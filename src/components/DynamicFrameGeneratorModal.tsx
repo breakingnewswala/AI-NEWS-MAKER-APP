@@ -1008,6 +1008,9 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         ]
   );
 
+  // Module 8: Headline Box Customization Modal State
+  const [isHeadlineCustomizerOpen, setIsHeadlineCustomizerOpen] = useState<boolean>(false);
+
   const userTier = (currentUser?.tier || 'basic').toLowerCase();
   const userRole = (currentUser?.role || '').toLowerCase();
   const userEmail = (currentUser?.email || '').toLowerCase();
@@ -6884,9 +6887,19 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
               ) : (
                 /* PHOTO MODE: Original Headline & Quote Settings */
                 <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3 text-xs">
-                  <h4 className="font-bold text-xs text-amber-400 uppercase tracking-wider">
-                    हेडलाइन टाइपोग्राफी एवं रंग (Devanagari Headline)
-                  </h4>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <h4 className="font-bold text-xs text-amber-400 uppercase tracking-wider">
+                      हेडलाइन टाइपोग्राफी एवं रंग (Devanagari Headline)
+                    </h4>
+                    <button
+                      type="button"
+                      onClick={() => setIsHeadlineCustomizerOpen(true)}
+                      className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Sliders className="w-3.5 h-3.5" />
+                      <span>हेडलाइन बॉक्स कस्टमाइज़ करें</span>
+                    </button>
+                  </div>
                   {textSlots.map((slot) => (
                     <div key={slot.id} className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2">
                       <div>
@@ -7085,6 +7098,15 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                         TEST V2 (ऑल लेयर्स)
                       </button>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsHeadlineCustomizerOpen(true)}
+                      className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs rounded-lg shadow transition cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Sliders className="w-3.5 h-3.5" />
+                      <span>हेडलाइन बॉक्स कस्टमाइज़ करें</span>
+                    </button>
 
                     {/* Format Toggle & Download Buttons (Part 7: Video mode downloads actual test video) */}
                     {generatorMode === 'video' ? (
@@ -8166,6 +8188,361 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
             </button>
           )}
         </div>
+
+        {/* Module 8: Headline Box Customizer Modal */}
+        {isHeadlineCustomizerOpen && (() => {
+          const slot = textSlots[0] || {
+            id: 'slot_text_headline',
+            name: 'मुख्य हेडलाइन (Main Headline)',
+            role: 'headline',
+            rect: { x: 7, y: 63, width: 86, height: 27 },
+            fontFamily: 'Noto Sans Devanagari',
+            fontSize: 70,
+            fontWeight: 'bold',
+            textColor: '#FFFFFF',
+            alignment: 'center',
+            maxLines: 3,
+            lineHeight: 1.3,
+            padding: 12,
+            backgroundColor: 'transparent',
+          };
+          const updateSlot = (patch: Partial<TextSlotConfig>) => {
+            setTextSlots((prev) => {
+              if (prev.length === 0) return [{ ...slot, ...patch }];
+              return prev.map((s, idx) => (idx === 0 ? { ...s, ...patch } : s));
+            });
+            if (patch.rect && generatorMode === 'video') {
+              setVideoHeadlineRect(patch.rect);
+            }
+            if (patch.fontFamily) setTypographyFontFamily(patch.fontFamily);
+            if (patch.fontSize) setTypographyFontSize(patch.fontSize);
+            if (patch.maxLines && generatorMode === 'video') setHeadlineLineCount(patch.maxLines as any);
+          };
+
+          return (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-6 overflow-y-auto">
+              <div className="bg-slate-900 border border-amber-500/50 rounded-2xl max-w-2xl w-full p-5 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                      <Sliders className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-white">हेडलाइन बॉक्स कस्टमाइज़ करें (Headline Box Customizer)</h4>
+                      <p className="text-[11px] text-slate-400">स्थिति, आकार, पैडिंग, अलाइनमेंट, रंग, बैकग्राउंड और बॉर्डर का पूर्ण नियंत्रण</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsHeadlineCustomizerOpen(false)}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* 1. Position & Size */}
+                <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2.5">
+                  <h5 className="text-xs font-black text-amber-400 uppercase tracking-wide">1. बॉक्स स्थिति व आकार (Position & Size)</h5>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">X (% क्षैतिज)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={90}
+                        value={slot.rect.x}
+                        onChange={(e) => updateSlot({ rect: { ...slot.rect, x: parseFloat(e.target.value) || 0 } })}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">Y (% लंबवत)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={95}
+                        value={slot.rect.y}
+                        onChange={(e) => updateSlot({ rect: { ...slot.rect, y: parseFloat(e.target.value) || 0 } })}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">चौड़ाई (Width %)</label>
+                      <input
+                        type="number"
+                        min={10}
+                        max={100}
+                        value={slot.rect.width}
+                        onChange={(e) => updateSlot({ rect: { ...slot.rect, width: parseFloat(e.target.value) || 50 } })}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">ऊँचाई (Height %)</label>
+                      <input
+                        type="number"
+                        min={5}
+                        max={70}
+                        value={slot.rect.height}
+                        onChange={(e) => updateSlot({ rect: { ...slot.rect, height: parseFloat(e.target.value) || 20 } })}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 pt-1 text-xs">
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">अंदरूनी पैडिंग (Padding px)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={40}
+                        value={slot.padding ?? 12}
+                        onChange={(e) => updateSlot({ padding: parseInt(e.target.value) || 0 })}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">टेक्स्ट अलाइनमेंट (Alignment)</label>
+                      <select
+                        value={slot.alignment || 'center'}
+                        onChange={(e) => updateSlot({ alignment: e.target.value as any })}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs"
+                      >
+                        <option value="center">Center (बीच में)</option>
+                        <option value="left">Left (बाएं)</option>
+                        <option value="right">Right (दाएं)</option>
+                        <option value="justify">Justify (बराबर)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Typography & Lines */}
+                <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2.5">
+                  <h5 className="text-xs font-black text-amber-400 uppercase tracking-wide">2. टाइपोग्राफी व पंक्तियाँ (Typography & Spacing)</h5>
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">फ़ॉन्ट फ़ैमिली</label>
+                      <select
+                        value={slot.fontFamily}
+                        onChange={(e) => updateSlot({ fontFamily: e.target.value })}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs"
+                      >
+                        <option value="Noto Sans Devanagari">Noto Sans Devanagari</option>
+                        <option value="Baloo 2">Baloo 2 (हेडिंग स्पेशल)</option>
+                        <option value="Mukta">Mukta</option>
+                        <option value="Hind">Hind</option>
+                        <option value="Rozha One">Rozha One</option>
+                        <option value="Yatra One">Yatra One</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">फ़ॉन्ट साइज़ ({slot.fontSize}px)</label>
+                      <input
+                        type="number"
+                        min={20}
+                        max={140}
+                        value={slot.fontSize}
+                        onChange={(e) => updateSlot({ fontSize: parseInt(e.target.value) || 50 })}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">लाइन स्पेसिंग ({slot.lineHeight || 1.3})</label>
+                      <input
+                        type="number"
+                        step={0.05}
+                        min={1.1}
+                        max={2.0}
+                        value={slot.lineHeight || 1.3}
+                        onChange={(e) => updateSlot({ lineHeight: parseFloat(e.target.value) || 1.3 })}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">अधिकतम लाइन्स</label>
+                      <select
+                        value={slot.maxLines || 3}
+                        onChange={(e) => updateSlot({ maxLines: parseInt(e.target.value) || 3 })}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-white text-xs"
+                      >
+                        <option value={1}>1 लाइन</option>
+                        <option value={2}>2 लाइन्स</option>
+                        <option value={3}>3 लाइन्स</option>
+                        <option value={4}>4 लाइन्स</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Colors, Background & Borders */}
+                <div className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2.5">
+                  <h5 className="text-xs font-black text-amber-400 uppercase tracking-wide">3. रंग, बैकग्राउंड व बॉर्डर (Colors & Box Style)</h5>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">टेक्स्ट रंग</label>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="color"
+                          value={slot.textColor || '#FFFFFF'}
+                          onChange={(e) => updateSlot({ textColor: e.target.value })}
+                          className="w-7 h-7 bg-slate-900 rounded cursor-pointer shrink-0"
+                        />
+                        <input
+                          type="text"
+                          value={slot.textColor || '#FFFFFF'}
+                          onChange={(e) => updateSlot({ textColor: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-white font-mono text-[11px]"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">हाईलाइट रंग</label>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="color"
+                          value={slot.highlightColor || '#FFE600'}
+                          onChange={(e) => updateSlot({ highlightColor: e.target.value })}
+                          className="w-7 h-7 bg-slate-900 rounded cursor-pointer shrink-0"
+                        />
+                        <input
+                          type="text"
+                          value={slot.highlightColor || '#FFE600'}
+                          onChange={(e) => updateSlot({ highlightColor: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-white font-mono text-[11px]"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">बैकग्राउंड रंग</label>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="color"
+                          value={slot.backgroundColor && slot.backgroundColor !== 'transparent' ? slot.backgroundColor : '#000000'}
+                          onChange={(e) => updateSlot({ backgroundColor: e.target.value })}
+                          className="w-7 h-7 bg-slate-900 rounded cursor-pointer shrink-0"
+                        />
+                        <input
+                          type="text"
+                          value={slot.backgroundColor || 'transparent'}
+                          onChange={(e) => updateSlot({ backgroundColor: e.target.value })}
+                          placeholder="transparent"
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-white font-mono text-[11px]"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">बैकग्राउंड अपारदर्शिता</label>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={slot.backgroundOpacity !== undefined ? slot.backgroundOpacity : 1}
+                        onChange={(e) => updateSlot({ backgroundOpacity: parseFloat(e.target.value) })}
+                        className="w-full accent-amber-400"
+                      />
+                      <span className="text-[10px] text-slate-400 block text-right font-mono">
+                        {Math.round((slot.backgroundOpacity !== undefined ? slot.backgroundOpacity : 1) * 100)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3 pt-1 text-xs">
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">बॉर्डर चौड़ाई ({slot.borderWidth || 0}px)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={12}
+                        value={slot.borderWidth || 0}
+                        onChange={(e) => updateSlot({ borderWidth: parseInt(e.target.value) || 0 })}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">बॉर्डर रंग</label>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="color"
+                          value={slot.borderColor || '#FACC15'}
+                          onChange={(e) => updateSlot({ borderColor: e.target.value })}
+                          className="w-7 h-7 bg-slate-900 rounded cursor-pointer shrink-0"
+                        />
+                        <input
+                          type="text"
+                          value={slot.borderColor || '#FACC15'}
+                          onChange={(e) => updateSlot({ borderColor: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-white font-mono text-[11px]"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-400 block mb-1">बॉर्डर रेडियस ({slot.borderRadius || 0}px)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={40}
+                        value={slot.borderRadius || 0}
+                        onChange={(e) => updateSlot({ borderRadius: parseInt(e.target.value) || 0 })}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-white font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. Live Sample Preview Box */}
+                <div className="p-3.5 bg-slate-950/80 border border-emerald-500/30 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-emerald-400 flex items-center gap-1.5">
+                      <Check className="w-3.5 h-3.5" />
+                      लाइव हेडलाइन बॉक्स प्रिव्यू
+                    </span>
+                    <span className="text-[10px] text-slate-500">X: {slot.rect.x}%, Y: {slot.rect.y}%, W: {slot.rect.width}%, H: {slot.rect.height}%</span>
+                  </div>
+                  <div
+                    className="overflow-hidden transition-all text-center flex flex-col justify-center"
+                    style={{
+                      backgroundColor: slot.backgroundColor && slot.backgroundColor !== 'transparent'
+                        ? slot.backgroundColor
+                        : 'rgba(0, 0, 0, 0.4)',
+                      opacity: slot.backgroundOpacity !== undefined ? slot.backgroundOpacity : 1,
+                      border: slot.borderWidth ? `${slot.borderWidth}px solid ${slot.borderColor || '#FACC15'}` : '1px dashed rgba(255, 255, 255, 0.2)',
+                      borderRadius: `${slot.borderRadius || 8}px`,
+                      padding: `${slot.padding || 12}px`,
+                    }}
+                  >
+                    <p
+                      className="font-bold tracking-tight"
+                      style={{
+                        fontFamily: slot.fontFamily ? `"${slot.fontFamily}", sans-serif` : 'inherit',
+                        fontSize: `${Math.max(14, Math.min(26, Math.round(slot.fontSize * 0.3)))}px`,
+                        lineHeight: slot.lineHeight || 1.3,
+                        color: slot.textColor || '#FFFFFF',
+                        textAlign: slot.alignment || 'center',
+                      }}
+                    >
+                      <span style={{ color: slot.highlightColor || '#FFE600' }}>रीवा पुलिस की</span> बड़ी कार्रवाई, नशीली कफ सिरप के साथ आरोपी गिरफ्तार
+                    </p>
+                  </div>
+                </div>
+
+                {/* Modal Actions */}
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsHeadlineCustomizerOpen(false)}
+                    className="px-5 py-2 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>कस्टमाइज़ेशन लागू करें व बंद करें</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

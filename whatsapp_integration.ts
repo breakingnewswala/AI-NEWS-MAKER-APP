@@ -2676,6 +2676,62 @@ export function registerWhatsAppIntegration(
     }
   };
 
+  /**
+   * Dispatches an approved Meta WhatsApp template message with variable parameters.
+   * Valid for outside 24-hour customer window communication.
+   */
+  const sendWhatsAppTemplate = async (
+    to: string,
+    templateName: string,
+    templateLang: string = "hi",
+    components: any[] = []
+  ) => {
+    const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+    const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
+    const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+    const maskedTo = maskWaId(to);
+
+    const templatePayload: any = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: templateLang },
+        components: components && components.length > 0 ? components : undefined,
+      },
+    };
+
+    if (process.env.NODE_ENV === "test" || !token || token.startsWith("test_")) {
+      console.log(`[WhatsApp:Template:TestMode] Mock template message dispatched to ${maskedTo} (${templateName})`);
+      return {
+        messaging_product: "whatsapp",
+        contacts: [{ input: to, wa_id: to }],
+        messages: [{ id: `wamid.tpl_${Date.now()}_${randomBytes(4).toString("hex")}` }],
+      };
+    }
+
+    const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(templatePayload),
+    });
+
+    const result = await response.json().catch(() => ({}));
+    if (response.ok && result?.messages?.[0]?.id) {
+      console.log(`[WhatsApp:Template] Template message dispatched (${templateName}) to ${maskedTo}`);
+      return result;
+    }
+
+    const errMsg = result?.error?.message || `HTTP ${response.status}`;
+    console.warn(`[WhatsApp:Template] Template send failed (${response.status}):`, errMsg);
+    throw new Error(`Meta Template Error: ${errMsg}`);
+  };
+
   const getKnowledgeContext = async (): Promise<{ context: string; count: number; errorCategory?: string }> => {
     const docs: Array<{ title: string; content: string }> = [];
 
@@ -4892,6 +4948,9 @@ AI News Maker परिवार में आपका हार्दिक �
         allConversations.map(async (conv) => {
           const phone = conv.waId || conv.customerPhone || "";
           const customer = await enrichCustomerData(phone);
+          const lastInbound = Number(conv.lastInboundAt || 0);
+          const isWindowActive = lastInbound > 0 && (Date.now() - lastInbound) <= (24 * 3600 * 1000);
+          const windowExpires = lastInbound > 0 ? lastInbound + (24 * 3600 * 1000) : 0;
           return {
             ...conv,
             conversationId: conv.conversationId || conv.id,
@@ -4903,6 +4962,10 @@ AI News Maker परिवार में आपका हार्दिक �
             status: conv.status || "open",
             lastMessagePreview: conv.lastMessagePreview || "",
             lastMessageAt: Number(conv.lastMessageAt || conv.lastInboundAt || conv.updatedAt || 0),
+            lastInboundAt: lastInbound,
+            isCustomerWindowActive: isWindowActive,
+            customerServiceWindowExpiresAt: windowExpires,
+            serverTimestamp: Date.now(),
             lastMessageStatus: conv.lastMessageStatus || "sent",
             lastMessageDirection: conv.lastMessageDirection || "inbound",
             assignedOperatorId: conv.assignedOperatorId || null,
@@ -5440,6 +5503,130 @@ AI News Maker परिवार में आपका हार्दिक �
       });
     } catch (err: any) {
       console.error("[WhatsApp:OperatorReply] Error sending reply:", err?.message || err);
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+
+  /**
+   * POST /api/admin/whatsapp/conversations/:id/send-template
+   * Sends an approved Meta WhatsApp template message to a conversation.
+   * Can be used anytime, especially after the 24-hour customer service window has expired.
+   */
+  app.post("/api/admin/whatsapp/conversations/:id/send-template", requireAdmin, async (req: any, res: any) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      const { templateName, templateLang = "hi", parameters = [], headerImage, customPreviewText } = req.body || {};
+
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+      if (!templateName) return res.status(400).json({ success: false, error: "कृपया स्वीकृत टेम्पलेट का नाम चुनें (Template name is required)" });
+
+      // Fetch conversation document
+      let convDoc: any = null;
+      if (centralDb?.readDoc) {
+        const cRes = await centralDb.readDoc("whatsapp_conversations", convId);
+        if (cRes?.success && cRes.data) convDoc = cRes.data;
+      }
+      if (!convDoc && conversationCache.has(convId)) {
+        convDoc = conversationCache.get(convId);
+      }
+      if (!convDoc) {
+        return res.status(404).json({ success: false, error: "Conversation not found" });
+      }
+
+      const recipientWaId = convDoc.waId || convDoc.customerPhone;
+      if (!recipientWaId) {
+        return res.status(400).json({ success: false, error: "वैध ग्राहक फ़ोन नंबर उपलब्ध नहीं है।" });
+      }
+
+      // Build components payload for Meta Graph API
+      const components: any[] = [];
+      if (headerImage) {
+        components.push({
+          type: "header",
+          parameters: [{ type: "image", image: { link: headerImage } }],
+        });
+      }
+      if (Array.isArray(parameters) && parameters.length > 0) {
+        components.push({
+          type: "body",
+          parameters: parameters.map((p: any) => ({
+            type: "text",
+            text: String(p ?? "").slice(0, 1024),
+          })),
+        });
+      }
+
+      const operatorEmail = req.user?.email || "operator";
+      const operatorName = req.user?.name || req.user?.fullName || operatorEmail;
+
+      const sent = await sendWhatsAppTemplate(recipientWaId, templateName, templateLang, components);
+      const outMsgId = String(sent?.messages?.[0]?.id || `tpl-${Date.now()}-${randomBytes(4).toString("hex")}`);
+      const now = Date.now();
+
+      // Render readable text for conversation preview
+      let renderedText = customPreviewText || `[स्वीकृत टेम्पलेट: ${templateName}]`;
+      if (Array.isArray(parameters) && parameters.length > 0) {
+        renderedText += `\n${parameters.join(" • ")}`;
+      }
+
+      const outRecord = {
+        messageId: outMsgId,
+        metaMessageId: outMsgId,
+        conversationId: convId,
+        waId: recipientWaId,
+        direction: "outbound",
+        messageType: "template",
+        templateName,
+        templateLanguage: templateLang,
+        parameters,
+        text: renderedText,
+        timestamp: now,
+        status: "sent",
+        senderType: "human_operator",
+        senderId: operatorEmail,
+        senderName: operatorName,
+        createdAt: now,
+      };
+
+      await requireWrite("whatsapp_messages", sha256(outMsgId), outRecord);
+      messageCache.set(sha256(outMsgId), outRecord);
+
+      // Update parent conversation
+      const updatedConv = {
+        ...convDoc,
+        lastMessagePreview: renderedText.slice(0, 180),
+        lastMessageDirection: "outbound",
+        lastMessageAt: now,
+        lastMessageStatus: "sent",
+        unreadCount: 0,
+        handlingMode: "human",
+        aiDispatchReservation: null,
+        operatorTakeoverAt: now,
+        conversationVersion: Number(convDoc.conversationVersion || 0) + 1,
+        updatedAt: now,
+      };
+
+      await requireWrite("whatsapp_conversations", convId, updatedConv);
+      conversationCache.set(convId, updatedConv);
+
+      await recordAuditEvent(centralDb, {
+        conversationId: convId,
+        eventType: "operator_template_sent",
+        newValue: outMsgId,
+        actorId: operatorEmail,
+        actorType: "operator",
+        metadata: { templateName, parametersCount: parameters.length, messageId: outMsgId },
+      });
+
+      return res.json({
+        success: true,
+        messageId: outMsgId,
+        status: "sent",
+        templateName,
+        timestamp: now,
+      });
+    } catch (err: any) {
+      console.error("[WhatsApp:SendTemplate] Error sending template:", err?.message || err);
       return res.status(500).json({ success: false, error: String(err?.message || err) });
     }
   });
@@ -6572,6 +6759,7 @@ AI News Maker परिवार में आपका हार्दिक �
   return {
     sendWhatsAppText,
     sendWhatsAppImage,
+    sendWhatsAppTemplate,
     uploadWhatsAppMedia,
     sendWhatsAppNewsBroadcast,
   };

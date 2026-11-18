@@ -3495,8 +3495,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   }
                 }
                 const locColor = card.locationTextColor || df.headerConfig.locationTextColor || '#FFFFFF';
-                const locBgColor = card.locationBgColor || df.headerConfig.locationBgColor || '#DC2626';
-                const locBorderRadius = df.headerConfig.locationStyle === 'box' ? '6px' : '9999px';
+                const isDarkChip = df.headerConfig.locationBadgeAssetId === 'loc_style_compact_chip' || df.locationBadgeAssetId === 'loc_style_compact_chip' || df.headerConfig.locationStyle === 'compact_chip' || df.headerConfig.locationStyle === 'box';
+                const locBgColor = card.locationBgColor || df.headerConfig.locationBgColor || (badgeAsset ? 'transparent' : (isDarkChip ? '#18181B' : '#DC2626'));
+                const locBorderRadius = isDarkChip || df.headerConfig.locationStyle === 'box' ? '6px' : '9999px';
+                const locBorder = isDarkChip ? '2px solid #FFFFFF' : '1.5px solid rgba(255, 255, 255, 0.4)';
 
                 let safeBadgeUrl = badgeAsset;
                 if (badgeAsset && badgeAsset.startsWith('data:image/svg+xml')) {
@@ -3525,7 +3527,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
                       backgroundColor: locBgColor,
                       borderRadius: locBorderRadius,
-                      border: '1.5px solid rgba(255, 255, 255, 0.4)',
+                      border: locBorder,
                       backgroundImage: safeBadgeUrl ? `url("${safeBadgeUrl}")` : undefined,
                       backgroundSize: '100% 100%',
                       backgroundPosition: 'center',
@@ -3593,7 +3595,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
                       backgroundColor: locBgColor,
                       color: locColor,
-                      border: '1.5px solid rgba(255, 255, 255, 0.4)',
+                      border: locBorder,
                       borderRadius: locBorderRadius,
                       fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 20) * previewScale))}px`,
                     }}
@@ -3731,8 +3733,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       if (item && item.url) calloutUrl = item.url;
                     }
                   }
-                  const effectiveCalloutText = (card.calloutTag && card.calloutTag.trim()) || (df.fullStoryCalloutConfig.text && df.fullStoryCalloutConfig.text.trim()) || '';
-                  if (!calloutUrl && !effectiveCalloutText) return null;
+                  // Priority 2: Master Admin global default Callout Library item
+                  if (!calloutUrl && (df.fullStoryCalloutConfig?.enabled || df.fullStoryCalloutConfig?.calloutVisibilityPolicy === 'forced_on')) {
+                    const defaultItem = getAssetLibraryItemById('callout_bully_forward_story') || getDefaultAssetLibrariesFallback('callout_png')[0];
+                    if (defaultItem && defaultItem.url) calloutUrl = defaultItem.url;
+                  }
+                  if (!calloutUrl || calloutImgError) return null;
 
                   const calloutRawY = df.fullStoryCalloutConfig?.rect?.y ?? 85;
                   const calloutRawH = df.fullStoryCalloutConfig?.rect?.height ?? 3.5;
@@ -3740,7 +3746,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   const maxBottomY = 100 - footerH - 0.5;
                   const calloutY = Math.min(calloutRawY, maxBottomY - calloutRawH);
 
-                  return (calloutUrl && !calloutImgError) ? (
+                  return (
                     <div
                       className="absolute pointer-events-auto flex items-center justify-center"
                       style={{
@@ -3759,29 +3765,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                         onError={() => setCalloutImgError(true)}
                       />
                     </div>
-                  ) : effectiveCalloutText ? (
-                    <div
-                      className="absolute pointer-events-auto px-2 py-0.5 rounded shadow flex items-center justify-center font-black"
-                      style={{
-                        left: `${df.fullStoryCalloutConfig?.rect?.x ?? 10}%`,
-                        top: `${calloutY}%`,
-                        width: `${df.fullStoryCalloutConfig?.rect?.width ?? 80}%`,
-                        height: `${calloutRawH}%`,
-                        backgroundColor: df.fullStoryCalloutConfig.bgColor || '#DC2626',
-                        color: df.fullStoryCalloutConfig.textColor || '#FFFFFF',
-                        borderColor: df.fullStoryCalloutConfig.borderColor || '#FACC15',
-                        borderWidth: `${df.fullStoryCalloutConfig.borderWidth ?? 1}px`,
-                        transform: `rotate(${df.fullStoryCalloutConfig.rotation || 0}deg) scale(${card.calloutScale ?? 1.0})`,
-                        transformOrigin: 'center center',
-                        fontSize: `${Math.max(9, Math.round((df.fullStoryCalloutConfig.fontSize || 18) * previewScale))}px`,
-                      }}
-                    >
-                      {df.fullStoryCalloutConfig.showIcon !== false && (
-                        <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse mr-1 inline-block" />
-                      )}
-                      <span className="truncate">{effectiveCalloutText.replace('🔴', '').trim()}</span>
-                    </div>
-                  ) : null;
+                  );
                 })()
               )}
 
@@ -3811,15 +3795,25 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               {(() => {
                 const textSlots = df.textSlots && df.textSlots.length > 0 ? df.textSlots : [{ rect: { x: 7, y: 63, width: 86, height: 27 }, alignment: 'center', textColor: '#FFFFFF' }];
                 const slot0 = textSlots[0];
+                const hbBg = slot0?.backgroundColor && slot0.backgroundColor !== 'transparent' ? slot0.backgroundColor : 'transparent';
+                const hbOpacity = slot0?.backgroundOpacity !== undefined ? slot0.backgroundOpacity : 1;
+                const hbBorderWidth = (slot0?.borderWidth || 0) * previewScale;
+                const hbBorderColor = slot0?.borderColor || '#FACC15';
+                const hbBorderRadius = (slot0?.borderRadius || 0) * previewScale;
+                const hbPadding = (slot0?.padding || 0) * previewScale;
                 return (
                   <div
-                    className={`absolute pointer-events-auto flex items-center px-2 ${slot0?.alignment === 'left' ? 'justify-start text-left' : slot0?.alignment === 'right' ? 'justify-end text-right' : 'justify-center text-center'}`}
+                    className={`absolute pointer-events-auto flex items-center ${slot0?.alignment === 'left' ? 'justify-start text-left' : slot0?.alignment === 'right' ? 'justify-end text-right' : 'justify-center text-center'}`}
                     style={{
                       left: `${slot0?.rect?.x ?? 7}%`,
                       top: `${slot0?.rect?.y ?? 63}%`,
                       width: `${slot0?.rect?.width ?? 86}%`,
                       height: `${slot0?.rect?.height ?? 27}%`,
-                      backgroundColor: slot0?.backgroundColor || 'transparent',
+                      backgroundColor: hbBg,
+                      opacity: hbOpacity,
+                      border: hbBorderWidth > 0 ? `${hbBorderWidth}px solid ${hbBorderColor}` : undefined,
+                      borderRadius: hbBorderRadius > 0 ? `${hbBorderRadius}px` : undefined,
+                      padding: hbPadding > 0 ? `${hbPadding}px` : undefined,
                     }}
                   >
                     <h1

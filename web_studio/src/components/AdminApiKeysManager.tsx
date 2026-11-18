@@ -122,6 +122,8 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
   // API Health Monitoring & Scheduler State (Part 3, 4, 5)
   const [healthItems, setHealthItems] = useState<ApiHealthCheckItem[]>(DEFAULT_INITIAL_HEALTH);
   const [schedulerEnabled, setSchedulerEnabled] = useState<boolean>(true);
+  const [schedulerIntervalMinutes, setSchedulerIntervalMinutes] = useState<number>(15);
+  const [failureModalData, setFailureModalData] = useState<{ isOpen: boolean; title: string; message: string; details?: any } | null>(null);
   const [monitoringHistory, setMonitoringHistory] = useState<ApiMonitoringHistoryState | null>(null);
   const [runningHealthTest, setRunningHealthTest] = useState<boolean>(false);
   const [togglingScheduler, setTogglingScheduler] = useState<boolean>(false);
@@ -223,12 +225,86 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         if (json.success) {
           setHealthItems(json.apis || []);
           setSchedulerEnabled(Boolean(json.schedulerEnabled));
+          if (json.schedulerIntervalMinutes) {
+            setSchedulerIntervalMinutes(json.schedulerIntervalMinutes);
+          }
           setMonitoringHistory(json.monitoringHistory || null);
         }
       }
     } catch (err) {
       console.warn('Failed to load API health status:', err);
     }
+  };
+
+  const handleChangeSchedulerInterval = async (minutes: 10 | 15 | 30) => {
+    try {
+      let headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
+      let res = await fetch(getApiUrl('/api/admin/api-health/scheduler/interval'), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ intervalMinutes: minutes }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setSchedulerIntervalMinutes(minutes);
+        showToast(`✅ स्वचालित निगरानी अंतराल ${minutes} मिनट पर सेट किया गया!`);
+      } else {
+        showToast(`❌ ${json.error || 'अंतराल सेट करने में त्रुटि'}`);
+      }
+    } catch (err: any) {
+      showToast(`❌ नेटवर्क त्रुटि: ${err.message}`);
+    }
+  };
+
+  const renderKeyStatusBadge = (item: FreeKeyItem) => {
+    const healthStatus = (item.lastHealthStatus || '').toLowerCase();
+    const errorMsg = (item.lastError || '').toLowerCase();
+
+    if (item.status === 'disabled') {
+      return (
+        <span className="px-2 py-0.5 bg-slate-800 border border-slate-700 text-slate-400 rounded text-[10px] font-bold">
+          DISABLED (निष्क्रिय)
+        </span>
+      );
+    }
+    if (healthStatus === 'invalid' || errorMsg.includes('invalid') || errorMsg.includes('not valid')) {
+      return (
+        <span className="px-2 py-0.5 bg-rose-950 border border-rose-700 text-rose-300 rounded text-[10px] font-bold flex items-center gap-1">
+          <AlertCircle className="w-2.5 h-2.5 text-rose-400" />
+          <span>INVALID_KEY (अमान्य की)</span>
+        </span>
+      );
+    }
+    if (healthStatus === 'quota_exceeded' || errorMsg.includes('quota') || errorMsg.includes('exhausted')) {
+      return (
+        <span className="px-2 py-0.5 bg-red-950 border border-red-700 text-red-300 rounded text-[10px] font-bold flex items-center gap-1">
+          <AlertCircle className="w-2.5 h-2.5 text-red-400" />
+          <span>QUOTA_EXHAUSTED (कोटा समाप्त)</span>
+        </span>
+      );
+    }
+    if (item.inCooldown || healthStatus === 'rate_limited' || errorMsg.includes('rate limit') || errorMsg.includes('too many requests')) {
+      return (
+        <span className="px-2 py-0.5 bg-yellow-950 border border-yellow-700 text-yellow-300 rounded text-[10px] font-bold flex items-center gap-1">
+          <Clock className="w-2.5 h-2.5 text-yellow-400 animate-spin" />
+          <span>RATE_LIMITED ({item.cooldownSecondsRemaining ? `${item.cooldownSecondsRemaining}s` : 'कूलडाउन'})</span>
+        </span>
+      );
+    }
+    if (healthStatus === 'temporarily_unavailable' || healthStatus === 'error') {
+      return (
+        <span className="px-2 py-0.5 bg-orange-950 border border-orange-700 text-orange-300 rounded text-[10px] font-bold flex items-center gap-1">
+          <Clock className="w-2.5 h-2.5 text-orange-400" />
+          <span>TEMPORARILY_UNAVAILABLE</span>
+        </span>
+      );
+    }
+    return (
+      <span className="px-2 py-0.5 bg-emerald-950 border border-emerald-700 text-emerald-300 rounded text-[10px] font-bold flex items-center gap-1">
+        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+        <span>READY (सक्रिय)</span>
+      </span>
+    );
   };
 
   const handleRunAllHealthTests = async () => {
@@ -566,6 +642,12 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         showToast(resData.message || '✅ API की सक्रिय है!');
       } else {
         showToast(resData.error || resData.message || '❌ API की स्वास्थ्य परीक्षण विफल रहा');
+        setFailureModalData({
+          isOpen: true,
+          title: `API स्वास्थ्य परीक्षण त्रुटि [${resData.state || 'ERROR'}]`,
+          message: resData.error || resData.message || 'परीक्षण विफल रहा',
+          details: resData,
+        });
       }
       await fetchKeysData(true);
     } catch (err: any) {
@@ -741,26 +823,41 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
               <span>{runningHealthTest ? 'जाँच जारी है...' : 'सभी API की जाँच करें'}</span>
             </button>
 
-            {/* Button 2: 15-Minute Automatic Scheduler Toggle */}
-            <button
-              type="button"
-              onClick={handleToggleScheduler}
-              disabled={togglingScheduler}
-              className={`px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-2 border transition-all cursor-pointer disabled:opacity-50 ${
-                schedulerEnabled
-                  ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/60'
-                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
-              }`}
-              title="हर 15 मिनट में स्वचालित पृष्ठभूमि स्वास्थ्य निगरानी"
-            >
-              <Clock className="w-3.5 h-3.5" />
-              <span>
-                हर 15 मिनट में स्वतः API जाँच:{' '}
-                <strong className={schedulerEnabled ? 'text-emerald-400' : 'text-slate-400'}>
-                  {schedulerEnabled ? 'सक्रिय (ON)' : 'निष्क्रिय (OFF)'}
-                </strong>
-              </span>
-            </button>
+            {/* Button 2: Automatic Scheduler Toggle & Interval Selector */}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleToggleScheduler}
+                disabled={togglingScheduler}
+                className={`px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-2 border transition-all cursor-pointer disabled:opacity-50 ${
+                  schedulerEnabled
+                    ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/60'
+                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'
+                }`}
+                title={`हर ${schedulerIntervalMinutes} मिनट में स्वचालित पृष्ठभूमि स्वास्थ्य निगरानी`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>
+                  स्वतः API जाँच ({schedulerIntervalMinutes}m):{' '}
+                  <strong className={schedulerEnabled ? 'text-emerald-400' : 'text-slate-400'}>
+                    {schedulerEnabled ? 'सक्रिय (ON)' : 'निष्क्रिय (OFF)'}
+                  </strong>
+                </span>
+              </button>
+
+              <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1.5 rounded-xl border border-slate-800 text-xs">
+                <span className="text-[11px] font-bold text-slate-400">अंतराल:</span>
+                <select
+                  value={schedulerIntervalMinutes}
+                  onChange={(e) => handleChangeSchedulerInterval(Number(e.target.value) as 10 | 15 | 30)}
+                  className="bg-slate-900 border border-slate-700 text-amber-300 rounded-lg px-2 py-0.5 text-xs font-bold focus:outline-none cursor-pointer"
+                >
+                  <option value={10}>10 मिनट</option>
+                  <option value={15}>15 मिनट (डिफ़ॉल्ट)</option>
+                  <option value={30}>30 मिनट</option>
+                </select>
+              </div>
+            </div>
 
             {/* Button 3: Alert Test Button */}
             <button
@@ -1101,18 +1198,8 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
                         <code className="text-[11px] bg-slate-900 px-2 py-0.5 rounded text-amber-300 font-mono border border-slate-800">
                           {item.maskedKey}
                         </code>
-                        {/* Status Badge */}
-                        {item.inCooldown ? (
-                          <span className="px-2 py-0.5 bg-yellow-950 border border-yellow-700 text-yellow-300 rounded text-[10px] font-bold flex items-center gap-1">
-                            <Clock className="w-2.5 h-2.5 text-yellow-400 animate-spin" />
-                            <span>कूलडाउन ({item.cooldownSecondsRemaining}s)</span>
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 bg-emerald-950 border border-emerald-700 text-emerald-300 rounded text-[10px] font-bold flex items-center gap-1">
-                            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
-                            <span>सक्रिय (Ready)</span>
-                          </span>
-                        )}
+                        {/* Status Badge with 6 distinct states */}
+                        {renderKeyStatusBadge(item)}
                       </div>
                       <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-3 flex-wrap">
                         <span>प्रदाता: {item.provider || 'गूगल जेमिनी (Google Gemini)'}</span>
@@ -1344,6 +1431,35 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
           </div>
         )}
       </div>
+
+      {/* Failure Diagnostic Popup Alert Modal */}
+      {failureModalData?.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-red-500/50 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center mx-auto text-red-400">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-2">
+              <h3 className="text-base font-black text-white">{failureModalData.title}</h3>
+              <p className="text-xs text-red-300 bg-red-950/40 p-3 rounded-xl border border-red-500/30 font-mono text-left break-words">
+                {failureModalData.message}
+              </p>
+              <p className="text-[11px] text-slate-400 leading-relaxed text-left">
+                💡 <strong>सलाह:</strong> यदि दैनिक कोटा (429 Quota Exhausted) समाप्त हुआ है, तो यह की स्वचालित रूप से 15 मिनट के कूलडाउन में चली जाएगी। यदि की स्थायी रूप से अमान्य (INVALID_KEY) है, तो कृपया Google AI Studio से नई की बनाकर जोड़ें।
+              </p>
+            </div>
+            <div className="flex items-center justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setFailureModalData(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white transition cursor-pointer"
+              >
+                बंद करें
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {toastMsg && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 border border-amber-500/50 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-150">

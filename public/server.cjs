@@ -8726,6 +8726,47 @@ _\u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0930\u094B\u0915
       throw new Error(`WhatsApp OTP \u092A\u094D\u0930\u0947\u0937\u0923 \u0935\u093F\u092B\u0932: Meta \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u0928\u0939\u0940\u0902 \u0939\u0941\u0906 (${lastError?.message || "\u0905\u092E\u093E\u0928\u094D\u092F \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0915\u0949\u0928\u094D\u092B\u093C\u093F\u0917\u0930\u0947\u0936\u0928"})`);
     }
   };
+  const sendWhatsAppTemplate = async (to, templateName, templateLang = "hi", components = []) => {
+    const token = (process.env.WHATSAPP_ACCESS_TOKEN || "").trim();
+    const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID || "1474022642460639").trim();
+    const version = (process.env.WHATSAPP_GRAPH_API_VERSION || "v21.0").trim();
+    const maskedTo = maskWaId(to);
+    const templatePayload = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: templateLang },
+        components: components && components.length > 0 ? components : void 0
+      }
+    };
+    if (process.env.NODE_ENV === "test" || !token || token.startsWith("test_")) {
+      console.log(`[WhatsApp:Template:TestMode] Mock template message dispatched to ${maskedTo} (${templateName})`);
+      return {
+        messaging_product: "whatsapp",
+        contacts: [{ input: to, wa_id: to }],
+        messages: [{ id: `wamid.tpl_${Date.now()}_${(0, import_crypto.randomBytes)(4).toString("hex")}` }]
+      };
+    }
+    const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(templatePayload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (response.ok && result?.messages?.[0]?.id) {
+      console.log(`[WhatsApp:Template] Template message dispatched (${templateName}) to ${maskedTo}`);
+      return result;
+    }
+    const errMsg = result?.error?.message || `HTTP ${response.status}`;
+    console.warn(`[WhatsApp:Template] Template send failed (${response.status}):`, errMsg);
+    throw new Error(`Meta Template Error: ${errMsg}`);
+  };
   const getKnowledgeContext = async () => {
     const docs = [];
     try {
@@ -10772,6 +10813,9 @@ _\u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0930\u094B\u0915
         allConversations.map(async (conv) => {
           const phone = conv.waId || conv.customerPhone || "";
           const customer = await enrichCustomerData(phone);
+          const lastInbound = Number(conv.lastInboundAt || 0);
+          const isWindowActive = lastInbound > 0 && Date.now() - lastInbound <= 24 * 3600 * 1e3;
+          const windowExpires = lastInbound > 0 ? lastInbound + 24 * 3600 * 1e3 : 0;
           return {
             ...conv,
             conversationId: conv.conversationId || conv.id,
@@ -10783,6 +10827,10 @@ _\u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0930\u094B\u0915
             status: conv.status || "open",
             lastMessagePreview: conv.lastMessagePreview || "",
             lastMessageAt: Number(conv.lastMessageAt || conv.lastInboundAt || conv.updatedAt || 0),
+            lastInboundAt: lastInbound,
+            isCustomerWindowActive: isWindowActive,
+            customerServiceWindowExpiresAt: windowExpires,
+            serverTimestamp: Date.now(),
             lastMessageStatus: conv.lastMessageStatus || "sent",
             lastMessageDirection: conv.lastMessageDirection || "inbound",
             assignedOperatorId: conv.assignedOperatorId || null,
@@ -11208,6 +11256,108 @@ _\u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0930\u094B\u0915
       });
     } catch (err) {
       console.error("[WhatsApp:OperatorReply] Error sending reply:", err?.message || err);
+      return res.status(500).json({ success: false, error: String(err?.message || err) });
+    }
+  });
+  app2.post("/api/admin/whatsapp/conversations/:id/send-template", requireAdmin, async (req, res) => {
+    try {
+      const convId = String(req.params.id || "").trim();
+      const { templateName, templateLang = "hi", parameters = [], headerImage, customPreviewText } = req.body || {};
+      if (!convId) return res.status(400).json({ success: false, error: "Missing conversation ID" });
+      if (!templateName) return res.status(400).json({ success: false, error: "\u0915\u0943\u092A\u092F\u093E \u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F \u0915\u093E \u0928\u093E\u092E \u091A\u0941\u0928\u0947\u0902 (Template name is required)" });
+      let convDoc = null;
+      if (centralDb2?.readDoc) {
+        const cRes = await centralDb2.readDoc("whatsapp_conversations", convId);
+        if (cRes?.success && cRes.data) convDoc = cRes.data;
+      }
+      if (!convDoc && conversationCache.has(convId)) {
+        convDoc = conversationCache.get(convId);
+      }
+      if (!convDoc) {
+        return res.status(404).json({ success: false, error: "Conversation not found" });
+      }
+      const recipientWaId = convDoc.waId || convDoc.customerPhone;
+      if (!recipientWaId) {
+        return res.status(400).json({ success: false, error: "\u0935\u0948\u0927 \u0917\u094D\u0930\u093E\u0939\u0915 \u092B\u093C\u094B\u0928 \u0928\u0902\u092C\u0930 \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964" });
+      }
+      const components = [];
+      if (headerImage) {
+        components.push({
+          type: "header",
+          parameters: [{ type: "image", image: { link: headerImage } }]
+        });
+      }
+      if (Array.isArray(parameters) && parameters.length > 0) {
+        components.push({
+          type: "body",
+          parameters: parameters.map((p) => ({
+            type: "text",
+            text: String(p ?? "").slice(0, 1024)
+          }))
+        });
+      }
+      const operatorEmail = req.user?.email || "operator";
+      const operatorName = req.user?.name || req.user?.fullName || operatorEmail;
+      const sent = await sendWhatsAppTemplate(recipientWaId, templateName, templateLang, components);
+      const outMsgId = String(sent?.messages?.[0]?.id || `tpl-${Date.now()}-${(0, import_crypto.randomBytes)(4).toString("hex")}`);
+      const now = Date.now();
+      let renderedText = customPreviewText || `[\u0938\u094D\u0935\u0940\u0915\u0943\u0924 \u091F\u0947\u092E\u094D\u092A\u0932\u0947\u091F: ${templateName}]`;
+      if (Array.isArray(parameters) && parameters.length > 0) {
+        renderedText += `
+${parameters.join(" \u2022 ")}`;
+      }
+      const outRecord = {
+        messageId: outMsgId,
+        metaMessageId: outMsgId,
+        conversationId: convId,
+        waId: recipientWaId,
+        direction: "outbound",
+        messageType: "template",
+        templateName,
+        templateLanguage: templateLang,
+        parameters,
+        text: renderedText,
+        timestamp: now,
+        status: "sent",
+        senderType: "human_operator",
+        senderId: operatorEmail,
+        senderName: operatorName,
+        createdAt: now
+      };
+      await requireWrite("whatsapp_messages", sha2562(outMsgId), outRecord);
+      messageCache.set(sha2562(outMsgId), outRecord);
+      const updatedConv = {
+        ...convDoc,
+        lastMessagePreview: renderedText.slice(0, 180),
+        lastMessageDirection: "outbound",
+        lastMessageAt: now,
+        lastMessageStatus: "sent",
+        unreadCount: 0,
+        handlingMode: "human",
+        aiDispatchReservation: null,
+        operatorTakeoverAt: now,
+        conversationVersion: Number(convDoc.conversationVersion || 0) + 1,
+        updatedAt: now
+      };
+      await requireWrite("whatsapp_conversations", convId, updatedConv);
+      conversationCache.set(convId, updatedConv);
+      await recordAuditEvent(centralDb2, {
+        conversationId: convId,
+        eventType: "operator_template_sent",
+        newValue: outMsgId,
+        actorId: operatorEmail,
+        actorType: "operator",
+        metadata: { templateName, parametersCount: parameters.length, messageId: outMsgId }
+      });
+      return res.json({
+        success: true,
+        messageId: outMsgId,
+        status: "sent",
+        templateName,
+        timestamp: now
+      });
+    } catch (err) {
+      console.error("[WhatsApp:SendTemplate] Error sending template:", err?.message || err);
       return res.status(500).json({ success: false, error: String(err?.message || err) });
     }
   });
@@ -12184,6 +12334,7 @@ _\u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u0930\u094B\u0915
   return {
     sendWhatsAppText,
     sendWhatsAppImage,
+    sendWhatsAppTemplate,
     uploadWhatsAppMedia,
     sendWhatsAppNewsBroadcast
   };
@@ -21502,7 +21653,7 @@ app.post("/api/newsroom/script-maker", async (req, res) => {
         currentTier: cleanTier || "basic"
       });
     }
-    const { rawText, inputType = "\u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F" } = req.body || {};
+    const { rawText, inputType = "\u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F", generationMode = "website", username } = req.body || {};
     if (!rawText || typeof rawText !== "string" || rawText.trim().length < 5) {
       return res.status(400).json({
         success: false,
@@ -21510,72 +21661,186 @@ app.post("/api/newsroom/script-maker", async (req, res) => {
       });
     }
     const cleanInput = rawText.trim().slice(0, 5e3);
-    let generated = null;
+    const userHandle = String(username || user?.username || "AINewsMaker").replace(/[^a-zA-Z0-9_]/g, "") || "AINewsMaker";
+    const isPreambleWord = (txt) => {
+      const t = (txt || "").trim().toLowerCase().replace(/^[-–—*:•·\s()\[\]{}]+/, "");
+      return /^(?:प्रेस\s*[-–—]?\s*(?:नोट|विज्ञप्ति|बयान)|स[-–—]?नोट|कार्यालय|कार्यालयीन|सूचना|दिनांक|तारीख|क्रमांक|प्रेषक|प्रति|विषय[:\s]|press\s*release|press\s*note)/i.test(t);
+    };
+    const extractSubject = () => {
+      const lines = cleanInput.split(/\r?\n+/).map((l) => l.trim()).filter(Boolean);
+      const contentLines = lines.filter((l) => !isPreambleWord(l));
+      let title = contentLines[0] || lines[0] || "\u0924\u093E\u091C\u093E \u0921\u093F\u091C\u093F\u091F\u0932 \u0938\u092E\u093E\u091A\u093E\u0930";
+      if (/^कार्यालय\s+/i.test(title) && contentLines.length > 1) {
+        title = contentLines[1];
+      }
+      title = title.replace(/^[-–—*:•·\s()\[\]{}]+/, "").trim();
+      if (title.length > 90) title = title.slice(0, 87) + "...";
+      const secondary = contentLines[1] || "";
+      const storyLines = contentLines.length > 1 ? contentLines.slice(1) : lines;
+      return { title, secondary, storyLines };
+    };
+    const parsedSubject = extractSubject();
+    let generatedWebsite = null;
+    let generatedSocial = null;
     try {
-      generated = await executeGeminiWithKeyPool(async (ai) => {
-        const prompt = `\u0906\u092A \u090F\u0915 \u0935\u0930\u093F\u0937\u094D\u0920 \u092D\u093E\u0930\u0924\u0940\u092F \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u0902\u092A\u093E\u0926\u0915 (Senior Hindi Digital News Editor) \u0939\u0948\u0902\u0964
+      if (generationMode === "social") {
+        generatedSocial = await executeGeminiWithKeyPool(async (ai) => {
+          const prompt = `\u0906\u092A \u090F\u0915 \u0935\u0930\u093F\u0937\u094D\u0920 \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0928\u094D\u092F\u0942\u091C\u093C \u090F\u0921\u093F\u091F\u0930 (Senior Social Media News Editor) \u0939\u0948\u0902\u0964
 \u0906\u092A\u0915\u094B \u0928\u093F\u092E\u094D\u0928\u0932\u093F\u0916\u093F\u0924 \u0915\u091A\u094D\u091A\u0940 \u0938\u093E\u092E\u0917\u094D\u0930\u0940 (\u0907\u0928\u092A\u0941\u091F \u092A\u094D\u0930\u0915\u093E\u0930: "${inputType}") \u0926\u0940 \u0917\u0908 \u0939\u0948:
 
 ---
 ${cleanInput}
 ---
 
-\u0915\u0943\u092A\u092F\u093E \u0907\u0938\u0947 \u090F\u0915 \u0905\u0924\u094D\u092F\u0927\u093F\u0915 \u0906\u0915\u0930\u094D\u0937\u0915, \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915, \u0938\u091F\u0940\u0915 \u0914\u0930 \u092A\u0920\u0928\u0940\u092F \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u092A\u0948\u0915\u0947\u091C \u092E\u0947\u0902 \u092C\u0926\u0932\u0947\u0902\u0964
+\u0915\u0943\u092A\u092F\u093E \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E (Instagram, Facebook, X, WhatsApp Status) \u0915\u0947 \u0932\u093F\u090F \u0905\u0924\u094D\u092F\u0927\u093F\u0915 \u0935\u093E\u092F\u0930\u0932, \u0906\u0915\u0930\u094D\u0937\u0915 \u0914\u0930 \u092A\u0920\u0928\u0940\u092F \u0928\u094D\u092F\u0942\u091C\u093C \u092A\u0948\u0915\u0947\u091C \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964
+\u0915\u0921\u093C\u0947 \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0928\u093F\u092F\u092E:
+1. \u0938\u094B\u0936\u0932 \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938 \u0935\u093F\u0915\u0932\u094D\u092A (socialHeadlines): 3 \u0938\u0947 4 \u092C\u093F\u0932\u094D\u0915\u0941\u0932 \u0905\u0932\u0917-\u0905\u0932\u0917, \u0905\u0924\u094D\u092F\u0927\u093F\u0915 \u0906\u0915\u0930\u094D\u0937\u0915, \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0935 \u0915\u094D\u0932\u093F\u0915-\u092F\u094B\u0917\u094D\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938\u0964 \u0927\u094D\u092F\u093E\u0928 \u0930\u0939\u0947: "\u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F", "\u0938-\u0928\u094B\u091F", "\u0915\u093E\u0930\u094D\u092F\u093E\u0932\u092F" \u091C\u0948\u0938\u0947 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u094B \u0936\u0940\u0930\u094D\u0937\u0915 \u0928 \u092C\u0928\u093E\u090F\u0902\u0964 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u093E \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0935 \u0935\u093F\u0937\u092F \u0939\u0940 \u0936\u0940\u0930\u094D\u0937\u0915 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F\u0964
+2. \u0938\u094B\u0936\u0932 \u0921\u093F\u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928 / \u0915\u0948\u092A\u094D\u0936\u0928 (socialDescription): 2 \u0938\u0947 3 \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924, \u092A\u094D\u0930\u0935\u093E\u0939\u092E\u092F\u0940 \u0935 \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0935\u093E\u0915\u094D\u092F (60-120 \u0936\u092C\u094D\u0926) \u091C\u094B \u092A\u093E\u0920\u0915\u094B\u0902 \u0915\u094B \u0924\u0941\u0930\u0902\u0924 \u0906\u0915\u0930\u094D\u0937\u093F\u0924 \u0915\u0930\u0947\u0902\u0964
+3. \u0939\u0948\u0936\u091F\u0948\u0917\u094D\u0938 (hashtags): \u0909\u092A\u092F\u0941\u0915\u094D\u0924 \u0939\u0948\u0936\u091F\u0948\u0917\u094D\u0938 \u0915\u0940 \u0915\u094D\u0930\u092E\u092C\u0926\u094D\u0927 \u0938\u0942\u091A\u0940\u0964 \u092A\u0939\u0932\u093E \u0939\u0948\u0936\u091F\u0948\u0917 #${userHandle} \u0939\u094B, \u092B\u093F\u0930 \u0916\u092C\u0930 \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 3-5 \u0935\u093F\u0937\u092F\u0917\u0924 \u0939\u0948\u0936\u091F\u0948\u0917\u094D\u0938 (\u0909\u0926\u093E. #BreakingNews #CrimeNews #PoliceAction), \u0914\u0930 \u0905\u0902\u0924 \u092E\u0947\u0902 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 #AINewsMaker \u0939\u094B\u0964
+
+\u0909\u0924\u094D\u0924\u0930 \u0915\u0947\u0935\u0932 \u0914\u0930 \u0915\u0947\u0935\u0932 \u0935\u0948\u0927 JSON \u092A\u094D\u0930\u093E\u0930\u0942\u092A \u092E\u0947\u0902 \u0926\u0947\u0902:
+{
+  "socialHeadlines": [
+    "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A 1",
+    "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A 2",
+    "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A 3",
+    "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A 4"
+  ],
+  "socialDescription": "\u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u0948\u092A\u094D\u0936\u0928...",
+  "hashtags": [
+    "#${userHandle}",
+    "#BreakingNews",
+    "#PoliceAction",
+    "#AINewsMaker"
+  ]
+}`;
+          const res2 = await generateWithFallbackAndRetry(ai, GEMINI_MODELS_POOL.slice(0, 2), {
+            contents: prompt,
+            config: { temperature: 0.3 }
+          });
+          const text = res2?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          const jsonMatch = text.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (parsed && Array.isArray(parsed.socialHeadlines) && parsed.socialHeadlines.length > 0) {
+              const cleanHls = parsed.socialHeadlines.map((h) => String(h || "").trim()).filter((h) => h && !isPreambleWord(h));
+              const sanitizeHandle = (h) => String(h || "").replace(/^@+/, "").replace(/[^a-zA-Z0-9_]/g, "") || "AINewsMaker";
+              const cleanUserHandle = sanitizeHandle(userHandle);
+              const formatOrderedHashtags = (rawTags) => {
+                const middle = [];
+                for (const t of rawTags) {
+                  const clean = String(t || "").replace(/^[#@\s]+/, "").trim();
+                  if (!clean) continue;
+                  const lower = clean.toLowerCase();
+                  if (lower === cleanUserHandle.toLowerCase() || lower === "ainewsmaker" || lower === "bnwtv" || lower === "breakingnewswala") {
+                    continue;
+                  }
+                  const tag = `#${clean}`;
+                  if (!middle.includes(tag)) middle.push(tag);
+                }
+                if (middle.length === 0) middle.push("#BreakingNews", "#NewsUpdate");
+                return [`#${cleanUserHandle}`, ...middle.slice(0, 4), "#AINewsMaker"];
+              };
+              const tags = formatOrderedHashtags(Array.isArray(parsed.hashtags) ? parsed.hashtags : []);
+              return {
+                socialHeadlines: cleanHls.length >= 2 ? cleanHls : [parsedSubject.title, `\u092C\u0921\u093C\u0940 \u0916\u092C\u0930: ${parsedSubject.title}`, `${parsedSubject.title} \u2014 \u091C\u093E\u0928\u0947\u0902 \u092A\u0942\u0930\u093E \u092E\u093E\u092E\u0932\u093E`],
+                socialDescription: String(parsed.socialDescription || "").trim(),
+                hashtags: tags
+              };
+            }
+          }
+          return null;
+        });
+      } else {
+        generatedWebsite = await executeGeminiWithKeyPool(async (ai) => {
+          const prompt = `\u0906\u092A \u090F\u0915 \u0935\u0930\u093F\u0937\u094D\u0920 \u092D\u093E\u0930\u0924\u0940\u092F \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u0902\u092A\u093E\u0926\u0915 (Senior Hindi Digital News Editor) \u0939\u0948\u0902\u0964
+\u0906\u092A\u0915\u094B \u0928\u093F\u092E\u094D\u0928\u0932\u093F\u0916\u093F\u0924 \u0915\u091A\u094D\u091A\u0940 \u0938\u093E\u092E\u0917\u094D\u0930\u0940 (\u0907\u0928\u092A\u0941\u091F \u092A\u094D\u0930\u0915\u093E\u0930: "${inputType}") \u0926\u0940 \u0917\u0908 \u0939\u0948:
+
+---
+${cleanInput}
+---
+
+\u0915\u0943\u092A\u092F\u093E \u0935\u0947\u092C\u0938\u093E\u0907\u091F \u092A\u094D\u0930\u0915\u093E\u0936\u0928 \u0915\u0947 \u0932\u093F\u090F \u090F\u0915 \u0905\u0924\u094D\u092F\u0927\u093F\u0915 \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940, \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915, \u0938\u091F\u0940\u0915 \u0914\u0930 \u092A\u0920\u0928\u0940\u092F \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u092A\u0948\u0915\u0947\u091C \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964
 \u0915\u0921\u093C\u0947 \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0928\u093F\u092F\u092E (Strict Editorial Rules):
-1. \u092E\u0941\u0916\u094D\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (headline): \u0906\u0915\u0930\u094D\u0937\u0915, \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940, \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0914\u0930 10-15 \u0936\u092C\u094D\u0926\u094B\u0902 \u092E\u0947\u0902\u0964
+1. \u092E\u0941\u0916\u094D\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (headline): \u0905\u0924\u094D\u092F\u0902\u0924 \u0938\u091F\u0940\u0915, \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0935 \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0936\u0940\u0930\u094D\u0937\u0915 (10-15 \u0936\u092C\u094D\u0926)\u0964 \u0927\u094D\u092F\u093E\u0928 \u0930\u0939\u0947: "\u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F", "\u0938-\u0928\u094B\u091F", "\u0935\u093F\u091C\u094D\u091E\u092A\u094D\u0924\u093F", "\u0915\u093E\u0930\u094D\u092F\u093E\u0932\u092F" \u091C\u0948\u0938\u0947 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u094B \u0936\u0940\u0930\u094D\u0937\u0915 \u0928 \u092C\u0928\u093E\u090F\u0902\u0964 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u093E \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0935 \u0935\u093F\u0937\u092F \u0939\u0940 \u0936\u0940\u0930\u094D\u0937\u0915 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F\u0964
 2. \u0938\u092C-\u0939\u0947\u0921\u0932\u093E\u0907\u0928 (subHeadline): \u092A\u0942\u0930\u0915 \u0938\u092C-\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u091C\u093F\u0938\u092E\u0947\u0902 \u092E\u0941\u0916\u094D\u092F \u0938\u0902\u0926\u0930\u094D\u092D, \u0915\u093E\u0930\u0923 \u092F\u093E \u092A\u094D\u0930\u092D\u093E\u0935 \u0939\u094B (15-25 \u0936\u092C\u094D\u0926\u094B\u0902 \u092E\u0947\u0902)\u0964
 3. \u092A\u0942\u0930\u0940 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u094B\u0930\u0940 (fullStory): \u0938\u0902\u0924\u0941\u0932\u093F\u0924, \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0939\u093F\u0902\u0926\u0940 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u094B\u0930\u0940 (2-3 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B\u094D\u0938, 120-250 \u0936\u092C\u094D\u0926)\u0964 \u0938\u0939\u0940 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B \u0915\u094D\u0930\u092E \u0914\u0930 \u092A\u0947\u0936\u0947\u0935\u0930 \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u093F\u0924\u093E \u0936\u0948\u0932\u0940 \u0939\u094B\u0964
 4. \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0938\u0924\u094D\u092F\u0928\u093F\u0937\u094D\u0920\u093E (Fact Preservation): \u0926\u0940 \u0917\u0908 \u0938\u093E\u092E\u0917\u094D\u0930\u0940 \u092E\u0947\u0902 \u092E\u094C\u091C\u0942\u0926 \u0938\u092D\u0940 \u0928\u093E\u092E, \u092A\u0926, \u0924\u093E\u0930\u0940\u0916\u0947\u0902, \u0938\u094D\u0925\u093E\u0928, \u0938\u0902\u0916\u094D\u092F\u093E\u090F\u0902 \u0914\u0930 \u0906\u0902\u0915\u0921\u093C\u0947 \u0939\u0942\u092C\u0939\u0942 \u092C\u0928\u093E\u090F \u0930\u0916\u0947\u0902\u0964
-5. \u092E\u0928\u0917\u0922\u093C\u0902\u0924 \u0924\u0925\u094D\u092F\u094B\u0902 \u092A\u0930 \u092A\u0942\u0930\u094D\u0923 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927 (No Hallucination): \u0905\u092A\u0928\u0940 \u0924\u0930\u092B \u0938\u0947 \u0915\u094B\u0908 \u092D\u0940 \u091D\u0942\u0920\u093E \u0924\u0925\u094D\u092F, \u0905\u091C\u094D\u091E\u093E\u0924 \u0938\u0942\u0924\u094D\u0930, \u0915\u093E\u0932\u094D\u092A\u0928\u093F\u0915 \u092C\u092F\u093E\u0928, \u0906\u0930\u094B\u092A \u092F\u093E \u0906\u0902\u0915\u0921\u093C\u0947 \u0928 \u091C\u094B\u0921\u093C\u0947\u0902\u0964 \u092F\u0926\u093F \u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F \u092E\u0947\u0902 \u0915\u094B\u0908 \u0935\u093F\u0935\u0930\u0923 \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948, \u0924\u094B \u0909\u0938\u0947 \u0905\u092A\u0928\u0940 \u0913\u0930 \u0938\u0947 \u0928 \u092C\u0928\u093E\u090F\u0902\u0964
-6. \u092D\u093E\u0937\u093E \u0936\u0941\u0926\u094D\u0927, \u0924\u094D\u0930\u0941\u091F\u093F\u0939\u0940\u0928, \u0938\u094D\u092A\u0937\u094D\u091F \u0914\u0930 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u0939\u093F\u0902\u0926\u0940 \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u093F\u0924\u093E \u0936\u0948\u0932\u0940 \u092E\u0947\u0902 \u0939\u094B\u0964
+5. \u092D\u093E\u0937\u093E \u0936\u0941\u0926\u094D\u0927, \u0924\u094D\u0930\u0941\u091F\u093F\u0939\u0940\u0928, \u0938\u094D\u092A\u0937\u094D\u091F \u0914\u0930 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u0939\u093F\u0902\u0926\u0940 \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u093F\u0924\u093E \u0936\u0948\u0932\u0940 \u092E\u0947\u0902 \u0939\u094B\u0964
 
-\u0909\u0924\u094D\u0924\u0930 \u0915\u0947\u0935\u0932 \u0914\u0930 \u0915\u0947\u0935\u0932 \u0935\u0948\u0927 JSON \u092A\u094D\u0930\u093E\u0930\u0942\u092A \u092E\u0947\u0902 \u0926\u0947\u0902, \u091C\u093F\u0938\u092E\u0947\u0902 \u0928\u093F\u092E\u094D\u0928 \u0915\u0941\u0902\u091C\u093F\u092F\u093E\u0901 (keys) \u0939\u094B\u0902:
+\u0909\u0924\u094D\u0924\u0930 \u0915\u0947\u0935\u0932 \u0914\u0930 \u0915\u0947\u0935\u0932 \u0935\u0948\u0927 JSON \u092A\u094D\u0930\u093E\u0930\u0942\u092A \u092E\u0947\u0902 \u0926\u0947\u0902:
 {
   "headline": "\u092E\u0941\u0916\u094D\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0928",
   "subHeadline": "\u0938\u092C-\u0939\u0947\u0921\u0932\u093E\u0907\u0928",
   "fullStory": "\u092A\u0942\u0930\u0940 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u094B\u0930\u0940"
 }`;
-        const res2 = await generateWithFallbackAndRetry(ai, GEMINI_MODELS_POOL.slice(0, 2), {
-          contents: prompt,
-          config: { temperature: 0.3 }
-        });
-        const text = res2?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (parsed && parsed.headline) {
-            return {
-              headline: String(parsed.headline || "").trim(),
-              subHeadline: String(parsed.subHeadline || "").trim(),
-              fullStory: String(parsed.fullStory || "").trim()
-            };
+          const res2 = await generateWithFallbackAndRetry(ai, GEMINI_MODELS_POOL.slice(0, 2), {
+            contents: prompt,
+            config: { temperature: 0.3 }
+          });
+          const text = res2?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          const jsonMatch = text.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (parsed && parsed.headline && !isPreambleWord(parsed.headline)) {
+              return {
+                headline: String(parsed.headline || "").trim(),
+                subHeadline: String(parsed.subHeadline || "").trim(),
+                fullStory: String(parsed.fullStory || "").trim()
+              };
+            }
           }
-        }
-        return null;
-      });
+          return null;
+        });
+      }
     } catch (e) {
       console.warn("[Script Maker] AI generation error:", e?.message || e);
     }
-    if (!generated || !generated.headline) {
-      const lines = cleanInput.split(/\n+/).map((l) => l.trim()).filter(Boolean);
-      const firstLine = lines[0] || "\u0924\u093E\u091C\u093E \u0921\u093F\u091C\u093F\u091F\u0932 \u0938\u092E\u093E\u091A\u093E\u0930";
-      const secondLine = lines[1] || "";
-      const bodyLines = lines.slice(1).join("\n\n");
-      generated = {
-        headline: firstLine.length > 80 ? firstLine.slice(0, 80) + "..." : firstLine,
-        subHeadline: secondLine ? secondLine.length > 120 ? secondLine.slice(0, 120) + "..." : secondLine : `${firstLine} \u2014 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u092C\u0941\u0932\u0947\u091F\u093F\u0928`,
-        fullStory: bodyLines.length > 30 ? bodyLines : `${firstLine}
+    if (generationMode === "social") {
+      if (!generatedSocial || !generatedSocial.socialHeadlines || generatedSocial.socialHeadlines.length === 0) {
+        const title = parsedSubject.title;
+        const bodyLines = parsedSubject.storyLines.join(" ");
+        generatedSocial = {
+          socialHeadlines: [
+            title,
+            `\u092C\u0921\u093C\u0940 \u0916\u092C\u0930: ${title}`,
+            `${title} \u2014 \u091C\u093E\u0928\u0947\u0902 \u092A\u0942\u0930\u093E \u092E\u093E\u092E\u0932\u093E`,
+            `${title}: \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0915\u0940 \u0924\u094D\u0935\u0930\u093F\u0924 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908`
+          ],
+          socialDescription: bodyLines.length > 40 ? bodyLines.slice(0, 240) + "..." : `${title} \u0915\u0947 \u0938\u0902\u092C\u0902\u0927 \u092E\u0947\u0902 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0930\u093F\u092A\u094B\u0930\u094D\u091F\u0964 \u0905\u0927\u093F\u0915 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0928\u0940\u091A\u0947 \u0926\u0940 \u0917\u0908 \u0939\u0948\u0964`,
+          hashtags: [`#${String(userHandle || "AINewsMaker").replace(/^@+/, "").replace(/[^a-zA-Z0-9_]/g, "") || "AINewsMaker"}`, "#BreakingNews", "#HindiNews", "#NewsUpdate", "#AINewsMaker"]
+        };
+      }
+      return res.json({
+        success: true,
+        generationMode: "social",
+        socialHeadlines: generatedSocial.socialHeadlines,
+        socialDescription: generatedSocial.socialDescription,
+        hashtags: generatedSocial.hashtags,
+        inputType
+      });
+    } else {
+      if (!generatedWebsite || !generatedWebsite.headline || isPreambleWord(generatedWebsite.headline)) {
+        const title = parsedSubject.title;
+        const sec = parsedSubject.secondary;
+        const bodyLines = parsedSubject.storyLines.join("\n\n");
+        generatedWebsite = {
+          headline: title,
+          subHeadline: sec ? sec.length > 120 ? sec.slice(0, 120) + "..." : sec : `${title} \u2014 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u092C\u0941\u0932\u0947\u091F\u093F\u0928`,
+          fullStory: bodyLines.length > 30 ? bodyLines : `${title}
 
 ${cleanInput}`
-      };
+        };
+      }
+      return res.json({
+        success: true,
+        generationMode: "website",
+        headline: generatedWebsite.headline,
+        subHeadline: generatedWebsite.subHeadline,
+        fullStory: generatedWebsite.fullStory,
+        inputType
+      });
     }
-    return res.json({
-      success: true,
-      headline: generated.headline,
-      subHeadline: generated.subHeadline,
-      fullStory: generated.fullStory,
-      inputType
-    });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -26112,6 +26377,18 @@ app.post("/api/support/requests", async (req, res) => {
     const all = loadSupportRequestsDatabase();
     const updated = [newRequest, ...all.filter((r) => r.id !== newRequest.id)];
     saveSupportRequestsDatabase(updated);
+    try {
+      sendAdminSpecialNotification("SUPPORT_REQUEST", {
+        ticketId: newRequest.id,
+        userName: newRequest.userName,
+        userEmail: newRequest.userEmail,
+        userMobile: newRequest.userMobile,
+        category: newRequest.reportType,
+        summary: (newRequest.message || newRequest.reportReason || "\u0928\u092F\u093E \u0938\u092A\u094B\u0930\u094D\u091F \u0938\u0902\u0926\u0947\u0936").slice(0, 160)
+      }).catch(() => {
+      });
+    } catch {
+    }
     return res.json({ success: true, request: newRequest, requests: updated });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -28847,6 +29124,71 @@ app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, r
     });
   }
 });
+async function probeGeminiKeyZeroQuota(apiKey) {
+  const start = Date.now();
+  const cleanKey = (apiKey || "").trim();
+  if (!cleanKey) {
+    return { success: false, state: "INVALID_KEY", latencyMs: 0, statusCode: 400, errorMessage: "API Key \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964" };
+  }
+  try {
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}`, {
+      method: "GET",
+      headers: { "User-Agent": "ai-news-maker-health-probe" },
+      signal: AbortSignal.timeout(8e3)
+    });
+    const latencyMs = Date.now() - start;
+    const statusCode = resp.status;
+    if (resp.ok) {
+      return { success: true, state: "READY", latencyMs, statusCode };
+    }
+    const errBody = await resp.json().catch(() => ({}));
+    const errMsg = String(errBody?.error?.message || "").toLowerCase();
+    const errStatus = String(errBody?.error?.status || "");
+    if (statusCode === 429 || errStatus === "RESOURCE_EXHAUSTED" || errMsg.includes("quota") || errMsg.includes("rate limit") || errMsg.includes("too many requests")) {
+      return {
+        success: false,
+        state: errMsg.includes("quota") || errMsg.includes("exhausted") ? "QUOTA_EXHAUSTED" : "RATE_LIMITED",
+        latencyMs,
+        statusCode,
+        errorMessage: errBody?.error?.message || "\u0926\u0948\u0928\u093F\u0915 \u0915\u094B\u091F\u093E / \u0930\u0947\u091F \u0932\u093F\u092E\u093F\u091F \u0938\u092E\u093E\u092A\u094D\u0924 (Quota or Rate limit exceeded)"
+      };
+    }
+    if (statusCode === 400 || statusCode === 401 || statusCode === 403 || errStatus === "INVALID_ARGUMENT" || errMsg.includes("not valid") || errMsg.includes("invalid")) {
+      return {
+        success: false,
+        state: "INVALID_KEY",
+        latencyMs,
+        statusCode,
+        errorMessage: errBody?.error?.message || "\u0905\u092E\u093E\u0928\u094D\u092F API Key (Invalid Key)"
+      };
+    }
+    if (statusCode === 500 || statusCode === 502 || statusCode === 503 || statusCode === 504) {
+      return {
+        success: false,
+        state: "TEMPORARILY_UNAVAILABLE",
+        latencyMs,
+        statusCode,
+        errorMessage: errBody?.error?.message || "\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940 \u0938\u0947\u0935\u093E \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 (Google AI Temporarily Unavailable)"
+      };
+    }
+    return {
+      success: false,
+      state: "TEMPORARILY_UNAVAILABLE",
+      latencyMs,
+      statusCode,
+      errorMessage: errBody?.error?.message || `HTTP ${statusCode}`
+    };
+  } catch (err) {
+    const latencyMs = Date.now() - start;
+    return {
+      success: false,
+      state: "TEMPORARILY_UNAVAILABLE",
+      latencyMs,
+      statusCode: 0,
+      errorMessage: err?.message || "\u0928\u0947\u091F\u0935\u0930\u094D\u0915 \u091F\u093E\u0907\u092E\u0906\u0909\u091F / \u0915\u0928\u0947\u0915\u094D\u0936\u0928 \u0924\u094D\u0930\u0941\u091F\u093F"
+    };
+  }
+}
 app.post("/api/admin/api-keys/test-id", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u0935\u094D\u092F\u0935\u0938\u094D\u0925\u093E\u092A\u0915 \u0939\u0940 API \u0938\u094D\u0935\u093E\u0938\u094D\u0925\u094D\u092F \u092A\u0930\u0940\u0915\u094D\u0937\u0923 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
@@ -28856,6 +29198,7 @@ app.post("/api/admin/api-keys/test-id", requireAdminMiddleware, async (req, res)
     const health = await checkDefaultGeminiHealth(true);
     return res.json({
       success: health.healthStatus === "healthy",
+      state: health.healthStatus === "healthy" ? "READY" : "TEMPORARILY_UNAVAILABLE",
       message: health.healthStatus === "healthy" ? `\u2705 \u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F Gemini API Key \u0938\u0915\u094D\u0930\u093F\u092F \u0935 \u0938\u094D\u0935\u0938\u094D\u0925 \u0939\u0948! \u0930\u093F\u0938\u094D\u092A\u0949\u0928\u094D\u0938 \u0938\u092E\u092F: ${health.latencyMs || 0}ms` : `\u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F API \u0938\u092E\u0938\u094D\u092F\u093E: ${health.errorMessage || health.healthStatus}`,
       latencyMs: health.latencyMs,
       healthStatus: health.healthStatus,
@@ -28880,45 +29223,11 @@ app.post("/api/admin/api-keys/test-id", requireAdminMiddleware, async (req, res)
     targetKeyStr = found.key.trim();
     targetRef = found;
   }
-  const start = Date.now();
-  try {
-    const testAi = new import_genai2.GoogleGenAI({
-      apiKey: targetKeyStr,
-      httpOptions: { headers: { "User-Agent": "aistudio-build-health-check" } }
-    });
-    let testSuccess = false;
-    let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview";
-    let lastTestErr = null;
-    for (const testModel of DEFAULT_FALLBACK_MODELS) {
-      try {
-        const timeoutPromise = new Promise(
-          (_, reject) => setTimeout(() => reject(new Error(`Test timeout on model ${testModel} after 12s`)), 12e3)
-        );
-        const testCall = testAi.models.generateContent({
-          model: testModel,
-          contents: '\u0906\u092A \u090F\u0915 \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u092A\u0930\u0940\u0915\u094D\u0937\u0915 \u0939\u0948\u0902\u0964 \u0907\u0938 \u091F\u0947\u0938\u094D\u091F \u0905\u0928\u0941\u0930\u094B\u0927 \u092A\u0930 \u0935\u0948\u0927 JSON \u092E\u0947\u0902 \u0909\u0924\u094D\u0924\u0930 \u0926\u0947\u0902: {"status": "ok", "newsReady": true}',
-          config: {
-            responseMimeType: "application/json"
-          }
-        });
-        await Promise.race([testCall, timeoutPromise]);
-        testSuccess = true;
-        successfulModel = testModel;
-        break;
-      } catch (mErr) {
-        lastTestErr = mErr;
-        const classified = classifyApiKeyError(mErr);
-        if (classified.type === "quota" || classified.type === "billing" || classified.type === "invalid") {
-          break;
-        }
-      }
-    }
-    if (!testSuccess) {
-      throw lastTestErr || new Error("All fallback models failed health diagnostic");
-    }
-    const latency = Date.now() - start;
-    targetRef.lastTestedAt = Date.now();
-    targetRef.lastLatencyMs = latency;
+  const probe = await probeGeminiKeyZeroQuota(targetKeyStr);
+  const now = Date.now();
+  targetRef.lastTestedAt = now;
+  targetRef.lastLatencyMs = probe.latencyMs;
+  if (probe.success) {
     targetRef.lastHealthStatus = "healthy";
     targetRef.lastError = void 0;
     targetRef.status = "active";
@@ -28928,34 +29237,45 @@ app.post("/api/admin/api-keys/test-id", requireAdminMiddleware, async (req, res)
     await saveApiKeysVault(vault);
     return res.json({
       success: true,
-      message: `\u2705 API Key \u092A\u0942\u0930\u094D\u0923\u0924\u0903 \u0938\u0915\u094D\u0930\u093F\u092F \u0935 \u0915\u093E\u0930\u094D\u092F\u0930\u0924 \u0939\u0948! \u091C\u0947\u092E\u093F\u0928\u0940 \u092E\u0949\u0921\u0932 (${successfulModel}) \u0938\u0947 \u0938\u092B\u0932 \u0915\u0928\u0947\u0915\u094D\u0936\u0928 (${latency}ms)`,
+      state: probe.state,
+      message: `\u2705 API Key \u0938\u0915\u094D\u0930\u093F\u092F \u0935 \u0938\u094D\u0935\u0938\u094D\u0925 \u0939\u0948! (Zero-Quota Probe \u0938\u092B\u0932: ${probe.latencyMs}ms)`,
       provider: "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
-      model: successfulModel,
-      latencyMs: latency,
+      model: "gemini-1.5-flash / gemini-2.0-flash",
+      latencyMs: probe.latencyMs,
       healthStatus: "healthy",
       status: targetRef.status,
       lastTestedAt: targetRef.lastTestedAt
     });
-  } catch (err) {
-    const latency = Date.now() - start;
-    const classified = classifyApiKeyError(err);
-    targetRef.lastTestedAt = Date.now();
-    targetRef.lastLatencyMs = latency;
-    targetRef.lastHealthStatus = classified.healthStatus;
-    targetRef.lastError = classified.userFacingError;
-    if (classified.type === "invalid") {
+  } else {
+    targetRef.lastHealthStatus = probe.state === "INVALID_KEY" ? "invalid" : probe.state === "QUOTA_EXHAUSTED" || probe.state === "RATE_LIMITED" ? "quota_exceeded" : "error";
+    targetRef.lastError = probe.errorMessage;
+    if (probe.state === "INVALID_KEY") {
       targetRef.status = "disabled";
+    }
+    if (probe.state === "QUOTA_EXHAUSTED" || probe.state === "RATE_LIMITED") {
+      targetRef.cooldownUntil = now + (probe.state === "QUOTA_EXHAUSTED" ? 15 * 60 * 1e3 : 60 * 1e3);
     }
     if ("errorCount" in targetRef) {
       targetRef.errorCount = (targetRef.errorCount || 0) + 1;
     }
     await saveApiKeysVault(vault);
-    return res.status(classified.type === "quota" || classified.type === "billing" ? 429 : 500).json({
+    if (probe.state === "QUOTA_EXHAUSTED" || probe.state === "RATE_LIMITED" || probe.state === "INVALID_KEY") {
+      sendApiAlertNotification("TECHNICAL_ERROR", {
+        apiName: `Free Key (${targetRef.label || keyId})`,
+        provider: "Google Gemini Free Pool",
+        status: probe.state,
+        httpCode: probe.statusCode,
+        latencyMs: probe.latencyMs,
+        errorMessage: probe.errorMessage
+      }).catch(() => {
+      });
+    }
+    return res.status(probe.statusCode >= 400 && probe.statusCode < 500 ? probe.statusCode : 500).json({
       success: false,
-      error: `\u0938\u094D\u0935\u093E\u0938\u094D\u0925\u094D\u092F \u092A\u0930\u0940\u0915\u094D\u0937\u0923 \u0924\u094D\u0930\u0941\u091F\u093F: ${classified.userFacingError}`,
+      state: probe.state,
+      error: `\u0938\u094D\u0935\u093E\u0938\u094D\u0925\u094D\u092F \u092A\u0930\u0940\u0915\u094D\u0937\u0923 \u0924\u094D\u0930\u0941\u091F\u093F [${probe.state}]: ${probe.errorMessage}`,
       provider: "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
-      model: DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview",
-      latencyMs: latency,
+      latencyMs: probe.latencyMs,
       healthStatus: targetRef.lastHealthStatus,
       lastTestedAt: targetRef.lastTestedAt
     });
@@ -29000,10 +29320,120 @@ function saveApiAlertsLog(logs) {
   } catch {
   }
 }
+var alertDedupeCache = /* @__PURE__ */ new Map();
+function getMasterAdminVerifiedPhone() {
+  if (process.env.ADMIN_WHATSAPP_NUMBER || process.env.MASTER_ADMIN_PHONE) {
+    const raw = String(process.env.ADMIN_WHATSAPP_NUMBER || process.env.MASTER_ADMIN_PHONE || "").replace(/[^0-9]/g, "");
+    if (raw.startsWith("91") && raw.length === 12) return raw;
+    if (raw.length === 10) return `91${raw}`;
+  }
+  try {
+    const profiles = loadUserProfilesDatabase();
+    const superadmin = Object.values(profiles).find((p) => p && (p.role === "superadmin" || p.email === "breakingnewswala.com@gmail.com"));
+    if (superadmin && (superadmin.phone || superadmin.whatsappNumber)) {
+      const p = String(superadmin.phone || superadmin.whatsappNumber).replace(/[^0-9]/g, "");
+      if (p.startsWith("91") && p.length === 12) return p;
+      if (p.length === 10) return `91${p}`;
+    }
+  } catch {
+  }
+  return "919669802408";
+}
+async function sendAdminSpecialNotification(type, payload) {
+  const timestamp = Date.now();
+  const adminPhone = getMasterAdminVerifiedPhone();
+  const dedupeKey = `${type}_${payload.ticketId || payload.id || payload.apiName || "general"}`;
+  const lastTime = alertDedupeCache.get(dedupeKey);
+  if (lastTime && timestamp - lastTime < 15 * 60 * 1e3) {
+    return { emailSent: false, whatsappSent: false, logRecorded: false };
+  }
+  alertDedupeCache.set(dedupeKey, timestamp);
+  let title = "AI NEWS MAKER \u2014 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0938\u0942\u091A\u0928\u093E";
+  let body = "";
+  if (type === "SUPPORT_REQUEST") {
+    title = `\u0938\u092A\u094B\u0930\u094D\u091F \u091F\u093F\u0915\u091F: ${payload.ticketId}`;
+    body = `\u{1F3AB} *\u0928\u092F\u093E \u0938\u092A\u094B\u0930\u094D\u091F \u091F\u093F\u0915\u091F \u092A\u094D\u0930\u093E\u092A\u094D\u0924 (#${payload.ticketId})*
+
+\u2022 *\u092F\u0942\u091C\u093C\u0930:* ${payload.userName || "\u0905\u0928\u093E\u092E"} (${payload.userEmail || payload.userMobile || "N/A"})
+\u2022 *\u0936\u094D\u0930\u0947\u0923\u0940:* ${payload.category || "\u0938\u093E\u092E\u093E\u0928\u094D\u092F"}
+\u2022 *\u0935\u093F\u0935\u0930\u0923:* ${payload.summary || ""}
+\u2022 *\u0938\u092E\u092F:* ${new Date(timestamp).toLocaleTimeString("hi-IN")}
+
+_AI News Maker \u0938\u092A\u094B\u0930\u094D\u091F \u0921\u0947\u0938\u094D\u0915 \u2022 \u090F\u0921\u092E\u093F\u0928 \u092A\u0948\u0928\u0932 \u092E\u0947\u0902 \u0926\u0947\u0916\u0947\u0902_`;
+  } else if (type === "BRANDING_REQUEST") {
+    title = "\u0932\u094B\u0917\u094B/\u092C\u094D\u0930\u093E\u0902\u0921\u093F\u0902\u0917 \u0905\u0928\u0941\u0930\u094B\u0927";
+    body = `\u{1F3A8} *\u0928\u092F\u093E \u0932\u094B\u0917\u094B/\u092C\u094D\u0930\u093E\u0902\u0921\u093F\u0902\u0917 \u0905\u0928\u0941\u0930\u094B\u0927 \u092A\u094D\u0930\u093E\u092A\u094D\u0924*
+
+\u2022 *\u092F\u0942\u091C\u093C\u0930:* ${payload.userName || payload.userEmail || "N/A"}
+\u2022 *\u091A\u0948\u0928\u0932:* ${payload.channelName || "N/A"}
+\u2022 *\u0938\u092E\u092F:* ${new Date(timestamp).toLocaleTimeString("hi-IN")}
+
+_AI News Maker \u090F\u0921\u092E\u093F\u0928 \u0915\u0902\u0938\u094B\u0932_`;
+  } else if (type === "USER_REQUEST") {
+    title = "\u092F\u0942\u091C\u093C\u0930 \u0938\u0940\u092E\u093E/\u0905\u0928\u0941\u0930\u094B\u0927";
+    body = `\u{1F464} *\u0928\u092F\u093E \u092F\u0942\u091C\u093C\u0930 \u0905\u0928\u0941\u0930\u094B\u0927 \u092A\u094D\u0930\u093E\u092A\u094D\u0924*
+
+\u2022 *\u092F\u0942\u091C\u093C\u0930:* ${payload.userEmail || payload.userId || "N/A"}
+\u2022 *\u0915\u093E\u0930\u0923:* ${payload.reason || "\u092A\u094D\u0932\u093E\u0928 \u0935\u093F\u0938\u094D\u0924\u093E\u0930"}
+\u2022 *\u0938\u092E\u092F:* ${new Date(timestamp).toLocaleTimeString("hi-IN")}
+
+_AI News Maker \u090F\u0921\u092E\u093F\u0928 \u0915\u0902\u0938\u094B\u0932_`;
+  }
+  let whatsappSent = false;
+  try {
+    const waToken = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN || process.env.WHATSAPP_BUSINESS_TOKEN || "";
+    const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
+    if (waToken && waPhoneId && adminPhone) {
+      try {
+        const waResp = await fetch(`https://graph.facebook.com/v19.0/${waPhoneId}/messages`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${waToken}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            to: adminPhone,
+            type: "text",
+            text: { body }
+          })
+        });
+        if (waResp.ok) whatsappSent = true;
+      } catch (waErr) {
+        console.warn("[Special Alert WhatsApp Dispatch] Network error:", waErr.message);
+      }
+    } else {
+      whatsappSent = Boolean(adminPhone);
+    }
+  } catch {
+  }
+  try {
+    const logs = loadApiAlertsLog();
+    logs.unshift({
+      id: `alert_spec_${timestamp}_${Math.random().toString(36).substring(2, 7)}`,
+      timestamp,
+      type,
+      ...payload,
+      title,
+      whatsappSent,
+      verifiedWhatsappNumber: adminPhone
+    });
+    saveApiAlertsLog(logs);
+  } catch {
+  }
+  return { emailSent: false, whatsappSent, logRecorded: true };
+}
 async function sendApiAlertNotification(type, details) {
   const timestamp = Date.now();
   const adminEmail = "breakingnewswala.com@gmail.com";
-  const verifiedWhatsappNumber = process.env.ADMIN_WHATSAPP_NUMBER || process.env.MASTER_ADMIN_PHONE || "9669802408";
+  const verifiedWhatsappNumber = getMasterAdminVerifiedPhone();
+  const dedupeKey = `${type}_${details.apiName}_${details.status}`;
+  const lastAlertTime = alertDedupeCache.get(dedupeKey);
+  if (type !== "TEST" && type !== "RECOVERY" && lastAlertTime && timestamp - lastAlertTime < 15 * 60 * 1e3) {
+    console.log(`[Alert Notification] Suppressed duplicate alert for ${dedupeKey} (last sent ${Math.round((timestamp - lastAlertTime) / 1e3)}s ago)`);
+    return { emailSent: false, whatsappSent: false, logRecorded: false };
+  }
+  alertDedupeCache.set(dedupeKey, timestamp);
   const emailSubject = type === "TEST" ? "AI NEWS MAKER \u2014 API \u0924\u0915\u0928\u0940\u0915\u0940 \u0924\u094D\u0930\u0941\u091F\u093F \u0905\u0932\u0930\u094D\u091F (\u0938\u093F\u092E\u0941\u0932\u0947\u0936\u0928 \u091F\u0947\u0938\u094D\u091F)" : type === "RECOVERY" ? `AI NEWS MAKER \u2014 API \u0938\u0947\u0935\u093E \u092A\u0941\u0928\u0930\u094D\u092C\u0939\u093E\u0932\u0940 (Recovery): ${details.apiName}` : `AI NEWS MAKER \u2014 API \u0924\u0915\u0928\u0940\u0915\u0940 \u0924\u094D\u0930\u0941\u091F\u093F \u0905\u0932\u0930\u094D\u091F: ${details.apiName}`;
   const emailBody = `
 ============================================================
@@ -29135,21 +29565,63 @@ async function runAllApiHealthChecks() {
       geminiItem.httpCode = 404;
     } else {
       const activeKey = vault.paidKey?.key || vault.freeKeys[0]?.key || process.env.GEMINI_API_KEY || "";
-      const testAi = new import_genai2.GoogleGenAI({
-        apiKey: activeKey,
-        httpOptions: { headers: { "User-Agent": "health-check-monitor" } }
-      });
-      await testAi.models.generateContent({
-        model: DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview",
-        contents: "Respond in one word: OK"
-      });
-      geminiItem.latencyMs = Date.now() - geminiStart;
-      geminiItem.status = "Healthy";
-      geminiItem.errorMessage = void 0;
-      geminiItem.httpCode = 200;
-      apiLastSuccessfulCheck["gemini_ai"] = now;
-      apiConsecutiveFailures["gemini_ai"] = 0;
-      delete apiFirstFailureTime["gemini_ai"];
+      const probe = await probeGeminiKeyZeroQuota(activeKey);
+      geminiItem.latencyMs = probe.latencyMs;
+      geminiItem.httpCode = probe.statusCode;
+      if (probe.success) {
+        geminiItem.status = "Healthy";
+        geminiItem.errorMessage = void 0;
+        apiLastSuccessfulCheck["gemini_ai"] = now;
+        apiConsecutiveFailures["gemini_ai"] = 0;
+        delete apiFirstFailureTime["gemini_ai"];
+      } else {
+        geminiItem.status = probe.state === "QUOTA_EXHAUSTED" ? "Rate Limited" : probe.state === "INVALID_KEY" ? "Authentication Error" : "Unhealthy";
+        geminiItem.errorMessage = probe.errorMessage;
+        apiConsecutiveFailures["gemini_ai"] = (apiConsecutiveFailures["gemini_ai"] || 0) + 1;
+        if (!apiFirstFailureTime["gemini_ai"]) apiFirstFailureTime["gemini_ai"] = now;
+      }
+      let vaultModified = false;
+      for (const freeKey of vault.freeKeys || []) {
+        if (!freeKey.key) continue;
+        const keyProbe = await probeGeminiKeyZeroQuota(freeKey.key);
+        const oldHealth = freeKey.lastHealthStatus;
+        freeKey.lastTestedAt = now;
+        freeKey.lastLatencyMs = keyProbe.latencyMs;
+        freeKey.lastHealthStatus = keyProbe.state === "INVALID_KEY" ? "invalid" : keyProbe.state === "QUOTA_EXHAUSTED" || keyProbe.state === "RATE_LIMITED" ? "quota_exceeded" : keyProbe.success ? "healthy" : "error";
+        freeKey.lastError = keyProbe.errorMessage;
+        if (!keyProbe.success) {
+          if (keyProbe.state === "QUOTA_EXHAUSTED" || keyProbe.state === "RATE_LIMITED") {
+            freeKey.cooldownUntil = now + (keyProbe.state === "QUOTA_EXHAUSTED" ? 15 * 60 * 1e3 : 60 * 1e3);
+          } else if (keyProbe.state === "INVALID_KEY") {
+            freeKey.status = "disabled";
+          }
+          vaultModified = true;
+          if (oldHealth === "healthy" || !oldHealth) {
+            sendApiAlertNotification("TECHNICAL_ERROR", {
+              apiName: `Free Key (${freeKey.label})`,
+              provider: "Google Gemini Free Pool",
+              status: keyProbe.state,
+              errorMessage: keyProbe.errorMessage,
+              httpCode: keyProbe.statusCode,
+              latencyMs: keyProbe.latencyMs
+            }).catch(() => {
+            });
+          }
+        } else if (oldHealth && oldHealth !== "healthy") {
+          freeKey.cooldownUntil = 0;
+          vaultModified = true;
+          sendApiAlertNotification("RECOVERY", {
+            apiName: `Free Key (${freeKey.label})`,
+            provider: "Google Gemini Free Pool",
+            status: "READY",
+            latencyMs: keyProbe.latencyMs
+          }).catch(() => {
+          });
+        }
+      }
+      if (vaultModified) {
+        await saveApiKeysVault(vault);
+      }
     }
   } catch (gErr) {
     geminiItem.latencyMs = Date.now() - geminiStart;
@@ -29396,6 +29868,7 @@ async function runAllApiHealthChecks() {
   }
   return results;
 }
+var apiHealthSchedulerIntervalMinutes = 15;
 function startApiHealthScheduler() {
   if (apiHealthSchedulerTimer) {
     clearInterval(apiHealthSchedulerTimer);
@@ -29405,14 +29878,15 @@ function startApiHealthScheduler() {
     console.log("[API Health Scheduler] Scheduler is currently paused/disabled by admin toggle.");
     return;
   }
-  console.log("[API Health Scheduler] Initializing 15-minute automatic health monitoring background scheduler.");
+  const intervalMs = (apiHealthSchedulerIntervalMinutes || 15) * 60 * 1e3;
+  console.log(`[API Health Scheduler] Initializing ${apiHealthSchedulerIntervalMinutes}-minute automatic health monitoring background scheduler.`);
   runAllApiHealthChecks().catch((e) => console.warn("[API Health Scheduler] Initial run error:", e.message));
   apiHealthSchedulerTimer = setInterval(() => {
     if (apiHealthSchedulerEnabled) {
-      console.log("[API Health Scheduler] Running scheduled 15-minute API health check...");
+      console.log(`[API Health Scheduler] Running scheduled ${apiHealthSchedulerIntervalMinutes}-minute API health check...`);
       runAllApiHealthChecks().catch((e) => console.warn("[API Health Scheduler] Scheduled run error:", e.message));
     }
-  }, 15 * 60 * 1e3);
+  }, intervalMs);
 }
 app.get("/api/admin/api-health/status", requireAdminMiddleware, async (_req, res) => {
   try {
@@ -29422,6 +29896,7 @@ app.get("/api/admin/api-health/status", requireAdminMiddleware, async (_req, res
     return res.json({
       success: true,
       schedulerEnabled: apiHealthSchedulerEnabled,
+      schedulerIntervalMinutes: apiHealthSchedulerIntervalMinutes,
       monitoringHistory: apiMonitoringHistory,
       apis: latestApiHealthResults,
       alertsLog: loadApiAlertsLog().slice(0, 10)
@@ -29440,6 +29915,25 @@ app.post("/api/admin/api-health/test-all", requireAdminMiddleware, async (_req, 
       monitoringHistory: apiMonitoringHistory,
       apis: results
     });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/api-health/scheduler/interval", requireAdminMiddleware, (req, res) => {
+  try {
+    const { intervalMinutes } = req.body || {};
+    const mins = Number(intervalMinutes);
+    if ([10, 15, 30].includes(mins)) {
+      apiHealthSchedulerIntervalMinutes = mins;
+      startApiHealthScheduler();
+      return res.json({
+        success: true,
+        schedulerEnabled: apiHealthSchedulerEnabled,
+        schedulerIntervalMinutes: apiHealthSchedulerIntervalMinutes,
+        message: `\u0938\u094D\u0935\u091A\u093E\u0932\u093F\u0924 \u0938\u094D\u0935\u093E\u0938\u094D\u0925\u094D\u092F \u0928\u093F\u0917\u0930\u093E\u0928\u0940 \u0905\u0902\u0924\u0930\u093E\u0932 \u0915\u094B ${mins} \u092E\u093F\u0928\u091F \u092A\u0930 \u0938\u0947\u091F \u0915\u093F\u092F\u093E \u0917\u092F\u093E\u0964`
+      });
+    }
+    return res.status(400).json({ success: false, error: "\u0905\u092E\u093E\u0928\u094D\u092F \u0905\u0902\u0924\u0930\u093E\u0932 (\u0915\u0947\u0935\u0932 10, 15 \u092F\u093E 30 \u092E\u093F\u0928\u091F \u0938\u094D\u0935\u0940\u0915\u093E\u0930\u094D\u092F \u0939\u0948)" });
   } catch (err) {
     return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
   }
@@ -37697,10 +38191,10 @@ async function startServer() {
           const query = req.query || {};
           const articleId = (query.article || query.news || query.newsId || query.articleId || (req.path.startsWith("/news/") ? req.path.replace("/news/", "") : "") || (req.path.startsWith("/article/") ? req.path.replace("/article/", "") : "")).toString().trim();
           const cleanBase = "https://www.ainewsmaker.online";
-          let title = "AI News Maker \u2014 \u0938\u094D\u092E\u093E\u0930\u094D\u091F \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B";
-          let description = "\u092D\u093E\u0930\u0924 \u0915\u093E \u0928\u0902\u092C\u0930 1 \u0938\u094D\u092E\u093E\u0930\u094D\u091F \u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B\u0964 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093C\u093F\u0915\u094D\u0938, \u0935\u0940\u0921\u093F\u092F\u094B \u0930\u0940\u0932\u094D\u0938 \u0914\u0930 \u0908-\u092A\u0947\u092A\u0930 \u092C\u0928\u093E\u090F\u0902 \u0938\u0947\u0915\u0902\u0921\u094B\u0902 \u092E\u0947\u0902\u0964";
-          let canonical = `${cleanBase}${req.path === "/" ? "/" : req.path}`;
-          let ogImage = `${cleanBase}/assets/breaking_news_wala_logo.png`;
+          let title = "AI News Maker - \u0938\u094D\u092E\u093E\u0930\u094D\u091F \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B";
+          let description = "\u092D\u093E\u0930\u0924 \u0915\u093E \u0938\u094D\u092E\u093E\u0930\u094D\u091F \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B\u0964 \u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0917\u094D\u0930\u093E\u092B\u093F\u0915\u094D\u0938, \u0935\u0940\u0921\u093F\u092F\u094B \u0930\u0940\u0932\u094D\u0938 \u0914\u0930 \u0908-\u092A\u0947\u092A\u0930 \u092C\u0928\u093E\u090F\u0902\u0964";
+          let canonical = `${cleanBase}${req.path === "/" ? "" : req.path}`;
+          let ogImage = `${cleanBase}/assets/ai_news_maker_logo.png?v=2`;
           let ogType = "website";
           let extraJsonLd = "";
           let prerenderContent = "";
@@ -37760,7 +38254,7 @@ async function startServer() {
                     "url": cleanBase,
                     "logo": {
                       "@type": "ImageObject",
-                      "url": `${cleanBase}/assets/breaking_news_wala_logo.png`
+                      "url": `${cleanBase}/assets/ai_news_maker_logo.png?v=2`
                     }
                   },
                   "mainEntityOfPage": canonical
@@ -37774,7 +38268,7 @@ async function startServer() {
                       <h1 style="font-size:26px;font-weight:700;margin:15px 0;">${safeTitle}</h1>
                       <p style="color:#94a3b8;font-size:13px;"><time datetime="${isoDate}">${isoDate.slice(0, 10)}</time> | AI News Maker \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0921\u0947\u0938\u094D\u0915</p>
                     </header>
-                    ${ogImage && !ogImage.includes("breaking_news_wala_logo.png") ? `<figure><img src="${ogImage}" alt="${safeTitle}" style="max-width:100%;border-radius:12px;margin:15px 0;" /></figure>` : ""}
+                    ${ogImage && !ogImage.includes("ai_news_maker_logo.png") && !ogImage.includes("breaking_news_wala_logo.png") ? `<figure><img src="${ogImage}" alt="${safeTitle}" style="max-width:100%;border-radius:12px;margin:15px 0;" /></figure>` : ""}
                     <div class="content" style="line-height:1.7;font-size:16px;">
                       <p>${safeSummary}</p>
                     </div>
@@ -37828,9 +38322,13 @@ async function startServer() {
           modified = modified.replace(/<meta\s+property=["']og:title["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:title" content="${title.replace(/"/g, "&quot;")}" />`);
           modified = modified.replace(/<meta\s+property=["']og:description["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:description" content="${description.replace(/"/g, "&quot;")}" />`);
           modified = modified.replace(/<meta\s+property=["']og:url["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:url" content="${canonical}" />`);
+          const imgWidth = ogType === "website" ? "1024" : "1200";
+          const imgHeight = ogType === "website" ? "1024" : "630";
           modified = modified.replace(/<meta\s+property=["']og:image["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:image" content="${ogImage}" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
+    <meta property="og:image:secure_url" content="${ogImage}" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="${imgWidth}" />
+    <meta property="og:image:height" content="${imgHeight}" />
     <meta property="og:image:alt" content="${title.replace(/"/g, "&quot;")}" />`);
           modified = modified.replace(/<meta\s+property=["']og:type["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:type" content="${ogType}" />`);
           modified = modified.replace(/<meta\s+name=["']twitter:card["']\s+content=["'][^"']*["']\s*\/?>/i, '<meta name="twitter:card" content="summary_large_image" />');

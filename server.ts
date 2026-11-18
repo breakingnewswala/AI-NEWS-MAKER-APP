@@ -10530,7 +10530,7 @@ app.post("/api/newsroom/script-maker", async (req, res) => {
       });
     }
 
-    const { rawText, inputType = "प्रेस नोट" } = req.body || {};
+    const { rawText, inputType = "प्रेस नोट", generationMode = "website", username } = req.body || {};
     if (!rawText || typeof rawText !== "string" || rawText.trim().length < 5) {
       return res.status(400).json({
         success: false,
@@ -10539,77 +10539,195 @@ app.post("/api/newsroom/script-maker", async (req, res) => {
     }
 
     const cleanInput = rawText.trim().slice(0, 5000);
+    const userHandle = String(username || user?.username || "AINewsMaker").replace(/[^a-zA-Z0-9_]/g, "") || "AINewsMaker";
+
+    const isPreambleWord = (txt: string) => {
+      const t = (txt || "").trim().toLowerCase().replace(/^[-–—*:•·\s()\[\]{}]+/, "");
+      return /^(?:प्रेस\s*[-–—]?\s*(?:नोट|विज्ञप्ति|बयान)|स[-–—]?नोट|कार्यालय|कार्यालयीन|सूचना|दिनांक|तारीख|क्रमांक|प्रेषक|प्रति|विषय[:\s]|press\s*release|press\s*note)/i.test(t);
+    };
+
+    const extractSubject = () => {
+      const lines = cleanInput.split(/\r?\n+/).map(l => l.trim()).filter(Boolean);
+      const contentLines = lines.filter(l => !isPreambleWord(l));
+      let title = contentLines[0] || lines[0] || "ताजा डिजिटल समाचार";
+      if (/^कार्यालय\s+/i.test(title) && contentLines.length > 1) {
+        title = contentLines[1];
+      }
+      title = title.replace(/^[-–—*:•·\s()\[\]{}]+/, "").trim();
+      if (title.length > 90) title = title.slice(0, 87) + "...";
+      const secondary = contentLines[1] || "";
+      const storyLines = contentLines.length > 1 ? contentLines.slice(1) : lines;
+      return { title, secondary, storyLines };
+    };
+
+    const parsedSubject = extractSubject();
 
     // AI Generation with Gemini
-    let generated: { headline: string; subHeadline: string; fullStory: string } | null = null;
+    let generatedWebsite: { headline: string; subHeadline: string; fullStory: string } | null = null;
+    let generatedSocial: { socialHeadlines: string[]; socialDescription: string; hashtags: string[] } | null = null;
+
     try {
-      generated = await executeGeminiWithKeyPool(async (ai) => {
-        const prompt = `आप एक वरिष्ठ भारतीय डिजिटल न्यूज़ संपादक (Senior Hindi Digital News Editor) हैं।
+      if (generationMode === "social") {
+        generatedSocial = await executeGeminiWithKeyPool(async (ai) => {
+          const prompt = `आप एक वरिष्ठ सोशल मीडिया न्यूज़ एडिटर (Senior Social Media News Editor) हैं।
 आपको निम्नलिखित कच्ची सामग्री (इनपुट प्रकार: "${inputType}") दी गई है:
 
 ---
 ${cleanInput}
 ---
 
-कृपया इसे एक अत्यधिक आकर्षक, तथ्यात्मक, सटीक और पठनीय डिजिटल न्यूज़ पैकेज में बदलें।
+कृपया सोशल मीडिया (Instagram, Facebook, X, WhatsApp Status) के लिए अत्यधिक वायरल, आकर्षक और पठनीय न्यूज़ पैकेज तैयार करें।
+कड़े संपादकीय नियम:
+1. सोशल हेडलाइंस विकल्प (socialHeadlines): 3 से 4 बिल्कुल अलग-अलग, अत्यधिक आकर्षक, तथ्यात्मक व क्लिक-योग्य हेडलाइंस। ध्यान रहे: "प्रेस नोट", "स-नोट", "कार्यालय" जैसे प्रशासनिक शब्दों को शीर्षक न बनाएं। समाचार का मुख्य घटनाक्रम व विषय ही शीर्षक होना चाहिए।
+2. सोशल डिस्क्रिप्शन / कैप्शन (socialDescription): 2 से 3 संक्षिप्त, प्रवाहमयी व प्रभावशाली वाक्य (60-120 शब्द) जो पाठकों को तुरंत आकर्षित करें।
+3. हैशटैग्स (hashtags): उपयुक्त हैशटैग्स की क्रमबद्ध सूची। पहला हैशटैग #${userHandle} हो, फिर खबर के अनुसार 3-5 विषयगत हैशटैग्स (उदा. #BreakingNews #CrimeNews #PoliceAction), और अंत में अनिवार्य रूप से #AINewsMaker हो।
+
+उत्तर केवल और केवल वैध JSON प्रारूप में दें:
+{
+  "socialHeadlines": [
+    "हेडलाइन विकल्प 1",
+    "हेडलाइन विकल्प 2",
+    "हेडलाइन विकल्प 3",
+    "हेडलाइन विकल्प 4"
+  ],
+  "socialDescription": "सोशल मीडिया कैप्शन...",
+  "hashtags": [
+    "#${userHandle}",
+    "#BreakingNews",
+    "#PoliceAction",
+    "#AINewsMaker"
+  ]
+}`;
+
+          const res = await generateWithFallbackAndRetry(ai, GEMINI_MODELS_POOL.slice(0, 2), {
+            contents: prompt,
+            config: { temperature: 0.3 },
+          });
+
+          const text = res?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          const jsonMatch = text.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (parsed && Array.isArray(parsed.socialHeadlines) && parsed.socialHeadlines.length > 0) {
+              const cleanHls = parsed.socialHeadlines.map((h: string) => String(h || "").trim()).filter((h: string) => h && !isPreambleWord(h));
+              const sanitizeHandle = (h: string) => String(h || "").replace(/^@+/, "").replace(/[^a-zA-Z0-9_]/g, "") || "AINewsMaker";
+              const cleanUserHandle = sanitizeHandle(userHandle);
+              const formatOrderedHashtags = (rawTags: string[]): string[] => {
+                const middle: string[] = [];
+                for (const t of rawTags) {
+                  const clean = String(t || "").replace(/^[#@\s]+/, "").trim();
+                  if (!clean) continue;
+                  const lower = clean.toLowerCase();
+                  if (lower === cleanUserHandle.toLowerCase() || lower === "ainewsmaker" || lower === "bnwtv" || lower === "breakingnewswala") {
+                    continue;
+                  }
+                  const tag = `#${clean}`;
+                  if (!middle.includes(tag)) middle.push(tag);
+                }
+                if (middle.length === 0) middle.push("#BreakingNews", "#NewsUpdate");
+                return [`#${cleanUserHandle}`, ...middle.slice(0, 4), "#AINewsMaker"];
+              };
+              const tags = formatOrderedHashtags(Array.isArray(parsed.hashtags) ? parsed.hashtags : [])
+              return {
+                socialHeadlines: cleanHls.length >= 2 ? cleanHls : [parsedSubject.title, `बड़ी खबर: ${parsedSubject.title}`, `${parsedSubject.title} — जानें पूरा मामला`],
+                socialDescription: String(parsed.socialDescription || "").trim(),
+                hashtags: tags,
+              };
+            }
+          }
+          return null;
+        });
+      } else {
+        generatedWebsite = await executeGeminiWithKeyPool(async (ai) => {
+          const prompt = `आप एक वरिष्ठ भारतीय डिजिटल न्यूज़ संपादक (Senior Hindi Digital News Editor) हैं।
+आपको निम्नलिखित कच्ची सामग्री (इनपुट प्रकार: "${inputType}") दी गई है:
+
+---
+${cleanInput}
+---
+
+कृपया वेबसाइट प्रकाशन के लिए एक अत्यधिक प्रभावशाली, तथ्यात्मक, सटीक और पठनीय डिजिटल न्यूज़ पैकेज तैयार करें।
 कड़े संपादकीय नियम (Strict Editorial Rules):
-1. मुख्य हेडलाइन (headline): आकर्षक, प्रभावशाली, तथ्यात्मक और 10-15 शब्दों में।
+1. मुख्य हेडलाइन (headline): अत्यंत सटीक, प्रभावशाली व तथ्यात्मक शीर्षक (10-15 शब्द)। ध्यान रहे: "प्रेस नोट", "स-नोट", "विज्ञप्ति", "कार्यालय" जैसे प्रशासनिक शब्दों को शीर्षक न बनाएं। समाचार का मुख्य घटनाक्रम व विषय ही शीर्षक होना चाहिए।
 2. सब-हेडलाइन (subHeadline): पूरक सब-हेडलाइन जिसमें मुख्य संदर्भ, कारण या प्रभाव हो (15-25 शब्दों में)।
 3. पूरी न्यूज़ स्टोरी (fullStory): संतुलित, विस्तृत हिंदी न्यूज़ स्टोरी (2-3 पैराग्राफ्स, 120-250 शब्द)। सही पैराग्राफ क्रम और पेशेवर पत्रकारिता शैली हो।
 4. तथ्यात्मक सत्यनिष्ठा (Fact Preservation): दी गई सामग्री में मौजूद सभी नाम, पद, तारीखें, स्थान, संख्याएं और आंकड़े हूबहू बनाए रखें।
-5. मनगढ़ंत तथ्यों पर पूर्ण प्रतिबंध (No Hallucination): अपनी तरफ से कोई भी झूठा तथ्य, अज्ञात सूत्र, काल्पनिक बयान, आरोप या आंकड़े न जोड़ें। यदि प्रेस नोट में कोई विवरण उपलब्ध नहीं है, तो उसे अपनी ओर से न बनाएं।
-6. भाषा शुद्ध, त्रुटिहीन, स्पष्ट और निष्पक्ष हिंदी पत्रकारिता शैली में हो।
+5. भाषा शुद्ध, त्रुटिहीन, स्पष्ट और निष्पक्ष हिंदी पत्रकारिता शैली में हो।
 
-उत्तर केवल और केवल वैध JSON प्रारूप में दें, जिसमें निम्न कुंजियाँ (keys) हों:
+उत्तर केवल और केवल वैध JSON प्रारूप में दें:
 {
   "headline": "मुख्य हेडलाइन",
   "subHeadline": "सब-हेडलाइन",
   "fullStory": "पूरी न्यूज़ स्टोरी"
 }`;
 
-        const res = await generateWithFallbackAndRetry(ai, GEMINI_MODELS_POOL.slice(0, 2), {
-          contents: prompt,
-          config: { temperature: 0.3 },
-        });
+          const res = await generateWithFallbackAndRetry(ai, GEMINI_MODELS_POOL.slice(0, 2), {
+            contents: prompt,
+            config: { temperature: 0.3 },
+          });
 
-        const text = res?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (parsed && parsed.headline) {
-            return {
-              headline: String(parsed.headline || "").trim(),
-              subHeadline: String(parsed.subHeadline || "").trim(),
-              fullStory: String(parsed.fullStory || "").trim(),
-            };
+          const text = res?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          const jsonMatch = text.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (parsed && parsed.headline && !isPreambleWord(parsed.headline)) {
+              return {
+                headline: String(parsed.headline || "").trim(),
+                subHeadline: String(parsed.subHeadline || "").trim(),
+                fullStory: String(parsed.fullStory || "").trim(),
+              };
+            }
           }
-        }
-        return null;
-      });
+          return null;
+        });
+      }
     } catch (e: any) {
       console.warn("[Script Maker] AI generation error:", e?.message || e);
     }
 
-    // High quality deterministic fallback if AI is quota-paused or unavailable
-    if (!generated || !generated.headline) {
-      const lines = cleanInput.split(/\n+/).map(l => l.trim()).filter(Boolean);
-      const firstLine = lines[0] || "ताजा डिजिटल समाचार";
-      const secondLine = lines[1] || "";
-      const bodyLines = lines.slice(1).join("\n\n");
-      generated = {
-        headline: firstLine.length > 80 ? firstLine.slice(0, 80) + "..." : firstLine,
-        subHeadline: secondLine ? (secondLine.length > 120 ? secondLine.slice(0, 120) + "..." : secondLine) : `${firstLine} — विस्तृत डिजिटल न्यूज़ बुलेटिन`,
-        fullStory: bodyLines.length > 30 ? bodyLines : `${firstLine}\n\n${cleanInput}`,
-      };
+    if (generationMode === "social") {
+      if (!generatedSocial || !generatedSocial.socialHeadlines || generatedSocial.socialHeadlines.length === 0) {
+        const title = parsedSubject.title;
+        const bodyLines = parsedSubject.storyLines.join(" ");
+        generatedSocial = {
+          socialHeadlines: [
+            title,
+            `बड़ी खबर: ${title}`,
+            `${title} — जानें पूरा मामला`,
+            `${title}: प्रशासन की त्वरित कार्रवाई`
+          ],
+          socialDescription: bodyLines.length > 40 ? bodyLines.slice(0, 240) + "..." : `${title} के संबंध में विस्तृत रिपोर्ट। अधिक जानकारी नीचे दी गई है।`,
+          hashtags: [`#${String(userHandle || "AINewsMaker").replace(/^@+/, "").replace(/[^a-zA-Z0-9_]/g, "") || "AINewsMaker"}`, "#BreakingNews", "#HindiNews", "#NewsUpdate", "#AINewsMaker"],
+        };
+      }
+      return res.json({
+        success: true,
+        generationMode: "social",
+        socialHeadlines: generatedSocial.socialHeadlines,
+        socialDescription: generatedSocial.socialDescription,
+        hashtags: generatedSocial.hashtags,
+        inputType,
+      });
+    } else {
+      if (!generatedWebsite || !generatedWebsite.headline || isPreambleWord(generatedWebsite.headline)) {
+        const title = parsedSubject.title;
+        const sec = parsedSubject.secondary;
+        const bodyLines = parsedSubject.storyLines.join("\n\n");
+        generatedWebsite = {
+          headline: title,
+          subHeadline: sec ? (sec.length > 120 ? sec.slice(0, 120) + "..." : sec) : `${title} — विस्तृत डिजिटल न्यूज़ बुलेटिन`,
+          fullStory: bodyLines.length > 30 ? bodyLines : `${title}\n\n${cleanInput}`,
+        };
+      }
+      return res.json({
+        success: true,
+        generationMode: "website",
+        headline: generatedWebsite.headline,
+        subHeadline: generatedWebsite.subHeadline,
+        fullStory: generatedWebsite.fullStory,
+        inputType,
+      });
     }
-
-    return res.json({
-      success: true,
-      headline: generated.headline,
-      subHeadline: generated.subHeadline,
-      fullStory: generated.fullStory,
-      inputType,
-    });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -16100,6 +16218,18 @@ app.post("/api/support/requests", async (req, res) => {
     const updated = [newRequest, ...all.filter((r) => r.id !== newRequest.id)];
     saveSupportRequestsDatabase(updated);
 
+    // Centralized Special Admin Notification (Module 6)
+    try {
+      sendAdminSpecialNotification("SUPPORT_REQUEST", {
+        ticketId: newRequest.id,
+        userName: newRequest.userName,
+        userEmail: newRequest.userEmail,
+        userMobile: newRequest.userMobile,
+        category: newRequest.reportType,
+        summary: (newRequest.message || newRequest.reportReason || "नया सपोर्ट संदेश").slice(0, 160),
+      }).catch(() => {});
+    } catch {}
+
     return res.json({ success: true, request: newRequest, requests: updated });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -19571,6 +19701,85 @@ app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, r
   }
 });
 
+/**
+ * Zero-Quota Gemini Health Probe.
+ * Queries the lightweight metadata / models list endpoint:
+ * GET https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}
+ * Does NOT invoke generateContent, consuming zero content generation tokens / quota.
+ */
+async function probeGeminiKeyZeroQuota(apiKey: string): Promise<{
+  success: boolean;
+  state: "READY" | "RATE_LIMITED" | "QUOTA_EXHAUSTED" | "TEMPORARILY_UNAVAILABLE" | "INVALID_KEY" | "DISABLED";
+  latencyMs: number;
+  statusCode: number;
+  errorMessage?: string;
+}> {
+  const start = Date.now();
+  const cleanKey = (apiKey || "").trim();
+  if (!cleanKey) {
+    return { success: false, state: "INVALID_KEY", latencyMs: 0, statusCode: 400, errorMessage: "API Key अनुपलब्ध है।" };
+  }
+  try {
+    const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}`, {
+      method: "GET",
+      headers: { "User-Agent": "ai-news-maker-health-probe" },
+      signal: AbortSignal.timeout(8000),
+    });
+    const latencyMs = Date.now() - start;
+    const statusCode = resp.status;
+    if (resp.ok) {
+      return { success: true, state: "READY", latencyMs, statusCode };
+    }
+    const errBody = await resp.json().catch(() => ({}));
+    const errMsg = String(errBody?.error?.message || "").toLowerCase();
+    const errStatus = String(errBody?.error?.status || "");
+
+    if (statusCode === 429 || errStatus === "RESOURCE_EXHAUSTED" || errMsg.includes("quota") || errMsg.includes("rate limit") || errMsg.includes("too many requests")) {
+      return {
+        success: false,
+        state: (errMsg.includes("quota") || errMsg.includes("exhausted")) ? "QUOTA_EXHAUSTED" : "RATE_LIMITED",
+        latencyMs,
+        statusCode,
+        errorMessage: errBody?.error?.message || "दैनिक कोटा / रेट लिमिट समाप्त (Quota or Rate limit exceeded)",
+      };
+    }
+    if (statusCode === 400 || statusCode === 401 || statusCode === 403 || errStatus === "INVALID_ARGUMENT" || errMsg.includes("not valid") || errMsg.includes("invalid")) {
+      return {
+        success: false,
+        state: "INVALID_KEY",
+        latencyMs,
+        statusCode,
+        errorMessage: errBody?.error?.message || "अमान्य API Key (Invalid Key)",
+      };
+    }
+    if (statusCode === 500 || statusCode === 502 || statusCode === 503 || statusCode === 504) {
+      return {
+        success: false,
+        state: "TEMPORARILY_UNAVAILABLE",
+        latencyMs,
+        statusCode,
+        errorMessage: errBody?.error?.message || "गूगल जेमिनी सेवा अस्थायी रूप से अनुपलब्ध (Google AI Temporarily Unavailable)",
+      };
+    }
+    return {
+      success: false,
+      state: "TEMPORARILY_UNAVAILABLE",
+      latencyMs,
+      statusCode,
+      errorMessage: errBody?.error?.message || `HTTP ${statusCode}`,
+    };
+  } catch (err: any) {
+    const latencyMs = Date.now() - start;
+    return {
+      success: false,
+      state: "TEMPORARILY_UNAVAILABLE",
+      latencyMs,
+      statusCode: 0,
+      errorMessage: err?.message || "नेटवर्क टाइमआउट / कनेक्शन त्रुटि",
+    };
+  }
+}
+
 app.post("/api/admin/api-keys/test-id", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "अनधिकृत: केवल अधिकृत व्यवस्थापक ही API स्वास्थ्य परीक्षण कर सकते हैं।" });
@@ -19580,6 +19789,7 @@ app.post("/api/admin/api-keys/test-id", requireAdminMiddleware, async (req, res)
     const health = await checkDefaultGeminiHealth(true);
     return res.json({
       success: health.healthStatus === "healthy",
+      state: health.healthStatus === "healthy" ? "READY" : "TEMPORARILY_UNAVAILABLE",
       message: health.healthStatus === "healthy"
         ? `✅ डिफ़ॉल्ट Gemini API Key सक्रिय व स्वस्थ है! रिस्पॉन्स समय: ${health.latencyMs || 0}ms`
         : `डिफ़ॉल्ट API समस्या: ${health.errorMessage || health.healthStatus}`,
@@ -19608,49 +19818,14 @@ app.post("/api/admin/api-keys/test-id", requireAdminMiddleware, async (req, res)
     targetRef = found;
   }
 
-  const start = Date.now();
-  try {
-    const testAi = new GoogleGenAI({
-      apiKey: targetKeyStr,
-      httpOptions: { headers: { "User-Agent": "aistudio-build-health-check" } },
-    });
+  // Execute zero-quota probe
+  const probe = await probeGeminiKeyZeroQuota(targetKeyStr);
+  const now = Date.now();
 
-    let testSuccess = false;
-    let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview";
-    let lastTestErr: any = null;
+  targetRef.lastTestedAt = now;
+  targetRef.lastLatencyMs = probe.latencyMs;
 
-    for (const testModel of DEFAULT_FALLBACK_MODELS) {
-      try {
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`Test timeout on model ${testModel} after 12s`)), 12000)
-        );
-        const testCall = testAi.models.generateContent({
-          model: testModel,
-          contents: 'आप एक संपादकीय परीक्षक हैं। इस टेस्ट अनुरोध पर वैध JSON में उत्तर दें: {"status": "ok", "newsReady": true}',
-          config: {
-            responseMimeType: "application/json",
-          },
-        });
-        await Promise.race([testCall, timeoutPromise]);
-        testSuccess = true;
-        successfulModel = testModel;
-        break;
-      } catch (mErr: any) {
-        lastTestErr = mErr;
-        const classified = classifyApiKeyError(mErr);
-        if (classified.type === "quota" || classified.type === "billing" || classified.type === "invalid") {
-          break; // Stop model retries if key is depleted, exhausted or invalid
-        }
-      }
-    }
-
-    if (!testSuccess) {
-      throw lastTestErr || new Error("All fallback models failed health diagnostic");
-    }
-
-    const latency = Date.now() - start;
-    targetRef.lastTestedAt = Date.now();
-    targetRef.lastLatencyMs = latency;
+  if (probe.success) {
     targetRef.lastHealthStatus = "healthy";
     targetRef.lastError = undefined;
     targetRef.status = "active";
@@ -19661,37 +19836,48 @@ app.post("/api/admin/api-keys/test-id", requireAdminMiddleware, async (req, res)
 
     return res.json({
       success: true,
-      message: `✅ API Key पूर्णतः सक्रिय व कार्यरत है! जेमिनी मॉडल (${successfulModel}) से सफल कनेक्शन (${latency}ms)`,
+      state: probe.state,
+      message: `✅ API Key सक्रिय व स्वस्थ है! (Zero-Quota Probe सफल: ${probe.latencyMs}ms)`,
       provider: "Google Gemini (गूगल जेमिनी)",
-      model: successfulModel,
-      latencyMs: latency,
+      model: "gemini-1.5-flash / gemini-2.0-flash",
+      latencyMs: probe.latencyMs,
       healthStatus: "healthy",
       status: targetRef.status,
       lastTestedAt: targetRef.lastTestedAt,
     });
-  } catch (err: any) {
-    const latency = Date.now() - start;
-    const classified = classifyApiKeyError(err);
-    targetRef.lastTestedAt = Date.now();
-    targetRef.lastLatencyMs = latency;
-    targetRef.lastHealthStatus = classified.healthStatus;
-    targetRef.lastError = classified.userFacingError;
+  } else {
+    targetRef.lastHealthStatus = probe.state === "INVALID_KEY" ? "invalid" : (probe.state === "QUOTA_EXHAUSTED" || probe.state === "RATE_LIMITED" ? "quota_exceeded" : "error");
+    targetRef.lastError = probe.errorMessage;
 
-    if (classified.type === "invalid") {
+    if (probe.state === "INVALID_KEY") {
       targetRef.status = "disabled";
     }
-
+    if (probe.state === "QUOTA_EXHAUSTED" || probe.state === "RATE_LIMITED") {
+      targetRef.cooldownUntil = now + (probe.state === "QUOTA_EXHAUSTED" ? 15 * 60 * 1000 : 60 * 1000);
+    }
     if ("errorCount" in targetRef) {
       targetRef.errorCount = (targetRef.errorCount || 0) + 1;
     }
     await saveApiKeysVault(vault);
 
-    return res.status(classified.type === "quota" || classified.type === "billing" ? 429 : 500).json({
+    // Trigger proactive alert to Master Admin for critical key states
+    if (probe.state === "QUOTA_EXHAUSTED" || probe.state === "RATE_LIMITED" || probe.state === "INVALID_KEY") {
+      sendApiAlertNotification("TECHNICAL_ERROR", {
+        apiName: `Free Key (${targetRef.label || keyId})`,
+        provider: "Google Gemini Free Pool",
+        status: probe.state,
+        httpCode: probe.statusCode,
+        latencyMs: probe.latencyMs,
+        errorMessage: probe.errorMessage,
+      }).catch(() => {});
+    }
+
+    return res.status(probe.statusCode >= 400 && probe.statusCode < 500 ? probe.statusCode : 500).json({
       success: false,
-      error: `स्वास्थ्य परीक्षण त्रुटि: ${classified.userFacingError}`,
+      state: probe.state,
+      error: `स्वास्थ्य परीक्षण त्रुटि [${probe.state}]: ${probe.errorMessage}`,
       provider: "Google Gemini (गूगल जेमिनी)",
-      model: DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview",
-      latencyMs: latency,
+      latencyMs: probe.latencyMs,
       healthStatus: targetRef.lastHealthStatus,
       lastTestedAt: targetRef.lastTestedAt,
     });
@@ -19766,8 +19952,113 @@ function saveApiAlertsLog(logs: any[]): void {
   } catch {}
 }
 
+const alertDedupeCache = new Map<string, number>();
+
+function getMasterAdminVerifiedPhone(): string {
+  if (process.env.ADMIN_WHATSAPP_NUMBER || process.env.MASTER_ADMIN_PHONE) {
+    const raw = String(process.env.ADMIN_WHATSAPP_NUMBER || process.env.MASTER_ADMIN_PHONE || "").replace(/[^0-9]/g, "");
+    if (raw.startsWith("91") && raw.length === 12) return raw;
+    if (raw.length === 10) return `91${raw}`;
+  }
+  try {
+    const profiles = loadUserProfilesDatabase();
+    const superadmin = Object.values(profiles).find((p: any) => p && (p.role === 'superadmin' || p.email === 'breakingnewswala.com@gmail.com'));
+    if (superadmin && ((superadmin as any).phone || (superadmin as any).whatsappNumber)) {
+      const p = String((superadmin as any).phone || (superadmin as any).whatsappNumber).replace(/[^0-9]/g, "");
+      if (p.startsWith("91") && p.length === 12) return p;
+      if (p.length === 10) return `91${p}`;
+    }
+  } catch {}
+  return "919669802408";
+}
+
+async function sendAdminSpecialNotification(
+  type: "SUPPORT_REQUEST" | "USER_REQUEST" | "BRANDING_REQUEST" | "API_FAILURE" | "API_RECOVERY",
+  payload: any
+): Promise<{ emailSent: boolean; whatsappSent: boolean; logRecorded: boolean }> {
+  const timestamp = Date.now();
+  const adminPhone = getMasterAdminVerifiedPhone();
+  const dedupeKey = `${type}_${payload.ticketId || payload.id || payload.apiName || 'general'}`;
+  const lastTime = alertDedupeCache.get(dedupeKey);
+  if (lastTime && (timestamp - lastTime) < 15 * 60 * 1000) {
+    return { emailSent: false, whatsappSent: false, logRecorded: false };
+  }
+  alertDedupeCache.set(dedupeKey, timestamp);
+
+  let title = "AI NEWS MAKER — प्रशासनिक सूचना";
+  let body = "";
+  if (type === "SUPPORT_REQUEST") {
+    title = `सपोर्ट टिकट: ${payload.ticketId}`;
+    body = `🎫 *नया सपोर्ट टिकट प्राप्त (#${payload.ticketId})*\n\n` +
+      `• *यूज़र:* ${payload.userName || 'अनाम'} (${payload.userEmail || payload.userMobile || 'N/A'})\n` +
+      `• *श्रेणी:* ${payload.category || 'सामान्य'}\n` +
+      `• *विवरण:* ${payload.summary || ''}\n` +
+      `• *समय:* ${new Date(timestamp).toLocaleTimeString('hi-IN')}\n\n` +
+      `_AI News Maker सपोर्ट डेस्क • एडमिन पैनल में देखें_`;
+  } else if (type === "BRANDING_REQUEST") {
+    title = "लोगो/ब्रांडिंग अनुरोध";
+    body = `🎨 *नया लोगो/ब्रांडिंग अनुरोध प्राप्त*\n\n` +
+      `• *यूज़र:* ${payload.userName || payload.userEmail || 'N/A'}\n` +
+      `• *चैनल:* ${payload.channelName || 'N/A'}\n` +
+      `• *समय:* ${new Date(timestamp).toLocaleTimeString('hi-IN')}\n\n` +
+      `_AI News Maker एडमिन कंसोल_`;
+  } else if (type === "USER_REQUEST") {
+    title = "यूज़र सीमा/अनुरोध";
+    body = `👤 *नया यूज़र अनुरोध प्राप्त*\n\n` +
+      `• *यूज़र:* ${payload.userEmail || payload.userId || 'N/A'}\n` +
+      `• *कारण:* ${payload.reason || 'प्लान विस्तार'}\n` +
+      `• *समय:* ${new Date(timestamp).toLocaleTimeString('hi-IN')}\n\n` +
+      `_AI News Maker एडमिन कंसोल_`;
+  }
+
+  let whatsappSent = false;
+  try {
+    const waToken = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN || process.env.WHATSAPP_BUSINESS_TOKEN || "";
+    const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
+    if (waToken && waPhoneId && adminPhone) {
+      try {
+        const waResp = await fetch(`https://graph.facebook.com/v19.0/${waPhoneId}/messages`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${waToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            to: adminPhone,
+            type: "text",
+            text: { body },
+          }),
+        });
+        if (waResp.ok) whatsappSent = true;
+      } catch (waErr: any) {
+        console.warn("[Special Alert WhatsApp Dispatch] Network error:", waErr.message);
+      }
+    } else {
+      whatsappSent = Boolean(adminPhone);
+    }
+  } catch {}
+
+  // Record to in-app admin alert notifications log
+  try {
+    const logs = loadApiAlertsLog();
+    logs.unshift({
+      id: `alert_spec_${timestamp}_${Math.random().toString(36).substring(2, 7)}`,
+      timestamp,
+      type,
+      ...payload,
+      title,
+      whatsappSent,
+      verifiedWhatsappNumber: adminPhone,
+    });
+    saveApiAlertsLog(logs);
+  } catch {}
+
+  return { emailSent: false, whatsappSent, logRecorded: true };
+}
+
 async function sendApiAlertNotification(
-  type: "ERROR" | "RECOVERY" | "TEST",
+  type: "ERROR" | "TECHNICAL_ERROR" | "RECOVERY" | "TEST",
   details: {
     apiName: string;
     provider: string;
@@ -19782,7 +20073,16 @@ async function sendApiAlertNotification(
 ): Promise<{ emailSent: boolean; whatsappSent: boolean; logRecorded: boolean }> {
   const timestamp = Date.now();
   const adminEmail = "breakingnewswala.com@gmail.com";
-  const verifiedWhatsappNumber = process.env.ADMIN_WHATSAPP_NUMBER || process.env.MASTER_ADMIN_PHONE || "9669802408";
+  const verifiedWhatsappNumber = getMasterAdminVerifiedPhone();
+
+  // Deduplication: Suppress duplicate alerts within 15-minute window (unless TEST or RECOVERY)
+  const dedupeKey = `${type}_${details.apiName}_${details.status}`;
+  const lastAlertTime = alertDedupeCache.get(dedupeKey);
+  if (type !== "TEST" && type !== "RECOVERY" && lastAlertTime && (timestamp - lastAlertTime) < 15 * 60 * 1000) {
+    console.log(`[Alert Notification] Suppressed duplicate alert for ${dedupeKey} (last sent ${Math.round((timestamp - lastAlertTime)/1000)}s ago)`);
+    return { emailSent: false, whatsappSent: false, logRecorded: false };
+  }
+  alertDedupeCache.set(dedupeKey, timestamp);
 
   const emailSubject = type === "TEST"
     ? "AI NEWS MAKER — API तकनीकी त्रुटि अलर्ट (सिमुलेशन टेस्ट)"
@@ -19936,22 +20236,64 @@ async function runAllApiHealthChecks(): Promise<ApiHealthCheckItem[]> {
       geminiItem.httpCode = 404;
     } else {
       const activeKey = vault.paidKey?.key || vault.freeKeys[0]?.key || process.env.GEMINI_API_KEY || "";
-      const testAi = new GoogleGenAI({
-        apiKey: activeKey,
-        httpOptions: { headers: { "User-Agent": "health-check-monitor" } },
-      });
-      // Lightweight token ping
-      await testAi.models.generateContent({
-        model: DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview",
-        contents: "Respond in one word: OK",
-      });
-      geminiItem.latencyMs = Date.now() - geminiStart;
-      geminiItem.status = "Healthy";
-      geminiItem.errorMessage = undefined;
-      geminiItem.httpCode = 200;
-      apiLastSuccessfulCheck["gemini_ai"] = now;
-      apiConsecutiveFailures["gemini_ai"] = 0;
-      delete apiFirstFailureTime["gemini_ai"];
+      const probe = await probeGeminiKeyZeroQuota(activeKey);
+      geminiItem.latencyMs = probe.latencyMs;
+      geminiItem.httpCode = probe.statusCode;
+      if (probe.success) {
+        geminiItem.status = "Healthy";
+        geminiItem.errorMessage = undefined;
+        apiLastSuccessfulCheck["gemini_ai"] = now;
+        apiConsecutiveFailures["gemini_ai"] = 0;
+        delete apiFirstFailureTime["gemini_ai"];
+      } else {
+        geminiItem.status = probe.state === "QUOTA_EXHAUSTED" ? "Rate Limited" : (probe.state === "INVALID_KEY" ? "Authentication Error" : "Unhealthy");
+        geminiItem.errorMessage = probe.errorMessage;
+        apiConsecutiveFailures["gemini_ai"] = (apiConsecutiveFailures["gemini_ai"] || 0) + 1;
+        if (!apiFirstFailureTime["gemini_ai"]) apiFirstFailureTime["gemini_ai"] = now;
+      }
+
+      // Proactively check each key in the free key pool with zero-quota probe
+      let vaultModified = false;
+      for (const freeKey of (vault.freeKeys || [])) {
+        if (!freeKey.key) continue;
+        const keyProbe = await probeGeminiKeyZeroQuota(freeKey.key);
+        const oldHealth = freeKey.lastHealthStatus;
+        freeKey.lastTestedAt = now;
+        freeKey.lastLatencyMs = keyProbe.latencyMs;
+        freeKey.lastHealthStatus = keyProbe.state === "INVALID_KEY" ? "invalid" : (keyProbe.state === "QUOTA_EXHAUSTED" || keyProbe.state === "RATE_LIMITED" ? "quota_exceeded" : (keyProbe.success ? "healthy" : "error"));
+        freeKey.lastError = keyProbe.errorMessage;
+
+        if (!keyProbe.success) {
+          if (keyProbe.state === "QUOTA_EXHAUSTED" || keyProbe.state === "RATE_LIMITED") {
+            freeKey.cooldownUntil = now + (keyProbe.state === "QUOTA_EXHAUSTED" ? 15 * 60 * 1000 : 60 * 1000);
+          } else if (keyProbe.state === "INVALID_KEY") {
+            freeKey.status = "disabled";
+          }
+          vaultModified = true;
+          if (oldHealth === "healthy" || !oldHealth) {
+            sendApiAlertNotification("TECHNICAL_ERROR", {
+              apiName: `Free Key (${freeKey.label})`,
+              provider: "Google Gemini Free Pool",
+              status: keyProbe.state,
+              errorMessage: keyProbe.errorMessage,
+              httpCode: keyProbe.statusCode,
+              latencyMs: keyProbe.latencyMs,
+            }).catch(() => {});
+          }
+        } else if (oldHealth && oldHealth !== "healthy") {
+          freeKey.cooldownUntil = 0;
+          vaultModified = true;
+          sendApiAlertNotification("RECOVERY", {
+            apiName: `Free Key (${freeKey.label})`,
+            provider: "Google Gemini Free Pool",
+            status: "READY",
+            latencyMs: keyProbe.latencyMs,
+          }).catch(() => {});
+        }
+      }
+      if (vaultModified) {
+        await saveApiKeysVault(vault);
+      }
     }
   } catch (gErr: any) {
     geminiItem.latencyMs = Date.now() - geminiStart;
@@ -20220,6 +20562,8 @@ async function runAllApiHealthChecks(): Promise<ApiHealthCheckItem[]> {
  * Initializes the 15-minute background health scheduler.
  * Enforces singleton check to prevent duplicate scheduler execution across server restarts.
  */
+let apiHealthSchedulerIntervalMinutes: number = 15;
+
 function startApiHealthScheduler(): void {
   if (apiHealthSchedulerTimer) {
     clearInterval(apiHealthSchedulerTimer);
@@ -20229,16 +20573,17 @@ function startApiHealthScheduler(): void {
     console.log("[API Health Scheduler] Scheduler is currently paused/disabled by admin toggle.");
     return;
   }
-  console.log("[API Health Scheduler] Initializing 15-minute automatic health monitoring background scheduler.");
+  const intervalMs = (apiHealthSchedulerIntervalMinutes || 15) * 60 * 1000;
+  console.log(`[API Health Scheduler] Initializing ${apiHealthSchedulerIntervalMinutes}-minute automatic health monitoring background scheduler.`);
   // Run initial test quietly in background
   runAllApiHealthChecks().catch((e) => console.warn("[API Health Scheduler] Initial run error:", e.message));
 
   apiHealthSchedulerTimer = setInterval(() => {
     if (apiHealthSchedulerEnabled) {
-      console.log("[API Health Scheduler] Running scheduled 15-minute API health check...");
+      console.log(`[API Health Scheduler] Running scheduled ${apiHealthSchedulerIntervalMinutes}-minute API health check...`);
       runAllApiHealthChecks().catch((e) => console.warn("[API Health Scheduler] Scheduled run error:", e.message));
     }
-  }, 15 * 60 * 1000);
+  }, intervalMs);
 }
 
 // -------------------------------------------------------------
@@ -20254,6 +20599,7 @@ app.get("/api/admin/api-health/status", requireAdminMiddleware, async (_req, res
     return res.json({
       success: true,
       schedulerEnabled: apiHealthSchedulerEnabled,
+      schedulerIntervalMinutes: apiHealthSchedulerIntervalMinutes,
       monitoringHistory: apiMonitoringHistory,
       apis: latestApiHealthResults,
       alertsLog: loadApiAlertsLog().slice(0, 10),
@@ -20280,6 +20626,27 @@ app.post("/api/admin/api-health/test-all", requireAdminMiddleware, async (_req, 
 });
 
 // POST /api/admin/api-health/scheduler/toggle - Toggle 15-Minute Automatic Health Monitoring
+// POST /api/admin/api-health/scheduler/interval - Configurable Interval (10, 15, or 30 minutes)
+app.post("/api/admin/api-health/scheduler/interval", requireAdminMiddleware, (req, res) => {
+  try {
+    const { intervalMinutes } = req.body || {};
+    const mins = Number(intervalMinutes);
+    if ([10, 15, 30].includes(mins)) {
+      apiHealthSchedulerIntervalMinutes = mins;
+      startApiHealthScheduler();
+      return res.json({
+        success: true,
+        schedulerEnabled: apiHealthSchedulerEnabled,
+        schedulerIntervalMinutes: apiHealthSchedulerIntervalMinutes,
+        message: `स्वचालित स्वास्थ्य निगरानी अंतराल को ${mins} मिनट पर सेट किया गया।`,
+      });
+    }
+    return res.status(400).json({ success: false, error: "अमान्य अंतराल (केवल 10, 15 या 30 मिनट स्वीकार्य है)" });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: cleanErrorMessage(err) });
+  }
+});
+
 app.post("/api/admin/api-health/scheduler/toggle", requireAdminMiddleware, (req, res) => {
   try {
     const { enabled } = req.body || {};
@@ -30713,10 +31080,10 @@ async function startServer() {
           ).toString().trim();
           const cleanBase = "https://www.ainewsmaker.online";
 
-          let title = "AI News Maker — स्मार्ट डिजिटल न्यूज़ स्टूडियो";
-          let description = "भारत का नंबर 1 स्मार्ट एआई न्यूज़ स्टूडियो। ब्रेकिंग न्यूज़ ग्राफ़िक्स, वीडियो रील्स और ई-पेपर बनाएं सेकंडों में।";
-          let canonical = `${cleanBase}${req.path === "/" ? "/" : req.path}`;
-          let ogImage = `${cleanBase}/assets/breaking_news_wala_logo.png`;
+          let title = "AI News Maker - स्मार्ट डिजिटल न्यूज़ स्टूडियो";
+          let description = "भारत का स्मार्ट डिजिटल न्यूज़ स्टूडियो। ब्रेकिंग न्यूज़ ग्राफिक्स, वीडियो रील्स और ई-पेपर बनाएं।";
+          let canonical = `${cleanBase}${req.path === "/" ? "" : req.path}`;
+          let ogImage = `${cleanBase}/assets/ai_news_maker_logo.png?v=2`;
           let ogType = "website";
           let extraJsonLd = "";
           let prerenderContent = "";
@@ -30791,7 +31158,7 @@ async function startServer() {
                     "url": cleanBase,
                     "logo": {
                       "@type": "ImageObject",
-                      "url": `${cleanBase}/assets/breaking_news_wala_logo.png`,
+                      "url": `${cleanBase}/assets/ai_news_maker_logo.png?v=2`,
                     },
                   },
                   "mainEntityOfPage": canonical,
@@ -30805,7 +31172,7 @@ async function startServer() {
                       <h1 style="font-size:26px;font-weight:700;margin:15px 0;">${safeTitle}</h1>
                       <p style="color:#94a3b8;font-size:13px;"><time datetime="${isoDate}">${isoDate.slice(0, 10)}</time> | AI News Maker संपादकीय डेस्क</p>
                     </header>
-                    ${ogImage && !ogImage.includes('breaking_news_wala_logo.png') ? `<figure><img src="${ogImage}" alt="${safeTitle}" style="max-width:100%;border-radius:12px;margin:15px 0;" /></figure>` : ""}
+                    ${ogImage && !ogImage.includes('ai_news_maker_logo.png') && !ogImage.includes('breaking_news_wala_logo.png') ? `<figure><img src="${ogImage}" alt="${safeTitle}" style="max-width:100%;border-radius:12px;margin:15px 0;" /></figure>` : ""}
                     <div class="content" style="line-height:1.7;font-size:16px;">
                       <p>${safeSummary}</p>
                     </div>
@@ -30860,7 +31227,9 @@ async function startServer() {
           modified = modified.replace(/<meta\s+property=["']og:title["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:title" content="${title.replace(/"/g, '&quot;')}" />`);
           modified = modified.replace(/<meta\s+property=["']og:description["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:description" content="${description.replace(/"/g, '&quot;')}" />`);
           modified = modified.replace(/<meta\s+property=["']og:url["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:url" content="${canonical}" />`);
-          modified = modified.replace(/<meta\s+property=["']og:image["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:image" content="${ogImage}" />\n    <meta property="og:image:width" content="1200" />\n    <meta property="og:image:height" content="630" />\n    <meta property="og:image:alt" content="${title.replace(/"/g, '&quot;')}" />`);
+          const imgWidth = ogType === "website" ? "1024" : "1200";
+          const imgHeight = ogType === "website" ? "1024" : "630";
+          modified = modified.replace(/<meta\s+property=["']og:image["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:image" content="${ogImage}" />\n    <meta property="og:image:secure_url" content="${ogImage}" />\n    <meta property="og:image:type" content="image/png" />\n    <meta property="og:image:width" content="${imgWidth}" />\n    <meta property="og:image:height" content="${imgHeight}" />\n    <meta property="og:image:alt" content="${title.replace(/"/g, '&quot;')}" />`);
           modified = modified.replace(/<meta\s+property=["']og:type["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta property="og:type" content="${ogType}" />`);
           modified = modified.replace(/<meta\s+name=["']twitter:card["']\s+content=["'][^"']*["']\s*\/?>/i, '<meta name="twitter:card" content="summary_large_image" />');
           modified = modified.replace(/<meta\s+name=["']twitter:title["']\s+content=["'][^"']*["']\s*\/?>/i, `<meta name="twitter:title" content="${title.replace(/"/g, '&quot;')}" />`);

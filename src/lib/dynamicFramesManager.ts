@@ -70,7 +70,13 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
 
   // 1. Header Config
   const rawH = raw.headerConfig || {};
+  const badgeAssetId = rawH.locationBadgeAssetId || raw.locationBadgeAssetId;
+  const libBadge = badgeAssetId ? getAssetLibraryItemById(badgeAssetId) : null;
+  const manualAsset = rawH.manualLocationAsset || raw.manualLocationAsset || libBadge?.url;
+  const isDarkBadge = badgeAssetId === 'loc_style_compact_chip' || rawH.locationStyle === 'compact_chip' || rawH.locationStyle === 'box' || (libBadge && libBadge.styleKey === 'compact_chip');
+
   const headerConfig: HeaderConfig = {
+    ...rawH,
     showLogo: rawH.showLogo !== false,
     logoPosition: rawH.logoPosition || 'top_left',
     logoRect: rawH.logoRect || (isStory ? { x: 6, y: 3, width: 24, height: 6.5 } : { x: 5, y: 3.5, width: 22, height: 9 }),
@@ -78,12 +84,19 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
     logoPaddingPx: typeof rawH.logoPaddingPx === 'number' ? rawH.logoPaddingPx : 4,
     showLocation: rawH.showLocation !== false,
     locationRect: rawH.locationRect || (isStory ? { x: 6, y: 10.5, width: 30, height: 3.2 } : { x: 5, y: 13.5, width: 28, height: 4.5 }),
-    locationStyle: rawH.locationStyle || 'pill',
-    locationBgColor: rawH.locationBgColor || '#DC2626',
-    locationTextColor: rawH.locationTextColor || '#FFFFFF',
+    locationStyle: rawH.locationStyle || libBadge?.styleKey || (isDarkBadge ? 'box' : 'pill'),
+    locationBgColor: rawH.locationBgColor || (isDarkBadge ? '#18181B' : (libBadge || manualAsset ? 'transparent' : '#DC2626')),
+    locationTextColor: rawH.locationTextColor || libBadge?.typographyConfig?.textColor || '#FFFFFF',
     locationShowIcon: rawH.locationShowIcon !== false,
-    locationBadgeMode: rawH.locationBadgeMode || 'dynamic_overlay',
-    manualLocationAsset: rawH.manualLocationAsset,
+    locationBadgeMode: rawH.locationBadgeMode || (manualAsset ? 'static_image' : 'dynamic_overlay'),
+    locationBadgeAssetId: badgeAssetId,
+    manualLocationAsset: manualAsset,
+    sliceConfig: rawH.sliceConfig || raw.sliceConfig || libBadge?.sliceConfig,
+    textRegion: rawH.textRegion || raw.textRegion || libBadge?.textRegion,
+    typographyConfig: rawH.typographyConfig || raw.typographyConfig || libBadge?.typographyConfig,
+    locationFontSize: typeof rawH.locationFontSize === 'number' ? rawH.locationFontSize : (libBadge?.typographyConfig?.fontSize ? Math.round(libBadge.typographyConfig.fontSize * 0.45) : 20),
+    locationPadding: typeof rawH.locationPadding === 'number' ? rawH.locationPadding : 6,
+    locationBorderRadius: typeof rawH.locationBorderRadius === 'number' ? rawH.locationBorderRadius : (isDarkBadge ? 6 : 9999),
     showDate: Boolean(rawH.showDate),
     dateRect: rawH.dateRect || (isStory ? { x: 6, y: 14.5, width: 34, height: 2.5 } : { x: 5, y: 18.5, width: 34, height: 3.5 }),
     dateFormat: rawH.dateFormat || 'D MMMM YYYY',
@@ -128,7 +141,12 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
       ? { ...calloutLayer.rect, height: calloutLayer.rect.height || 3.5 }
       : (isStory ? { x: 8, y: 85, width: 84, height: 3.5 } : { x: 8, y: 83, width: 84, height: 3.5 }));
 
+  const calloutAssetId = rawC.calloutAssetId || raw.calloutAssetId;
+  const libCallout = calloutAssetId ? getAssetLibraryItemById(calloutAssetId) : null;
+  const manualCallout = rawC.manualCalloutAsset || raw.calloutAssetUrl || libCallout?.url;
+
   const fullStoryCalloutConfig: FullStoryCalloutConfig = {
+    ...rawC,
     enabled: Boolean(rawC.enabled ?? calloutLayer?.visible ?? (calloutLayer ? true : false)),
     text: rawC.text || '',
     rect: calloutRect,
@@ -136,8 +154,9 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
     bgColor: rawC.bgColor || 'rgba(0,0,0,0.7)',
     borderColor: rawC.borderColor || '#FFE600',
     showIcon: rawC.showIcon !== false,
-    manualCalloutAsset: rawC.manualCalloutAsset,
-    calloutAssetMode: rawC.calloutAssetMode || 'dynamic_overlay',
+    calloutAssetId: calloutAssetId,
+    manualCalloutAsset: manualCallout,
+    calloutAssetMode: rawC.calloutAssetMode || (manualCallout ? 'static_image' : 'dynamic_overlay'),
     calloutVisibilityPolicy: rawC.calloutVisibilityPolicy || 'optional',
     rotation: typeof rawC.rotation === 'number' ? rawC.rotation : 0,
   };
@@ -367,7 +386,10 @@ export function normalizeDynamicFrame(raw: any): DynamicFrameTemplate {
     footerConfig,
     watermarkConfig,
     fullStoryCalloutConfig,
-    calloutAssetUrl: raw.calloutAssetUrl || raw.fullStoryCalloutConfig?.manualCalloutAsset,
+    calloutAssetUrl: manualCallout || raw.calloutAssetUrl,
+    locationBadgeAssetId: badgeAssetId,
+    calloutAssetId: calloutAssetId,
+    sliceConfig: rawH.sliceConfig || raw.sliceConfig || libBadge?.sliceConfig,
     poweredByConfig,
     safeZoneConfig,
     statementOptions,
@@ -723,242 +745,646 @@ export async function requestAiFrameAnalysis(
 
 export function getDefaultAssetLibrariesFallback(type?: string): AssetLibraryItem[] {
   const defaults: AssetLibraryItem[] = [
-    {
-      id: "asset_1794132101671_u0g9s",
-      name: "Red Map Pin Badge with Divider",
-      category: "general",
-      type: "location_badge",
-      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='36' viewBox='0 0 160 36'><defs><linearGradient id='bgGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23E11D48'/><stop offset='100%' stop-color='%23BE123C'/></linearGradient></defs><rect width='156' height='36' rx='6' fill='url(%23bgGrad)'/><path d='M18 10c-3.3 0-6 2.7-6 6 0 4.5 6 11 6 11s6-6.5 6-11c0-3.3-2.7-6-6-6zm0 8.5c-1.4 0-2.5-1.1-2.5-2.5s1.1-2.5 2.5-2.5 2.5 1.1 2.5 2.5-1.1 2.5-2.5 2.5z' fill='%23FFFFFF'/><line x1='34' y1='6' x2='34' y2='30' stroke='%23FFFFFF' stroke-width='1.5' stroke-opacity='0.4'/><text x='42' y='23' font-family='Arial, sans-serif' font-weight='bold' font-size='14' fill='%23FFFFFF' letter-spacing='0.5'>LOCATION</text></svg>",
-      enabled: true,
-      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
-      createdAt: 1794132101671,
-      updatedAt: 1794132101671,
+  {
+    "id": "loc_style_classic_ribbon_pin",
+    "name": "Classic Ribbon Pin (क्लासिक रिबन पिन)",
+    "type": "location_badge",
+    "category": "ribbon",
+    "styleKey": "classic_ribbon",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><defs><linearGradient id='crpGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23DC2626'/><stop offset='70%' stop-color='%23B91C1C'/><stop offset='100%' stop-color='%23991B1B'/></linearGradient></defs><rect x='3' y='4' width='354' height='64' rx='12' fill='url(%23crpGrad)' stroke='%23FACC15' stroke-width='2.5'/><circle cx='38' cy='36' r='18' fill='%23FACC15'/><path d='M38 23 C32 23 27 28 27 34 C27 41 38 50 38 50 C38 50 49 41 49 34 C49 28 44 23 38 23 Z' fill='%23DC2626'/><circle cx='38' cy='33' r='4' fill='%23FFFFFF'/><line x1='66' y1='14' x2='66' y2='58' stroke='%23FACC15' stroke-width='2'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
     },
-    {
-      id: "loc_style_vintage_stamp",
-      name: "Vintage Stamp (विंटेज स्टैम्प)",
-      category: "breaking",
-      type: "location_badge",
-      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='4' y='5' width='352' height='62' rx='6' fill='%23450A0A' stroke='%23FBBF24' stroke-width='2' stroke-dasharray='6 3'/><rect x='10' y='11' width='340' height='50' rx='4' fill='none' stroke='%23FBBF24' stroke-width='1'/><circle cx='38' cy='36' r='16' fill='%23FBBF24'/><circle cx='38' cy='36' r='12' fill='none' stroke='%23450A0A' stroke-width='2'/><circle cx='38' cy='36' r='4' fill='%23450A0A'/><line x1='66' y1='14' x2='66' y2='58' stroke='%23FBBF24' stroke-width='1.5'/></svg>",
-      enabled: true,
-      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
-      createdAt: 1794350000000,
-      updatedAt: 1794350000000,
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FFFFFF",
+      "textAlign": "center"
     },
-    {
-      id: "callout_bully_forward_story",
-      name: "आगे पढ़ें बुलेटिन स्टोरी (Bully Forward)",
-      category: "general",
-      type: "callout_png",
-      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='goldGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23F59E0B'/><stop offset='50%' stop-color='%23FBBF24'/><stop offset='100%' stop-color='%23D97706'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23goldGrad)' stroke='%23FFFFFF' stroke-width='2'/><circle cx='40' cy='36' r='24' fill='%231E293B'/><polygon points='34,26 50,36 34,46' fill='%23FBBF24'/><text x='76' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='22' fill='%230F172A'>आगे पढ़ें बुलेटिन स्टोरी</text><circle cx='438' cy='36' r='18' fill='%231E293B'/><path d='M432 36 L444 36 M440 30 L446 36 L440 42' stroke='%23FBBF24' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>",
-      enabled: true,
-      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
-      createdAt: 1794280000000,
-      updatedAt: 1794280000000,
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.7
+    }
+  },
+  {
+    "id": "loc_style_glassmorphism_pill",
+    "name": "Glassmorphism Pill (ग्लासमॉर्फिज्म पिल)",
+    "type": "location_badge",
+    "category": "modern",
+    "styleKey": "glass_pill",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='4' width='354' height='64' rx='32' fill='%230F172AE6' stroke='%2306B6D4' stroke-width='2.5'/><circle cx='38' cy='36' r='16' fill='%2306B6D4'/><path d='M38 25 C33 25 29 29 29 34 C29 40 38 47 38 47 C38 47 47 40 47 34 C47 29 43 25 38 25 Z' fill='%230F172A'/><circle cx='38' cy='33' r='3.5' fill='%23FFFFFF'/><line x1='64' y1='16' x2='64' y2='56' stroke='%2306B6D4' stroke-width='1.5' stroke-dasharray='3 3'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
     },
-    {
-      id: "callout_special_gold",
-      name: "विशेष बुलेटिन (Special Gold Header)",
-      category: "general",
-      type: "callout_png",
-      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='440' height='64' viewBox='0 0 440 64'><defs><linearGradient id='gGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23D97706'/><stop offset='100%' stop-color='%2392400E'/></linearGradient></defs><rect x='2' y='4' width='436' height='56' rx='28' fill='url(%23gGrad)' stroke='%23FDE68A' stroke-width='2'/><text x='32' y='38' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FFFFFF'>★ विशेष बुलेटिन कवरेज</text><circle cx='400' cy='32' r='14' fill='%23FDE68A'/><polygon points='396,26 406,32 396,38' fill='%2392400E'/></svg>",
-      enabled: true,
-      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
-      createdAt: 1794280000000,
-      updatedAt: 1794280000000,
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#38BDF8",
+      "textAlign": "center"
     },
-    {
-      id: "callout_breaking_red",
-      name: "ब्रेकिंग न्यूज़ रेड पट्टी (Breaking Red Strip)",
-      category: "general",
-      type: "callout_png",
-      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='rGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23DC2626'/><stop offset='100%' stop-color='%23991B1B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23rGrad)' stroke='%23FFFFFF' stroke-width='2.5'/><polygon points='38,24 54,36 38,48' fill='%23FFFFFF'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FFFFFF'>पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FFFFFF'/><polygon points='436,28 448,36 436,44' fill='%23DC2626'/></svg>",
-      enabled: true,
-      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
-      createdAt: 1794280000000,
-      updatedAt: 1794280000000,
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.1,
+      "centerMinPct": 0.68
+    }
+  },
+  {
+    "id": "loc_style_3d_bevel_plate",
+    "name": "3D Bevel Plate (3D बेवेल प्लेट)",
+    "type": "location_badge",
+    "category": "3d",
+    "styleKey": "3d_bevel",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><defs><linearGradient id='bevelGrad' x1='0%' y1='0%' x2='0%' y2='100%'><stop offset='0%' stop-color='%23334155'/><stop offset='50%' stop-color='%231E293B'/><stop offset='100%' stop-color='%230F172A'/></linearGradient></defs><rect x='3' y='4' width='354' height='64' rx='10' fill='url(%23bevelGrad)' stroke='%2364748B' stroke-width='3'/><polygon points='16,36 34,18 52,36 34,54' fill='%23E2E8F0'/><circle cx='34' cy='36' r='6' fill='%23DC2626'/><line x1='66' y1='14' x2='66' y2='58' stroke='%23F59E0B' stroke-width='2.5'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
     },
-    {
-      id: "callout_story_details_hindi",
-      name: "पूरी खबर विवरण में पढ़ें (Crimson & Gold Ribbon)",
-      category: "general",
-      type: "callout_png",
-      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='cgGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23BE123C'/><stop offset='50%' stop-color='%23E11D48'/><stop offset='100%' stop-color='%239F1239'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23cgGrad)' stroke='%23FBBF24' stroke-width='2.5'/><circle cx='40' cy='36' r='20' fill='%23FBBF24'/><polygon points='36,28 48,36 36,44' fill='%23881337'/><text x='74' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='22' fill='%23FFFFFF'>पूरी खबर विवरण में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FBBF24'/><path d='M434 36 L446 36 M442 30 L448 36 L442 42' stroke='%23881337' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>",
-      enabled: true,
-      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
-      createdAt: 1794350000000,
-      updatedAt: 1794350000000,
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FFFFFF",
+      "textAlign": "center"
     },
-    {
-      id: "callout_story_info_below",
-      name: "पूरी जानकारी नीचे पढ़ें (Navy & Cyan Editorial Badge)",
-      category: "general",
-      type: "callout_png",
-      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='ncGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%230F172A'/><stop offset='70%' stop-color='%231E293B'/><stop offset='100%' stop-color='%230284C7'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23ncGrad)' stroke='%2338BDF8' stroke-width='2'/><circle cx='40' cy='36' r='20' fill='%230284C7'/><path d='M34 36 L46 36 M42 30 L48 36 L42 42' stroke='%23FFFFFF' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/><text x='74' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='22' fill='%23F0F9FF'>पूरी जानकारी नीचे पढ़ें</text><circle cx='440' cy='36' r='16' fill='%2338BDF8'/><polygon points='436,28 446,36 436,44' fill='%230F172A'/></svg>",
-      enabled: true,
-      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
-      createdAt: 1794350000000,
-      updatedAt: 1794350000000,
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.7
+    }
+  },
+  {
+    "id": "loc_style_minimal_tag",
+    "name": "Minimal Tag (मिनिमल टैग)",
+    "type": "location_badge",
+    "category": "minimal",
+    "styleKey": "minimal_tag",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='6' width='354' height='60' rx='8' fill='%23000000' stroke='%23E2E8F0' stroke-width='1.5'/><circle cx='36' cy='36' r='14' fill='%23EF4444'/><circle cx='36' cy='36' r='5' fill='%23FFFFFF'/><line x1='60' y1='18' x2='60' y2='54' stroke='%23475569' stroke-width='1.5'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 20,
+      "y": 15,
+      "width": 76,
+      "height": 70
     },
-    {
-      id: "callout_story_detail_read",
-      name: "विस्तृत खबर के लिए पढ़ें (Emerald & Amber Pill)",
-      category: "general",
-      type: "callout_png",
-      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='eaGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23065F46'/><stop offset='60%' stop-color='%23047857'/><stop offset='100%' stop-color='%23064E3B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23eaGrad)' stroke='%23F59E0B' stroke-width='2.5'/><circle cx='40' cy='36' r='20' fill='%23F59E0B'/><polygon points='36,28 48,36 36,44' fill='%23064E3B'/><text x='74' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='22' fill='%23ECFDF5'>विस्तृत खबर के लिए पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23F59E0B'/><path d='M434 36 L446 36 M442 30 L448 36 L442 42' stroke='%23064E3B' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>",
-      enabled: true,
-      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
-      createdAt: 1794350000000,
-      updatedAt: 1794350000000,
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FFFFFF",
+      "textAlign": "center"
     },
-    {
-      id: "callout_story_live_update",
-      name: "ताजा अपडेट — विवरण में देखें (Ruby Live Pulse)",
-      category: "breaking",
-      type: "callout_png",
-      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='lpGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23991B1B'/><stop offset='50%' stop-color='%23DC2626'/><stop offset='100%' stop-color='%237F1D1D'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23lpGrad)' stroke='%23FEF08A' stroke-width='2.5'/><circle cx='40' cy='36' r='12' fill='%23EF4444' stroke='%23FFFFFF' stroke-width='2'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='21' fill='%23FFFFFF'>ताजा अपडेट — विवरण में देखें</text><circle cx='440' cy='36' r='16' fill='%23FEF08A'/><polygon points='436,28 446,36 436,44' fill='%23991B1B'/></svg>",
-      enabled: true,
-      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
-      createdAt: 1794350000000,
-      updatedAt: 1794350000000,
+    "sliceConfig": {
+      "leftWidthPct": 0.2,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.72
+    }
+  },
+  {
+    "id": "loc_style_gradient_flare",
+    "name": "Gradient Flare (ग्रेडिएंट फ्लेयर)",
+    "type": "location_badge",
+    "category": "vibrant",
+    "styleKey": "gradient_flare",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><defs><linearGradient id='flareGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23EA580C'/><stop offset='50%' stop-color='%23DC2626'/><stop offset='100%' stop-color='%237F1D1D'/></linearGradient></defs><rect x='3' y='4' width='354' height='64' rx='16' fill='url(%23flareGrad)' stroke='%23FED7AA' stroke-width='2'/><circle cx='38' cy='36' r='17' fill='%23FFF7ED'/><path d='M38 24 C33 24 28 29 28 35 C28 42 38 49 38 49 C38 49 48 42 48 35 C48 29 43 24 38 24 Z' fill='%23EA580C'/><circle cx='38' cy='34' r='3.5' fill='%23FFFFFF'/><line x1='66' y1='14' x2='66' y2='58' stroke='%23FED7AA' stroke-width='2'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
     },
-    {
-      id: "callout_story_full_read",
-      name: "विस्तृत विवरण नीचे उपलब्ध है (Royal Indigo & Gold Pill)",
-      category: "special",
-      type: "callout_png",
-      url: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='riGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23312E81'/><stop offset='50%' stop-color='%234338CA'/><stop offset='100%' stop-color='%231E1B4B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23riGrad)' stroke='%23FCD34D' stroke-width='2.5'/><circle cx='40' cy='36' r='20' fill='%23FCD34D'/><path d='M34 36 L46 36 M42 30 L48 36 L42 42' stroke='%23312E81' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/><text x='74' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='21' fill='%23FEF3C7'>विस्तृत विवरण नीचे उपलब्ध है</text><circle cx='440' cy='36' r='16' fill='%23FCD34D'/><polygon points='436,28 446,36 436,44' fill='%23312E81'/></svg>",
-      enabled: true,
-      allowedPlans: ["PRO", "VIP DESK"],
-      createdAt: 1794350000000,
-      updatedAt: 1794350000000,
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FFFFFF",
+      "textAlign": "center"
     },
-    {
-      id: "footer_regular_gold",
-      name: "रेगुलर क्लीन फ़ुटर (White & Gold)",
-      category: "regular",
-      type: "custom_footer",
-      enabled: true,
-      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
-      footerConfig: {
-        footerBgColor: "#FFFFFF",
-        footerTextColor: "#000000",
-        footerHeightPct: 8,
-        elements: { showChannelName: false, showWebsite: true, showPhone: true, showSocialIcons: true },
-        alignment: "center",
-        channelNameAlign: "left",
-        websiteAlign: "center",
-        socialIconsAlign: "left",
-        phoneAlign: "right",
-        iconSize: 20,
-        elementSpacing: 12,
-        paddingX: 16,
-        separator: "|",
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.7
+    }
+  },
+  {
+    "id": "loc_style_dark_neon_outline",
+    "name": "Dark Neon Outline (डार्क नियॉन आउटलाइन)",
+    "type": "location_badge",
+    "category": "neon",
+    "styleKey": "dark_neon",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='4' width='354' height='64' rx='14' fill='%23050811' stroke='%2322D3EE' stroke-width='3'/><rect x='16' y='18' width='36' height='36' rx='8' fill='%2322D3EE22' stroke='%2322D3EE' stroke-width='2'/><circle cx='34' cy='36' r='7' fill='%2322D3EE'/><line x1='64' y1='14' x2='64' y2='58' stroke='%2322D3EE' stroke-width='2'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#22D3EE",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.7
+    }
+  },
+  {
+    "id": "loc_style_dual_tone_split",
+    "name": "Dual Tone Split (ड्यूअल टोन स्प्लिट)",
+    "type": "location_badge",
+    "category": "dualtone",
+    "styleKey": "dual_tone",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='4' width='354' height='64' rx='12' fill='%231E3A8A' stroke='%23FACC15' stroke-width='2'/><path d='M3 16 C3 9.4 8.4 4 15 4 L72 4 L56 68 L15 68 C8.4 68 3 62.6 3 56 Z' fill='%23DC2626'/><circle cx='32' cy='36' r='14' fill='%23FACC15'/><circle cx='32' cy='36' r='6' fill='%23DC2626'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FFFFFF",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.7
+    }
+  },
+  {
+    "id": "loc_style_vintage_stamp",
+    "name": "Vintage Stamp (विंटेज स्टैम्प)",
+    "type": "location_badge",
+    "category": "vintage",
+    "styleKey": "vintage_stamp",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='4' y='5' width='352' height='62' rx='6' fill='%23450A0A' stroke='%23FBBF24' stroke-width='2' stroke-dasharray='6 3'/><rect x='10' y='11' width='340' height='50' rx='4' fill='none' stroke='%23FBBF24' stroke-width='1'/><circle cx='38' cy='36' r='16' fill='%23FBBF24'/><circle cx='38' cy='36' r='12' fill='none' stroke='%23450A0A' stroke-width='2'/><circle cx='38' cy='36' r='4' fill='%23450A0A'/><line x1='66' y1='14' x2='66' y2='58' stroke='%23FBBF24' stroke-width='1.5'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FDE68A",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.7
+    }
+  },
+  {
+    "id": "loc_style_modern_floating_capsule",
+    "name": "Modern Floating Capsule (मॉडर्न फ्लोटिंग कैप्सूल)",
+    "type": "location_badge",
+    "category": "modern",
+    "styleKey": "floating_capsule",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='4' width='354' height='64' rx='32' fill='%23111827' stroke='%2310B981' stroke-width='2.5'/><circle cx='38' cy='36' r='16' fill='%2310B981'/><circle cx='38' cy='36' r='6' fill='%23111827'/><line x1='64' y1='16' x2='64' y2='56' stroke='%2310B981' stroke-width='2'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FFFFFF",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.1,
+      "centerMinPct": 0.68
+    }
+  },
+  {
+    "id": "loc_style_metallic_badge",
+    "name": "Metallic Badge (मेटैलिक बैज)",
+    "type": "location_badge",
+    "category": "metallic",
+    "styleKey": "metallic_badge",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><defs><linearGradient id='metalGrad' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='%23CBD5E1'/><stop offset='50%' stop-color='%2394A3B8'/><stop offset='100%' stop-color='%2364748B'/></linearGradient></defs><rect x='3' y='4' width='354' height='64' rx='10' fill='url(%23metalGrad)' stroke='%23F1F5F9' stroke-width='2.5'/><circle cx='38' cy='36' r='16' fill='%230F172A'/><circle cx='38' cy='36' r='7' fill='%23EF4444'/><line x1='66' y1='14' x2='66' y2='58' stroke='%230F172A' stroke-width='2'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#0F172A",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.7
+    }
+  },
+  {
+    "id": "loc_style_compact_chip",
+    "name": "Compact Chip (कॉम्पैक्ट चिप)",
+    "type": "location_badge",
+    "category": "compact",
+    "styleKey": "compact_chip",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='6' width='354' height='60' rx='6' fill='%2318181B' stroke='%23FFFFFF' stroke-width='2.5'/><circle cx='36' cy='36' r='16' fill='%23DC2626'/><path d='M36 26 C32 26 29 29 29 33 C29 38 36 44 36 44 C36 44 43 38 43 33 C43 29 40 26 36 26 Z' fill='%23FFFFFF'/><circle cx='36' cy='33' r='2.5' fill='%23DC2626'/><line x1='60' y1='14' x2='60' y2='58' stroke='%23FFFFFF' stroke-width='1.5' stroke-opacity='0.6'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 20,
+      "y": 15,
+      "width": 76,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FFFFFF",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.2,
+      "rightWidthPct": 0.08,
+      "centerMinPct": 0.72
+    }
+  },
+  {
+    "id": "loc_style_elegant_outline_pill",
+    "name": "Elegant Outline Pill (एलिगेंट आउटलाइन पिल)",
+    "type": "location_badge",
+    "category": "elegant",
+    "styleKey": "elegant_pill",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='4' width='354' height='64' rx='32' fill='%23172554' stroke='%23EAB308' stroke-width='2.5'/><circle cx='38' cy='36' r='16' fill='none' stroke='%23EAB308' stroke-width='2.5'/><circle cx='38' cy='36' r='6' fill='%23EAB308'/><line x1='64' y1='16' x2='64' y2='56' stroke='%23EAB308' stroke-width='2'/></svg>",
+    "enabled": true,
+    "textRegion": {
+      "x": 22,
+      "y": 15,
+      "width": 74,
+      "height": 70
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 48,
+      "fontWeight": "bold",
+      "textColor": "#FEF08A",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.22,
+      "rightWidthPct": 0.1,
+      "centerMinPct": 0.68
+    }
+  },
+  {
+    "id": "asset_1794132101671_u0g9s",
+    "name": "Red Map Pin Badge with Divider",
+    "type": "location_badge",
+    "category": "general",
+    "url": "/assets/location_white_icon.png",
+    "enabled": true,
+    "createdAt": 1794132101671,
+    "updatedAt": 1794132144005,
+    "textRegion": {
+      "x": 32,
+      "y": 24,
+      "width": 58,
+      "height": 55
+    },
+    "typographyConfig": {
+      "fontFamily": "Mukta",
+      "fontSize": 50,
+      "fontWeight": "bold",
+      "textColor": "#000000",
+      "textAlign": "center"
+    },
+    "sliceConfig": {
+      "leftWidthPct": 0.28,
+      "rightWidthPct": 0.15,
+      "centerMinPct": 0.57
+    }
+  },
+  {
+    "id": "callout_bully_forward_story",
+    "name": "पूरी खबर विवरण कॉलआउट (Full Story Callout)",
+    "category": "general",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='bgGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23DC2626'/><stop offset='60%' stop-color='%23991B1B'/><stop offset='100%' stop-color='%231E293B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23bgGrad)' stroke='%23FACC15' stroke-width='3'/><polygon points='38,24 54,36 38,48' fill='%23FACC15'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FFFFFF'>पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FACC15'/><polygon points='436,28 448,36 436,44' fill='%23000000'/></svg>",
+    "enabled": true,
+    "createdAt": 1793880000000,
+    "updatedAt": 1793880000000
+  },
+  {
+    "id": "footer_regular_gold",
+    "name": "रेगुलर क्लीन फ़ुटर (White & Gold)",
+    "type": "custom_footer",
+    "category": "regular",
+    "enabled": true,
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "footerConfig": {
+      "footerBgColor": "#FFFFFF",
+      "footerTextColor": "#000000",
+      "footerHeightPct": 8,
+      "elements": {
+        "showChannelName": false,
+        "showWebsite": true,
+        "showPhone": true,
+        "showSocialIcons": true
       },
-      createdAt: 1794100000000,
-      updatedAt: 1794100000000,
+      "alignment": "center",
+      "channelNameAlign": "left",
+      "websiteAlign": "center",
+      "socialIconsAlign": "left",
+      "phoneAlign": "right",
+      "iconSize": 20,
+      "elementSpacing": 12,
+      "paddingX": 16,
+      "separator": "|"
     },
-    {
-      id: "footer_branding_navy",
-      name: "ब्रांडिंग डार्क फ़ुटर (Navy & Gold Accent)",
-      category: "branding",
-      type: "custom_footer",
-      enabled: true,
-      allowedPlans: ["ADVANCED", "PRO", "VIP DESK"],
-      footerConfig: {
-        footerBgColor: "#0F172A",
-        footerTextColor: "#FACC15",
-        footerHeightPct: 8,
-        elements: { showChannelName: false, showWebsite: true, showPhone: true, showSocialIcons: true },
-        alignment: "center",
-        channelNameAlign: "left",
-        websiteAlign: "center",
-        socialIconsAlign: "left",
-        phoneAlign: "right",
-        iconSize: 20,
-        elementSpacing: 12,
-        paddingX: 16,
-        separator: "|",
+    "createdAt": 1794100000000,
+    "updatedAt": 1794100000000
+  },
+  {
+    "id": "footer_branding_navy",
+    "name": "ब्रांडिंग डार्क फ़ुटर (Navy & Gold Accent)",
+    "type": "custom_footer",
+    "category": "branding",
+    "enabled": true,
+    "allowedPlans": [
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "footerConfig": {
+      "footerBgColor": "#0F172A",
+      "footerTextColor": "#FACC15",
+      "footerHeightPct": 8,
+      "elements": {
+        "showChannelName": false,
+        "showWebsite": true,
+        "showPhone": true,
+        "showSocialIcons": true
       },
-      createdAt: 1794100000000,
-      updatedAt: 1794100000000,
+      "alignment": "center",
+      "channelNameAlign": "left",
+      "websiteAlign": "center",
+      "socialIconsAlign": "left",
+      "phoneAlign": "right",
+      "iconSize": 20,
+      "elementSpacing": 12,
+      "paddingX": 16,
+      "separator": "|"
     },
-    {
-      id: "footer_social_blue",
-      name: "सोशल मीडिया हाइलाइट फ़ुटर (Royal Blue)",
-      category: "social",
-      type: "custom_footer",
-      enabled: true,
-      allowedPlans: ["BASIC", "ADVANCED", "PRO", "VIP DESK"],
-      footerConfig: {
-        footerBgColor: "#1E40AF",
-        footerTextColor: "#FFFFFF",
-        footerHeightPct: 8,
-        elements: { showChannelName: false, showWebsite: true, showPhone: true, showSocialIcons: true },
-        alignment: "center",
-        channelNameAlign: "left",
-        websiteAlign: "center",
-        socialIconsAlign: "left",
-        phoneAlign: "right",
-        iconSize: 20,
-        elementSpacing: 12,
-        paddingX: 16,
-        separator: "|",
+    "createdAt": 1794100000000,
+    "updatedAt": 1794100000000
+  },
+  {
+    "id": "footer_social_blue",
+    "name": "सोशल मीडिया हाइलाइट फ़ुटर (Royal Blue)",
+    "type": "custom_footer",
+    "category": "social",
+    "enabled": true,
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "footerConfig": {
+      "footerBgColor": "#1E40AF",
+      "footerTextColor": "#FFFFFF",
+      "footerHeightPct": 8,
+      "elements": {
+        "showChannelName": false,
+        "showWebsite": true,
+        "showPhone": true,
+        "showSocialIcons": true
       },
-      createdAt: 1794100000000,
-      updatedAt: 1794100000000,
+      "alignment": "center",
+      "channelNameAlign": "left",
+      "websiteAlign": "center",
+      "socialIconsAlign": "left",
+      "phoneAlign": "right",
+      "iconSize": 20,
+      "elementSpacing": 12,
+      "paddingX": 16,
+      "separator": "|"
     },
-    {
-      id: "footer_news_breaking_red",
-      name: "न्यूज़ अलर्ट रेड फ़ुटर (Breaking Red)",
-      category: "news",
-      type: "custom_footer",
-      enabled: true,
-      allowedPlans: ["PRO", "VIP DESK"],
-      footerConfig: {
-        footerBgColor: "#DC2626",
-        footerTextColor: "#FFFFFF",
-        footerHeightPct: 8.5,
-        elements: { showChannelName: false, showWebsite: true, showPhone: true, showSocialIcons: true },
-        alignment: "center",
-        channelNameAlign: "left",
-        websiteAlign: "center",
-        socialIconsAlign: "left",
-        phoneAlign: "right",
-        iconSize: 20,
-        elementSpacing: 12,
-        paddingX: 16,
-        separator: "|",
+    "createdAt": 1794100000000,
+    "updatedAt": 1794100000000
+  },
+  {
+    "id": "footer_news_breaking_red",
+    "name": "न्यूज़ अलर्ट रेड फ़ुटर (Breaking Red)",
+    "type": "custom_footer",
+    "category": "news",
+    "enabled": true,
+    "allowedPlans": [
+      "PRO",
+      "VIP DESK"
+    ],
+    "footerConfig": {
+      "footerBgColor": "#DC2626",
+      "footerTextColor": "#FFFFFF",
+      "footerHeightPct": 8.5,
+      "elements": {
+        "showChannelName": false,
+        "showWebsite": true,
+        "showPhone": true,
+        "showSocialIcons": true
       },
-      createdAt: 1794100000000,
-      updatedAt: 1794100000000,
+      "alignment": "center",
+      "channelNameAlign": "left",
+      "websiteAlign": "center",
+      "socialIconsAlign": "left",
+      "phoneAlign": "right",
+      "iconSize": 20,
+      "elementSpacing": 12,
+      "paddingX": 16,
+      "separator": "|"
     },
-    {
-      id: "footer_special_vip_gold",
-      name: "स्पेशल वीआईपी गोल्ड फ़ुटर (VIP Gold Special)",
-      category: "special",
-      type: "custom_footer",
-      enabled: true,
-      allowedPlans: ["VIP DESK"],
-      footerConfig: {
-        footerBgColor: "#FACC15",
-        footerTextColor: "#000000",
-        footerHeightPct: 9,
-        elements: { showChannelName: false, showWebsite: true, showPhone: true, showSocialIcons: true },
-        alignment: "center",
-        channelNameAlign: "left",
-        websiteAlign: "center",
-        socialIconsAlign: "left",
-        phoneAlign: "right",
-        iconSize: 22,
-        elementSpacing: 14,
-        paddingX: 18,
-        separator: "•",
+    "createdAt": 1794100000000,
+    "updatedAt": 1794100000000
+  },
+  {
+    "id": "footer_special_vip_gold",
+    "name": "स्पेशल वीआईपी गोल्ड फ़ुटर (VIP Gold Special)",
+    "type": "custom_footer",
+    "category": "special",
+    "enabled": true,
+    "allowedPlans": [
+      "VIP DESK"
+    ],
+    "footerConfig": {
+      "footerBgColor": "#FACC15",
+      "footerTextColor": "#000000",
+      "footerHeightPct": 9,
+      "elements": {
+        "showChannelName": false,
+        "showWebsite": true,
+        "showPhone": true,
+        "showSocialIcons": true
       },
-      createdAt: 1794100000000,
-      updatedAt: 1794100000000,
+      "alignment": "center",
+      "channelNameAlign": "left",
+      "websiteAlign": "center",
+      "socialIconsAlign": "left",
+      "phoneAlign": "right",
+      "iconSize": 22,
+      "elementSpacing": 14,
+      "paddingX": 18,
+      "separator": "•"
     },
-  ];
+    "createdAt": 1794100000000,
+    "updatedAt": 1794100000000
+  },
+  {
+    "id": "callout_special_gold",
+    "name": "गोल्डन वीआईपी स्टोरी कॉलआउट (Gold VIP)",
+    "category": "special",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='gGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%2378350F'/><stop offset='50%' stop-color='%23B45309'/><stop offset='100%' stop-color='%231E293B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23gGrad)' stroke='%23FDE047' stroke-width='3'/><polygon points='38,24 54,36 38,48' fill='%23FDE047'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FEF08A'>पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FDE047'/><polygon points='436,28 448,36 436,44' fill='%2378350F'/></svg>",
+    "enabled": true,
+    "allowedPlans": [
+      "PRO",
+      "VIP DESK"
+    ],
+    "createdAt": 1794280000000,
+    "updatedAt": 1794280000000
+  },
+  {
+    "id": "callout_breaking_red",
+    "name": "ब्रेकिंग न्यूज़ रेड कॉलआउट (Breaking Red)",
+    "category": "breaking",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='rGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23B91C1C'/><stop offset='70%' stop-color='%23DC2626'/><stop offset='100%' stop-color='%23991B1B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23rGrad)' stroke='%23FFFFFF' stroke-width='2.5'/><polygon points='38,24 54,36 38,48' fill='%23FFFFFF'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='20' fill='%23FFFFFF'>पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FFFFFF'/><polygon points='436,28 448,36 436,44' fill='%23DC2626'/></svg>",
+    "enabled": true,
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "createdAt": 1794280000000,
+    "updatedAt": 1794280000000
+  },
+  {
+    "id": "callout_story_details_hindi",
+    "name": "पूरी खबर विवरण में पढ़ें (Crimson & Gold Ribbon)",
+    "category": "general",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='cgGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23BE123C'/><stop offset='50%' stop-color='%23E11D48'/><stop offset='100%' stop-color='%239F1239'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23cgGrad)' stroke='%23FBBF24' stroke-width='2.5'/><circle cx='40' cy='36' r='20' fill='%23FBBF24'/><polygon points='36,28 48,36 36,44' fill='%23881337'/><text x='74' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='22' fill='%23FFFFFF'>पूरी खबर विवरण में पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23FBBF24'/><path d='M434 36 L446 36 M442 30 L448 36 L442 42' stroke='%23881337' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>",
+    "enabled": true,
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "createdAt": 1794350000000,
+    "updatedAt": 1794350000000
+  },
+  {
+    "id": "callout_story_info_below",
+    "name": "पूरी जानकारी नीचे पढ़ें (Navy & Cyan Editorial Badge)",
+    "category": "general",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='ncGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%230F172A'/><stop offset='70%' stop-color='%231E293B'/><stop offset='100%' stop-color='%230284C7'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23ncGrad)' stroke='%2338BDF8' stroke-width='2'/><circle cx='40' cy='36' r='20' fill='%230284C7'/><path d='M34 36 L46 36 M42 30 L48 36 L42 42' stroke='%23FFFFFF' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/><text x='74' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='22' fill='%23F0F9FF'>पूरी जानकारी नीचे पढ़ें</text><circle cx='440' cy='36' r='16' fill='%2338BDF8'/><polygon points='436,28 446,36 436,44' fill='%230F172A'/></svg>",
+    "enabled": true,
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "createdAt": 1794350000000,
+    "updatedAt": 1794350000000
+  },
+  {
+    "id": "callout_story_detail_read",
+    "name": "विस्तृत खबर के लिए पढ़ें (Emerald & Amber Pill)",
+    "category": "general",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='eaGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23065F46'/><stop offset='60%' stop-color='%23047857'/><stop offset='100%' stop-color='%23064E3B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23eaGrad)' stroke='%23F59E0B' stroke-width='2.5'/><circle cx='40' cy='36' r='20' fill='%23F59E0B'/><polygon points='36,28 48,36 36,44' fill='%23064E3B'/><text x='74' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='22' fill='%23ECFDF5'>विस्तृत खबर के लिए पढ़ें</text><circle cx='440' cy='36' r='16' fill='%23F59E0B'/><path d='M434 36 L446 36 M442 30 L448 36 L442 42' stroke='%23064E3B' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>",
+    "enabled": true,
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "createdAt": 1794350000000,
+    "updatedAt": 1794350000000
+  },
+  {
+    "id": "callout_story_live_update",
+    "name": "ताजा अपडेट — विवरण में देखें (Ruby Live Pulse)",
+    "category": "breaking",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='lpGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23991B1B'/><stop offset='50%' stop-color='%23DC2626'/><stop offset='100%' stop-color='%237F1D1D'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23lpGrad)' stroke='%23FEF08A' stroke-width='2.5'/><circle cx='40' cy='36' r='12' fill='%23EF4444' stroke='%23FFFFFF' stroke-width='2'/><text x='66' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='21' fill='%23FFFFFF'>ताजा अपडेट — विवरण में देखें</text><circle cx='440' cy='36' r='16' fill='%23FEF08A'/><polygon points='436,28 446,36 436,44' fill='%23991B1B'/></svg>",
+    "enabled": true,
+    "allowedPlans": [
+      "BASIC",
+      "ADVANCED",
+      "PRO",
+      "VIP DESK"
+    ],
+    "createdAt": 1794350000000,
+    "updatedAt": 1794350000000
+  },
+  {
+    "id": "callout_story_full_read",
+    "name": "विस्तृत विवरण नीचे उपलब्ध है (Royal Indigo & Gold Pill)",
+    "category": "special",
+    "type": "callout_png",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='72' viewBox='0 0 480 72'><defs><linearGradient id='riGrad' x1='0%' y1='0%' x2='100%' y2='0%'><stop offset='0%' stop-color='%23312E81'/><stop offset='50%' stop-color='%234338CA'/><stop offset='100%' stop-color='%231E1B4B'/></linearGradient></defs><rect x='2' y='4' width='476' height='64' rx='32' fill='url(%23riGrad)' stroke='%23FCD34D' stroke-width='2.5'/><circle cx='40' cy='36' r='20' fill='%23FCD34D'/><path d='M34 36 L46 36 M42 30 L48 36 L42 42' stroke='%23312E81' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/><text x='74' y='44' font-family='Arial, sans-serif' font-weight='900' font-size='21' fill='%23FEF3C7'>विस्तृत विवरण नीचे उपलब्ध है</text><circle cx='440' cy='36' r='16' fill='%23FCD34D'/><polygon points='436,28 446,36 436,44' fill='%23312E81'/></svg>",
+    "enabled": true,
+    "allowedPlans": [
+      "PRO",
+      "VIP DESK"
+    ],
+    "createdAt": 1794350000000,
+    "updatedAt": 1794350000000
+  }
+];
 
   if (!type || type === 'all') return defaults;
   return defaults.filter((item) => item.type === type);

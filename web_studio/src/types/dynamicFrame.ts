@@ -358,11 +358,15 @@ export interface TextSlotConfig {
   fontWeight?: string;
   textColor: string;
   highlightColor?: string;
-  alignment: 'left' | 'center' | 'right';
+  alignment: 'left' | 'center' | 'right' | 'justify';
   maxLines: number;
   lineHeight?: number;
   padding?: number;
   backgroundColor?: string;
+  backgroundOpacity?: number;
+  borderWidth?: number;
+  borderColor?: string;
+  borderRadius?: number;
   rotation?: number; // 0, 90, 180, 270
 }
 

@@ -55,6 +55,7 @@ import { generate5BalancedHeadlineOptions } from '../lib/speakerUtils';
 import { newsAudio, BUILTIN_NEWS_TRACKS } from '../lib/newsAudioEngine';
 import { generateVideoDownloadFileName } from '../lib/dateUtils';
 import { saveVideoDraft } from '../lib/draftsManager';
+import { addProjectToHistory } from '../lib/projectHistoryManager';
 import { getSocialIconSrc } from '../lib/socialIconsData';
 import {
   VIDEO_FRAME_DEFINITIONS,
@@ -3239,6 +3240,30 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           }),
         }).catch(() => {});
       } catch {}
+
+      // Automatically record Video in Local-Only Project History (Module 2)
+      try {
+        const headlineText = activeHeadlineText || initialVideo?.title || 'वीडियो न्यूज़ बुलेटिन';
+        await addProjectToHistory(currentUser?.uid || currentUser?.email, {
+          id: 'proj_vid_' + Date.now(),
+          title: headlineText,
+          type: 'video',
+          category: 'वीडियो न्यूज़',
+          thumbnailUrl: activeDynamicFrame?.samplePhotoUrl || sampleVideoPreview || '',
+          createdAt: Date.now(),
+          status: 'exported',
+          data: {
+            filename,
+            duration: totalDuration,
+            aspect,
+            headline: headlineText,
+            exportedAt: new Date().toISOString(),
+          },
+        });
+      } catch (vHistErr) {
+        console.warn('Saving video to local project history failed:', vHistErr);
+      }
+
       setCompletedDownloadUrl(downloadUrl);
       setCompletedDownloadFilename(filename);
 

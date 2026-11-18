@@ -154,6 +154,100 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
   const [isSubmittingTemplate, setIsSubmittingTemplate] = useState(false);
   const [tplError, setTplError] = useState('');
 
+  // Module 3: Approved Meta Template Dispatcher State (After 24h Customer Service Window)
+  const [activeTemplateName, setActiveTemplateName] = useState('news_broadcast_v1');
+  const [templateParamValues, setTemplateParamValues] = useState<Record<number, string>>({
+    1: 'विशेष समाचार बुलेटिन',
+    2: 'लाइव अपडेट और समाचार ग्राफिक तैयार करने के लिए लिंक पर क्लिक करें।',
+  });
+  const [isSendingTemplate, setIsSendingTemplate] = useState(false);
+  const [templateSendSuccess, setTemplateSendSuccess] = useState(false);
+  const [templateSendError, setTemplateSendError] = useState<string | null>(null);
+
+  const getApprovedTemplatesList = () => {
+    return templates.filter((t) => (t.status || '').toUpperCase() === 'APPROVED');
+  };
+
+  const extractTemplateParamIndices = (): number[] => {
+    const body = getSelectedTemplateBody();
+    const regex = /\{\{(\d+)\}\}/g;
+    const indices: number[] = [];
+    let m;
+    while ((m = regex.exec(body)) !== null) {
+      const idx = Number(m[1]);
+      if (!indices.includes(idx)) indices.push(idx);
+    }
+    return indices.sort((a, b) => a - b);
+  };
+
+  const getSelectedTemplateBody = () => {
+    const tplList = getApprovedTemplatesList();
+    const found = tplList.find((t) => t.name === activeTemplateName) || tplList[0];
+    if (found?.bodyText) return found.bodyText;
+    const bodyComp = (found?.components || []).find((c: any) => c.type === 'BODY');
+    return bodyComp?.text || '🚨 *{{1}}*\n\n{{2}}\n\n✨ AI News Maker';
+  };
+
+  const renderTemplateLivePreview = () => {
+    let body = getSelectedTemplateBody();
+    body = body.replace(/\{\{(\d+)\}\}/g, (_match: string, p1: string) => {
+      const idx = Number(p1);
+      return templateParamValues[idx] || `{{${idx}}}`;
+    });
+    return body;
+  };
+
+  const handleSendApprovedTemplate = async () => {
+    if (!selectedConvId || isSendingTemplate) return;
+    setIsSendingTemplate(true);
+    setTemplateSendError(null);
+    setTemplateSendSuccess(false);
+
+    const paramIndices = extractTemplateParamIndices();
+    const missing = paramIndices.filter((idx) => !templateParamValues[idx] || !templateParamValues[idx].trim());
+    if (missing.length > 0) {
+      setTemplateSendError(`कृपया सभी आवश्यक पैरामीटर्स दर्ज करें (कमी: {{${missing.join('}}, {{')}}})`);
+      setIsSendingTemplate(false);
+      return;
+    }
+
+    try {
+      const tplList = getApprovedTemplatesList();
+      const activeTpl = tplList.find((t) => t.name === activeTemplateName) || tplList[0];
+      const paramsArray = Object.keys(templateParamValues)
+        .sort((a, b) => Number(a) - Number(b))
+        .map((k) => templateParamValues[Number(k)] || '');
+
+      const res = await fetch(`/api/admin/whatsapp/conversations/${selectedConvId}/send-template`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          templateName: activeTemplateName,
+          templateLang: activeTpl.language || 'hi',
+          parameters: paramsArray,
+          customPreviewText: renderTemplateLivePreview(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setTemplateSendError(data.error || 'टेम्पलेट संदेश प्रेषण विफल रहा।');
+      } else {
+        setTemplateSendSuccess(true);
+        setTimeout(() => setTemplateSendSuccess(false), 4000);
+        fetchMessages(selectedConvId);
+        fetchConversations();
+      }
+    } catch (err: any) {
+      setTemplateSendError(err?.message || 'सर्वर से संपर्क नहीं हो सका।');
+    } finally {
+      setIsSendingTemplate(false);
+    }
+  };
+
   // ==========================================
   // TAB 5: AUTOMATION SETTINGS STATE
   // ==========================================
@@ -373,7 +467,7 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
 
   const lastInboundAt = Number(selectedConv?.lastInboundAt || 0);
   const hoursSinceLastInbound = lastInboundAt > 0 ? (Date.now() - lastInboundAt) / (1000 * 3600) : 999;
-  const isWithin24hWindow = hoursSinceLastInbound <= 24;
+  const isWithin24hWindow = (selectedConv as any)?.isCustomerWindowActive !== undefined ? Boolean((selectedConv as any).isCustomerWindowActive) : (hoursSinceLastInbound <= 24);
 
   // ==========================================
   // FLOW BUILDER API CALLS
@@ -1338,10 +1432,15 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
 
                 {/* 24-Hour WhatsApp Session Window Alert */}
                 {!isWithin24hWindow && (
-                  <div className="px-4 py-2 bg-amber-950/40 border-b border-amber-500/30 text-amber-300 text-[11px] flex items-center gap-2 shrink-0">
-                    <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span>
-                      *24-घंटे की WhatsApp ग्राहक विंडो समाप्त हो चुकी है।* केवल तभी संदेश भेजें जब ग्राहक ने हाल ही में संपर्क किया हो।
+                  <div className="px-4 py-2.5 bg-amber-950/60 border-b border-amber-500/40 text-amber-300 text-xs flex items-center justify-between gap-3 shrink-0">
+                    <div className="flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span className="font-bold">
+                        24 घंटे की ग्राहक सेवा विंडो समाप्त हो चुकी है। Meta नीति के अनुसार केवल स्वीकृत टेम्पलेट संदेश ही भेजे जा सकते हैं।
+                      </span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 font-mono text-amber-300">
+                      {Math.round(hoursSinceLastInbound)} घंटे पूर्व
                     </span>
                   </div>
                 )}
@@ -1476,54 +1575,144 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
                   </div>
                 )}
 
-                {/* Reply Form (Sticky bottom with safe inset for mobile virtual keyboard) */}
-                <form
-                  onSubmit={handleSendMessage}
-                  className="p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2 shrink-0 sticky bottom-0 z-10"
-                >
-                  <button
-                    type="button"
-                    onClick={() => setShowQuickReplies(!showQuickReplies)}
-                    className="p-2.5 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-xl border border-slate-700 transition cursor-pointer"
-                    title="क्विक रिप्लाई चुनें"
+                {/* Reply Form or Approved Meta Template Dispatcher */}
+                {isWithin24hWindow ? (
+                  /* ACTIVE 24-HOUR CUSTOMER SERVICE WINDOW: Free-form message composer */
+                  <form
+                    onSubmit={handleSendMessage}
+                    className="p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2 shrink-0 sticky bottom-0 z-10"
                   >
-                    <Zap className="w-4 h-4" />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickReplies(!showQuickReplies)}
+                      className="p-2.5 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-xl border border-slate-700 transition cursor-pointer"
+                      title="क्विक रिप्लाई चुनें"
+                    >
+                      <Zap className="w-4 h-4" />
+                    </button>
 
-                  <div className="flex-1 relative">
-                    <textarea
-                      ref={replyInputRef}
-                      value={replyText}
-                      onChange={(e) => setReplyText(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSendMessage();
-                        }
-                      }}
-                      placeholder={
-                        isWithin24hWindow
-                          ? 'ग्राहक को जवाब लिखें (Enter दबाकर भेजें)...'
-                          : 'चेतावनी: 24h विंडो समाप्त हो चुकी है...'
-                      }
-                      rows={1}
-                      maxLength={4096}
-                      className="w-full pl-3 pr-16 py-2.5 bg-slate-950 text-slate-100 placeholder-slate-500 text-xs sm:text-sm rounded-xl border border-slate-800 focus:outline-none focus:border-emerald-500 resize-none"
-                    />
-                    <div className="absolute right-2.5 bottom-2 text-[10px] text-slate-500">
-                      {replyText.length}/4096
+                    <div className="flex-1 relative">
+                      <textarea
+                        ref={replyInputRef}
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendMessage();
+                          }
+                        }}
+                        placeholder="ग्राहक को जवाब लिखें (Enter दबाकर भेजें)..."
+                        rows={1}
+                        maxLength={4096}
+                        className="w-full pl-3 pr-16 py-2.5 bg-slate-950 text-slate-100 placeholder-slate-500 text-xs sm:text-sm rounded-xl border border-slate-800 focus:outline-none focus:border-emerald-500 resize-none"
+                      />
+                      <div className="absolute right-2.5 bottom-2 text-[10px] text-slate-500">
+                        {replyText.length}/4096
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={!replyText.trim() || isSending}
+                      className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5 shrink-0 h-[42px]"
+                    >
+                      <Send className={`w-4 h-4 ${isSending ? 'animate-spin' : ''}`} />
+                      <span>{isSending ? 'भेज रहे हैं...' : 'भेजें'}</span>
+                    </button>
+                  </form>
+                ) : (
+                  /* EXPIRED 24-HOUR WINDOW: Approved Meta Template Dispatcher */
+                  <div className="p-3.5 bg-slate-900 border-t border-slate-800 space-y-3 shrink-0 sticky bottom-0 z-10">
+                    <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xs">
+                          <FileText className="w-3.5 h-3.5" />
+                        </div>
+                        <span className="text-xs font-black text-amber-300">
+                          स्वीकृत Meta टेम्पलेट चुनें एवं भेजें
+                        </span>
+                      </div>
+                      <select
+                        value={activeTemplateName}
+                        onChange={(e) => setActiveTemplateName(e.target.value)}
+                        className="bg-slate-950 border border-slate-700 text-xs text-white font-bold rounded-lg px-2.5 py-1 focus:outline-none focus:border-amber-400 cursor-pointer"
+                      >
+                        {getApprovedTemplatesList().map((tpl) => (
+                          <option key={tpl.name} value={tpl.name}>
+                            {tpl.name} ({tpl.language || 'hi'}) — {tpl.category || 'MARKETING'}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Template Variable Inputs */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-400 flex items-center justify-between">
+                          <span>पैरामीटर {'{{1}}'}: मुख्य विषय / शीर्षक</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={templateParamValues[1] || ''}
+                          onChange={(e) => setTemplateParamValues({ ...templateParamValues, 1: e.target.value })}
+                          placeholder="जैसे: ताज़ा समाचार बुलेटिन..."
+                          className="w-full bg-slate-950 border border-slate-800 focus:border-amber-400 text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-slate-400 flex items-center justify-between">
+                          <span>पैरामीटर {'{{2}}'}: विवरण / संदर्भ</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={templateParamValues[2] || ''}
+                          onChange={(e) => setTemplateParamValues({ ...templateParamValues, 2: e.target.value })}
+                          placeholder="जैसे: विस्तृत रिपोर्ट एवं ग्राफिक्स..."
+                          className="w-full bg-slate-950 border border-slate-800 focus:border-amber-400 text-white rounded-xl px-3 py-1.5 text-xs focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Live Template Preview Box */}
+                    <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-2.5 text-xs space-y-1">
+                      <div className="text-[10px] font-bold text-amber-400 uppercase tracking-wide flex items-center gap-1">
+                        <Eye className="w-3 h-3" />
+                        <span>लाइव टेम्पलेट पूर्वावलोकन (Live Preview)</span>
+                      </div>
+                      <p className="text-slate-200 whitespace-pre-wrap leading-relaxed font-sans text-xs">
+                        {renderTemplateLivePreview()}
+                      </p>
+                    </div>
+
+                    {/* Error & Success Feedback */}
+                    {templateSendError && (
+                      <div className="text-xs text-red-400 flex items-center gap-1.5 bg-red-950/40 p-2 rounded-xl border border-red-500/30">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{templateSendError}</span>
+                      </div>
+                    )}
+                    {templateSendSuccess && (
+                      <div className="text-xs text-emerald-400 flex items-center gap-1.5 bg-emerald-950/40 p-2 rounded-xl border border-emerald-500/30">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        <span>✅ स्वीकृत टेम्पलेट संदेश सफलतापूर्वक ग्राहक को भेज दिया गया!</span>
+                      </div>
+                    )}
+
+                    {/* Action Bar */}
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        disabled={isSendingTemplate}
+                        onClick={handleSendApprovedTemplate}
+                        className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Send className={`w-3.5 h-3.5 ${isSendingTemplate ? 'animate-spin' : ''}`} />
+                        <span>{isSendingTemplate ? 'टेम्पलेट भेज रहे हैं...' : 'स्वीकृत टेम्पलेट भेजें'}</span>
+                      </button>
                     </div>
                   </div>
-
-                  <button
-                    type="submit"
-                    disabled={!replyText.trim() || isSending}
-                    className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5 shrink-0 h-[42px]"
-                  >
-                    <Send className={`w-4 h-4 ${isSending ? 'animate-spin' : ''}`} />
-                    <span>{isSending ? 'भेज रहे हैं...' : 'भेजें'}</span>
-                  </button>
-                </form>
+                )}
               </>
             )}
           </div>

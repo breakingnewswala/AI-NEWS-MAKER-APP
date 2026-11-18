@@ -53,31 +53,37 @@ import {
   deleteInquiry,
 } from '../lib/supportInboxManager';
 
-export interface ProjectHistoryItem {
-  id: string;
-  title: string;
-  type: 'graphic' | 'video';
-  status: 'exported' | 'generated' | 'draft';
-  thumbnailUrl?: string;
-  timestamp: number;
-  data?: any;
-}
+import {
+  ProjectHistoryItem,
+  getUserProjectHistory,
+  deleteProjectHistoryItem,
+  clearAllProjectHistory,
+  getHistoryRetentionHours,
+  setHistoryRetentionHours,
+} from '../lib/projectHistoryManager';
 
-export function loadUserProjectHistory(): ProjectHistoryItem[] {
+export type { ProjectHistoryItem };
+
+export function loadUserProjectHistory(userId?: string | null): ProjectHistoryItem[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem('ai_news_maker_projects_history_v1');
+    const uid = userId || 'anonymous_user';
+    const raw = localStorage.getItem(`ai_news_maker_projects_history_v2_${uid}`) || localStorage.getItem('ai_news_maker_projects_history_v1');
     const list: ProjectHistoryItem[] = raw ? JSON.parse(raw) : [];
 
     // Also include user saved drafts that are not sample defaults
     const drafts = getSavedDrafts().filter((d) => !d.id.startsWith('draft-sample-'));
     const draftItems: ProjectHistoryItem[] = drafts.map((d) => ({
       id: d.id,
+      userId: uid,
       title: d.headline || d.title || 'समाचार प्रोजेक्ट',
       type: (d.draftType === 'video' || (d as any).videoData) ? 'video' : 'graphic',
       status: 'draft',
       thumbnailUrl: d.thumbnailUrl || (d.cardData as any)?.photoUrl || (d.cardData as any)?.images?.main,
+      createdAt: d.updatedAt || d.createdAt || Date.now(),
       timestamp: d.updatedAt || d.createdAt || Date.now(),
+      retentionHours: 48,
+      expiresAt: (d.updatedAt || d.createdAt || Date.now()) + 48 * 3600 * 1000,
       data: d,
     }));
 
@@ -89,7 +95,7 @@ export function loadUserProjectHistory(): ProjectHistoryItem[] {
       }
     });
 
-    return Array.from(map.values()).sort((a, b) => b.timestamp - a.timestamp);
+    return Array.from(map.values()).sort((a, b) => (b.createdAt || b.timestamp || 0) - (a.createdAt || a.timestamp || 0));
   } catch {
     return [];
   }
@@ -149,9 +155,13 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
       window.removeEventListener('ai_news_open_newsroom_whatsapp_inbox', handleOpenInbox);
     };
   }, []);
-  const [projectHistory, setProjectHistory] = useState<ProjectHistoryItem[]>(() => loadUserProjectHistory());
+
+  const currentUid = currentUser?.uid || currentUser?.email || currentUser?.username || 'anonymous_user';
+  const [projectHistory, setProjectHistory] = useState<ProjectHistoryItem[]>(() => loadUserProjectHistory(currentUid));
   const [historySearchQuery, setHistorySearchQuery] = useState('');
   const [historyTypeFilter, setHistoryTypeFilter] = useState<'all' | 'graphic' | 'video'>('all');
+  const [historyRetention, setHistoryRetention] = useState<24 | 48>(() => getHistoryRetentionHours(currentUid));
+  const [isClearHistoryModalOpen, setIsClearHistoryModalOpen] = useState(false);
 
   // Drafts state
   const [drafts, setDrafts] = useState<NewsDraft[]>(() => getSavedDrafts());
@@ -211,18 +221,79 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
     (currentUser as any)?.role === 'admin' ||
     (currentUser as any)?.role === 'superadmin';
 
-  // Module 6: AI Script Maker States & Handlers
+  // Module 4: AI Script Maker States & Handlers (Website vs Social Media Modes)
+  const [scriptMode, setScriptMode] = useState<'website' | 'social'>('website');
   const [scriptInputType, setScriptInputType] = useState<'प्रेस नोट' | 'रॉ स्क्रिप्ट' | 'अन्य समाचार सामग्री'>('प्रेस नोट');
   const [rawScriptText, setRawScriptText] = useState('');
   const [isGeneratingScript, setIsGeneratingScript] = useState(false);
   const [scriptError, setScriptError] = useState<string | null>(null);
   const [generatedScript, setGeneratedScript] = useState<{
+    mode: 'website' | 'social';
     headline: string;
-    subHeadline: string;
+    subHeadline?: string;
     fullStory: string;
+    socialHeadlines?: string[];
+    socialDescription?: string;
+    hashtags?: string[];
   } | null>(null);
-  const [scriptCopiedField, setScriptCopiedField] = useState<'headline' | 'subheadline' | 'story' | 'all' | null>(null);
+  const [scriptCopiedField, setScriptCopiedField] = useState<'headline' | 'subheadline' | 'story' | 'all' | 'social_caption' | 'social_hashtags' | 'social_all' | string | null>(null);
   const [scriptSavedDraftSuccess, setScriptSavedDraftSuccess] = useState(false);
+
+  // Module 2: Local Project History Manager Handlers
+  const refreshHistory = async () => {
+    try {
+      const items = await getUserProjectHistory(currentUid);
+      const drafts = getSavedDrafts().filter((d) => !d.id.startsWith('draft-sample-'));
+      const draftItems: ProjectHistoryItem[] = drafts.map((d) => ({
+        id: d.id,
+        userId: currentUid,
+        title: d.headline || d.title || 'समाचार प्रोजेक्ट',
+        type: (d.draftType === 'video' || (d as any).videoData) ? 'video' : 'graphic',
+        status: 'draft',
+        thumbnailUrl: d.thumbnailUrl || (d.cardData as any)?.photoUrl || (d.cardData as any)?.images?.main,
+        createdAt: d.updatedAt || d.createdAt || Date.now(),
+        timestamp: d.updatedAt || d.createdAt || Date.now(),
+        retentionHours: historyRetention,
+        expiresAt: (d.updatedAt || d.createdAt || Date.now()) + historyRetention * 3600 * 1000,
+        data: d,
+      }));
+      const map = new Map<string, ProjectHistoryItem>();
+      items.forEach((p) => map.set(p.id, p));
+      draftItems.forEach((d) => {
+        if (!map.has(d.id)) map.set(d.id, d);
+      });
+      setProjectHistory(Array.from(map.values()).sort((a, b) => (b.createdAt || b.timestamp || 0) - (a.createdAt || a.timestamp || 0)));
+    } catch {
+      setProjectHistory(loadUserProjectHistory(currentUid));
+    }
+  };
+
+  const handleRetentionChange = (hours: 24 | 48) => {
+    setHistoryRetentionHours(hours, currentUid);
+    setHistoryRetention(hours);
+    refreshHistory();
+  };
+
+  const handleDeleteHistoryItem = async (itemId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      await deleteProjectHistoryItem(currentUid, itemId);
+      deleteDraft(itemId);
+      await refreshHistory();
+    } catch (err) {
+      console.error('Failed to delete history item:', err);
+    }
+  };
+
+  const handleClearAllHistory = async () => {
+    try {
+      await clearAllProjectHistory(currentUid);
+      setIsClearHistoryModalOpen(false);
+      await refreshHistory();
+    } catch (err) {
+      console.error('Failed to clear history:', err);
+    }
+  };
 
   // Module 8: Master Admin Play Store URL Management State
   const [isEditingPlayStoreUrl, setIsEditingPlayStoreUrl] = useState(false);
@@ -278,17 +349,31 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
         body: JSON.stringify({
           rawText: rawScriptText,
           inputType: scriptInputType,
+          generationMode: scriptMode,
+          username: currentUser?.username || currentUser?.name,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
         setScriptError(data.error || 'न्यूज़ स्टोरी तैयार करने में त्रुटि आई। कृपया पुनः प्रयास करें।');
       } else {
-        setGeneratedScript({
-          headline: data.headline || '',
-          subHeadline: data.subHeadline || '',
-          fullStory: data.fullStory || '',
-        });
+        if (data.generationMode === 'social') {
+          setGeneratedScript({
+            mode: 'social',
+            headline: data.headline || data.socialHeadlines?.[0] || '',
+            socialHeadlines: data.socialHeadlines || [],
+            socialDescription: data.socialDescription || '',
+            hashtags: data.hashtags || [],
+            fullStory: data.fullStory || data.socialDescription || '',
+          });
+        } else {
+          setGeneratedScript({
+            mode: 'website',
+            headline: data.headline || '',
+            subHeadline: data.subHeadline || '',
+            fullStory: data.fullStory || '',
+          });
+        }
         setScriptSavedDraftSuccess(false);
       }
     } catch (err: any) {
@@ -298,7 +383,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
     }
   };
 
-  const handleCopyScriptField = (field: 'headline' | 'story' | 'all', text: string) => {
+  const handleCopyScriptField = (field: string, text: string) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       navigator.clipboard.writeText(text);
     }
@@ -309,6 +394,13 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
   const handleSaveScriptAsDraft = () => {
     if (!generatedScript) return;
     try {
+      const summaryText =
+        generatedScript.mode === 'social'
+          ? `${generatedScript.socialDescription || ''}\n\n${(generatedScript.hashtags || []).join(' ')}`
+          : generatedScript.subHeadline
+          ? `${generatedScript.subHeadline}\n\n${generatedScript.fullStory}`
+          : generatedScript.fullStory;
+
       saveDraft(
         {
           templateId: 'graphic_001',
@@ -319,19 +411,17 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
           category: 'संपादकीय',
           location: '',
           date: 'आज की ताज़ा ख़बर',
-          summary: generatedScript.subHeadline
-            ? `${generatedScript.subHeadline}\n\n${generatedScript.fullStory}`
-            : generatedScript.fullStory,
+          summary: summaryText,
           photoUrl: '',
         } as any,
         {
           title: generatedScript.headline,
-          anchorScript: generatedScript.fullStory,
-          tags: ['#AIScriptMaker', '#NewsStory', '#AINewsMaker'],
+          anchorScript: generatedScript.fullStory || summaryText,
+          tags: generatedScript.hashtags || ['#AIScriptMaker', '#NewsStory', '#AINewsMaker'],
         }
       );
       setDrafts(getSavedDrafts());
-      setProjectHistory(loadUserProjectHistory());
+      refreshHistory();
       setScriptSavedDraftSuccess(true);
       setTimeout(() => setScriptSavedDraftSuccess(false), 3000);
     } catch (err) {
@@ -348,8 +438,10 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
       setInquiries(getSupportInquiries());
     };
     const handleHistoryUpdate = () => {
-      setProjectHistory(loadUserProjectHistory());
+      refreshHistory();
     };
+
+    refreshHistory();
 
     window.addEventListener('ai_news_drafts_updated', handleDraftsUpdate);
     window.addEventListener('ai_news_support_inquiry_added', handleInquiriesUpdate);
@@ -599,7 +691,8 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
 
   const pendingCount = inquiries.filter((i) => i.status === 'pending').length;
 
-  const formatTime = (ts: number) => {
+  const formatTime = (ts?: number) => {
+    if (!ts || isNaN(ts)) return 'अभी';
     const diff = Date.now() - ts;
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return 'अभी';
@@ -689,6 +782,40 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
         ) : (
           /* Unlocked Editor for Pro / VIP / Master Admin */
           <div className="space-y-4">
+            {/* Mode Selector Tabs (Website Mode vs Social Media Mode) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 p-1.5 bg-slate-950/90 rounded-2xl border border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setScriptMode('website');
+                  if (generatedScript && generatedScript.mode !== 'website') setGeneratedScript(null);
+                }}
+                className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  scriptMode === 'website'
+                    ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                <span>🌐 वेबसाइट के लिए न्यूज़ स्क्रिप्ट</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setScriptMode('social');
+                  if (generatedScript && generatedScript.mode !== 'social') setGeneratedScript(null);
+                }}
+                className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  scriptMode === 'social'
+                    ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-md'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                }`}
+              >
+                <Share2 className="w-4 h-4" />
+                <span>📱 सोशल मीडिया के लिए न्यूज़ स्क्रिप्ट</span>
+              </button>
+            </div>
+
             {/* Input Type Selector */}
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-bold text-slate-300">सामग्री प्रकार:</span>
@@ -711,13 +838,21 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
             {/* Raw Text Textarea */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
-                <span>प्रेस नोट / रॉ टेक्स्ट / बयान दर्ज करें:</span>
+                <span>
+                  {scriptMode === 'social'
+                    ? 'प्रेस नोट या सोशल मीडिया पोस्ट हेतु कच्ची खबर दर्ज करें:'
+                    : 'प्रेस नोट / रॉ टेक्स्ट / बयान दर्ज करें:'}
+                </span>
                 <span className="text-[11px] text-slate-500">{rawScriptText.length} वर्ण</span>
               </label>
               <textarea
                 value={rawScriptText}
                 onChange={(e) => setRawScriptText(e.target.value)}
-                placeholder="यहाँ प्रेस नोट या अपनी रॉ न्यूज़ स्क्रिप्ट पेस्ट करें..."
+                placeholder={
+                  scriptMode === 'social'
+                    ? 'यहाँ प्रेस नोट या कच्ची खबर पेस्ट करें... AI सोशल मीडिया के लिए 3-4 आकर्षक हेडलाइंस, कैप्शन और सही हैशटैग्स बनाएगा।'
+                    : 'यहाँ प्रेस नोट या अपनी रॉ न्यूज़ स्क्रिप्ट पेस्ट करें...'
+                }
                 rows={4}
                 className="w-full bg-slate-950/80 border border-slate-700 focus:border-amber-400 rounded-xl p-3 text-sm text-white placeholder-slate-500 focus:outline-none transition resize-y min-h-[100px]"
               />
@@ -742,12 +877,16 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                 {isGeneratingScript ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>AI स्टोरी तैयार कर रहा है...</span>
+                    <span>AI {scriptMode === 'social' ? 'सोशल पोस्ट' : 'स्टोरी'} तैयार कर रहा है...</span>
                   </>
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4" />
-                    <span>न्यूज़ स्क्रिप्ट तैयार करें</span>
+                    <span>
+                      {scriptMode === 'social'
+                        ? 'सोशल मीडिया न्यूज़ स्क्रिप्ट तैयार करें'
+                        : 'न्यूज़ स्क्रिप्ट तैयार करें'}
+                    </span>
                   </>
                 )}
               </button>
@@ -767,12 +906,199 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
             </div>
 
             {/* Generated Output Sections */}
-            {generatedScript && (
+            {generatedScript && generatedScript.mode === 'social' && (
+              /* MODE B: SOCIAL MEDIA OUTPUT */
               <div className="pt-4 border-t border-slate-800 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-black text-amber-400 flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    तैयार न्यूज़ स्टोरी पैकेज (संपादनीय)
+                    तैयार सोशल मीडिया पैकेज (संपादनीय)
+                  </h4>
+                  <span className="text-[11px] text-slate-400">शीर्षक पर क्लिक करके पसंदीदा हेडलाइन चुनें</span>
+                </div>
+
+                {/* 1. Distinct Social Headlines (3-4 Options) */}
+                <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-3">
+                  <label className="text-xs font-black text-amber-300 uppercase tracking-wide flex items-center justify-between">
+                    <span>1. सोशल मीडिया हेडलाइंस विकल्प (3-4 आकर्षक ऑप्शंस)</span>
+                    <span className="text-[10px] text-slate-400 font-normal">क्लिक करके प्राथमिक शीर्षक चुनें</span>
+                  </label>
+                  <div className="space-y-2">
+                    {(generatedScript.socialHeadlines || [generatedScript.headline]).map((hl, idx) => {
+                      const isSelected = generatedScript.headline === hl;
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => setGeneratedScript({ ...generatedScript, headline: hl })}
+                          className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                            isSelected
+                              ? 'bg-amber-500/15 border-amber-500 text-white shadow-sm'
+                              : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-start gap-2.5 min-w-0">
+                            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5 ${
+                              isSelected ? 'bg-amber-400 text-slate-950' : 'bg-slate-800 text-slate-400'
+                            }`}>
+                              {idx + 1}
+                            </span>
+                            <span className="text-xs sm:text-sm font-bold leading-snug">{hl}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {isSelected && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                चयनित
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCopyScriptField(`social_hl_${idx}`, hl);
+                              }}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
+                              title="यह शीर्षक कॉपी करें"
+                            >
+                              {scriptCopiedField === `social_hl_${idx}` ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5 text-amber-400" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Social Description / Caption */}
+                <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black text-amber-300 uppercase tracking-wide">
+                      2. सोशल मीडिया विवरण / कैप्शन (Caption & Description)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyScriptField('social_caption', generatedScript.socialDescription || '')}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {scriptCopiedField === 'social_caption' ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-emerald-400">कॉपी हो गया!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-amber-400" />
+                          <span>कैप्शन कॉपी करें</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <textarea
+                    rows={4}
+                    value={generatedScript.socialDescription || ''}
+                    onChange={(e) => setGeneratedScript({ ...generatedScript, socialDescription: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-xl p-3 text-xs sm:text-sm text-slate-200 focus:outline-none transition resize-y"
+                  />
+                </div>
+
+                {/* 3. Ordered Hashtags */}
+                <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black text-amber-300 uppercase tracking-wide">
+                      3. हैशटैग सूची (प्रारूप: #यूज़रनेम #विषय #AINewsMaker)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyScriptField('social_hashtags', (generatedScript.hashtags || []).join(' '))}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {scriptCopiedField === 'social_hashtags' ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-emerald-400">कॉपी हो गया!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-amber-400" />
+                          <span>हैशटैग्स कॉपी करें</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {(generatedScript.hashtags || []).map((ht, i) => (
+                      <span
+                        key={i}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                          i === 0
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                            : i === (generatedScript.hashtags || []).length - 1
+                            ? 'bg-red-500/20 text-red-300 border-red-500/40'
+                            : 'bg-slate-900 text-sky-300 border-slate-800'
+                        }`}
+                      >
+                        {ht}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Social Action Bar */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleCopyScriptField(
+                          'social_all',
+                          `${generatedScript.headline}\n\n${generatedScript.socialDescription || ''}\n\n${(generatedScript.hashtags || []).join(' ')}`
+                        )
+                      }
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-black shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {scriptCopiedField === 'social_all' ? (
+                        <>
+                          <Check className="w-4 h-4 text-slate-950" />
+                          <span>पूरा सोशल पोस्ट कॉपी हो गया!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4 text-slate-950" />
+                          <span>पूरा सोशल पोस्ट कॉपी करें</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveScriptAsDraft}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-xs font-bold text-white shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Bookmark className="w-4 h-4" />
+                      <span>ड्राफ्ट के रूप में सहेजें</span>
+                    </button>
+                  </div>
+
+                  {scriptSavedDraftSuccess && (
+                    <div className="text-xs font-bold text-emerald-400 flex items-center gap-1 animate-in fade-in duration-200">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>ड्राफ्ट सफलतापूर्वक सहेजा गया! नीचे ड्राफ्ट्स में देखें।</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Generated Output Sections */}
+            {generatedScript && generatedScript.mode === 'website' && (
+              /* MODE A: WEBSITE MODE OUTPUT */
+              <div className="pt-4 border-t border-slate-800 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-black text-amber-400 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    तैयार वेबसाइट न्यूज़ पैकेज (संपादनीय)
                   </h4>
                   <span className="text-[11px] text-slate-400">सीधे बॉक्स में एडिट कर सकते हैं</span>
                 </div>
@@ -817,7 +1143,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                     </label>
                     <button
                       type="button"
-                      onClick={() => handleCopyScriptField('subheadline', generatedScript.subHeadline)}
+                      onClick={() => handleCopyScriptField('subheadline', generatedScript.subHeadline || '')}
                       className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 transition flex items-center gap-1.5 cursor-pointer"
                     >
                       {scriptCopiedField === 'subheadline' ? (
@@ -835,7 +1161,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                   </div>
                   <textarea
                     rows={2}
-                    value={generatedScript.subHeadline}
+                    value={generatedScript.subHeadline || ''}
                     onChange={(e) => setGeneratedScript({ ...generatedScript, subHeadline: e.target.value })}
                     className="w-full bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-xl p-3 text-xs sm:text-sm text-slate-200 focus:outline-none transition resize-y"
                   />
@@ -845,7 +1171,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                 <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-black text-amber-300 uppercase tracking-wide">
-                      3. पूरी न्यूज़ स्टोरी (Full Story)
+                      3. पूरी न्यूज़ स्टोरी (Full Story, 2-3 पैराग्राफ्स)
                     </label>
                     <button
                       type="button"
@@ -1482,6 +1808,33 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* Retention Selector (24h / 48h Default) */}
+                  <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800 text-xs">
+                    <Clock className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-[11px] font-bold text-slate-300">ऑटो-क्लीनअप:</span>
+                    <select
+                      value={historyRetention}
+                      onChange={(e) => handleRetentionChange(Number(e.target.value) as 24 | 48)}
+                      className="bg-slate-900 border border-slate-700 text-amber-300 rounded-lg px-2 py-0.5 text-xs font-bold focus:outline-none cursor-pointer"
+                    >
+                      <option value={48}>48 घंटे (डिफ़ॉल्ट)</option>
+                      <option value={24}>24 घंटे</option>
+                    </select>
+                  </div>
+
+                  {/* Clear All History Button */}
+                  {projectHistory.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setIsClearHistoryModalOpen(true)}
+                      className="px-2.5 py-1 bg-red-950/60 hover:bg-red-900 text-red-300 border border-red-700/50 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                      title="पूरी प्रोजेक्ट हिस्ट्री साफ़ करें"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                      <span>सभी साफ़ करें</span>
+                    </button>
+                  )}
+
                   <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
                     <button
                       type="button"
@@ -1582,7 +1935,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                           </div>
                           <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/80 text-[10px] text-slate-300 backdrop-blur-md flex items-center gap-1">
                             <Clock className="w-3 h-3 text-slate-400" />
-                            <span>{formatTime(item.timestamp)}</span>
+                            <span>{formatTime(item.createdAt || item.timestamp)}</span>
                           </div>
                         </div>
 
@@ -1608,9 +1961,50 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                           <FileEdit className="w-3.5 h-3.5" />
                           <span>स्टूडियो में खोलें</span>
                         </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteHistoryItem(item.id, e)}
+                          className="p-1.5 bg-slate-900 hover:bg-red-950 text-slate-400 hover:text-red-400 border border-slate-800 hover:border-red-500/40 rounded-xl transition cursor-pointer shrink-0"
+                          title="प्रोजेक्ट हिस्ट्री से हटाएं"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Confirmation Modal for Clearing All History */}
+              {isClearHistoryModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+                  <div className="bg-slate-900 border border-red-500/40 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+                    <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center mx-auto text-red-400">
+                      <Trash2 className="w-6 h-6" />
+                    </div>
+                    <div className="text-center space-y-2">
+                      <h3 className="text-lg font-black text-white">सभी प्रोजेक्ट हिस्ट्री साफ़ करें?</h3>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        यह क्रिया डिवाइस के लोकल डेटाबेस से आपके सभी <strong>{projectHistory.length}</strong> प्रोजेक्ट हिस्ट्री रिकॉर्ड और अस्थायी थंबनेल्स को हटा देगी। आपके मूल ड्राफ्ट्स, सेव की गई फ़ोटो और डाउनलोड्स सुरक्षित रहेंगे।
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-end gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setIsClearHistoryModalOpen(false)}
+                        className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-300 transition cursor-pointer"
+                      >
+                        रद्द करें
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearAllHistory}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-xs font-black text-white shadow-lg transition cursor-pointer"
+                      >
+                        हाँ, सभी साफ़ करें
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

@@ -99,6 +99,7 @@ import { EPaperScreenWeb } from './components/EPaperScreenWeb';
 import { ProfileScreenWeb } from './components/ProfileScreenWeb';
 import { NewsroomScreenWeb } from './components/NewsroomScreenWeb';
 import { DraftsScreenWeb } from './components/DraftsScreenWeb';
+import { addProjectToHistory } from './lib/projectHistoryManager';
 import { CategoriesScreenWeb } from './components/CategoriesScreenWeb';
 import { ExportScreenWeb } from './components/ExportScreenWeb';
 import { TermsPage } from './components/TermsPage';
@@ -3034,29 +3035,24 @@ export default function App() {
         console.warn('Could not report download export completion:', completeErr);
       }
 
-      // Automatically record in Project History
+      // Automatically record in Local-Only Project History (Module 2)
       try {
-        const historyItem = {
+        await addProjectToHistory(currentUser?.uid || currentUser?.email, {
           id: 'proj_' + Date.now(),
           title: card.headline || card.category || 'समाचार ग्राफिक',
-          type: 'graphic' as const,
+          type: 'graphic',
           category: card.category || 'ताज़ा खबर',
-          thumbnail: card.image || '',
-          timestamp: Date.now(),
-          status: 'exported' as const,
+          thumbnailUrl: card.image || '',
+          createdAt: Date.now(),
+          status: 'exported',
           data: {
             ...card,
             exportedAt: new Date().toISOString(),
             filename,
           },
-        };
-        const rawHistory = localStorage.getItem('ai_news_maker_projects_history_v1');
-        const list = rawHistory ? JSON.parse(rawHistory) : [];
-        list.unshift(historyItem);
-        localStorage.setItem('ai_news_maker_projects_history_v1', JSON.stringify(list.slice(0, 50)));
-        window.dispatchEvent(new CustomEvent('ai_news_project_history_updated'));
+        });
       } catch (histErr) {
-        console.warn('Saving to project history failed:', histErr);
+        console.warn('Saving to local project history failed:', histErr);
       }
 
       // Refresh daily download quota status across app

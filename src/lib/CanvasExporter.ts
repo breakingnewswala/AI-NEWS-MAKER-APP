@@ -1980,8 +1980,8 @@ async function drawAuthoritativeDynamicFrameCanvas(
           const dynamicBw = Math.min(maxBw, Math.max(bw, leftDestW + midDestW + rightDestW));
           const finalCenterW = Math.max(10, dynamicBw - leftDestW - rightDestW);
 
-          // Draw background color if selected by user or frame config
-          const bgCol = card.locationBgColor || df.headerConfig.locationBgColor || '#DC2626';
+          // Draw custom background color ONLY if explicitly set by user or frame
+          const bgCol = card.locationBgColor || df.headerConfig.locationBgColor;
           if (bgCol) {
             ctx.save();
             ctx.fillStyle = bgCol;
@@ -2032,14 +2032,15 @@ async function drawAuthoritativeDynamicFrameCanvas(
       const measuredTextW = ctx.measureText(cleanLocText).width;
       const dynamicBw = Math.min(width - bx - 20, Math.max(100, Math.round(measuredTextW + 56)));
 
-      ctx.fillStyle = card.locationBgColor || df.headerConfig.locationBgColor || '#DC2626';
+      const isDarkBadge = df.headerConfig?.locationBadgeAssetId === 'loc_style_compact_chip' || df.locationBadgeAssetId === 'loc_style_compact_chip' || df.headerConfig?.locationStyle === 'box' || df.headerConfig?.locationStyle === 'compact_chip';
+      ctx.fillStyle = isDarkBadge && !card.locationBgColor && !df.headerConfig?.locationBgColor ? '#18181B' : (card.locationBgColor || df.headerConfig.locationBgColor || '#DC2626');
       ctx.beginPath();
-      ctx.roundRect(bx, by, dynamicBw, bh, df.headerConfig.locationStyle === 'box' ? 6 : bh / 2);
+      ctx.roundRect(bx, by, dynamicBw, bh, (isDarkBadge || df.headerConfig.locationStyle === 'box') ? 6 : bh / 2);
       ctx.fill();
 
-      // Subtle stroke
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-      ctx.lineWidth = 1.5;
+      // Stroke
+      ctx.strokeStyle = isDarkBadge ? '#FFFFFF' : 'rgba(255, 255, 255, 0.4)';
+      ctx.lineWidth = isDarkBadge ? 2 : 1.5;
       ctx.stroke();
 
       const locColor = card.locationTextColor || df.headerConfig.locationTextColor || '#FFFFFF';
@@ -2145,8 +2146,8 @@ async function drawAuthoritativeDynamicFrameCanvas(
         const drawX = Math.round(cx + (cw - drawW) / 2);
         const drawY = Math.round(cy + (ch - drawH) / 2);
         ctx.drawImage(cImg, drawX, drawY, drawW, drawH);
-      } else if (calloutText) {
-        ctx.fillStyle = df.fullStoryCalloutConfig.bgColor || '#DC2626';
+      } else if (calloutText && df.fullStoryCalloutConfig?.bgColor) {
+        ctx.fillStyle = df.fullStoryCalloutConfig.bgColor;
         ctx.strokeStyle = df.fullStoryCalloutConfig.borderColor || '#FACC15';
         ctx.lineWidth = df.fullStoryCalloutConfig.borderWidth ?? 2;
         ctx.beginPath();
@@ -2235,10 +2236,37 @@ async function drawAuthoritativeDynamicFrameCanvas(
   const textColor = card.headlineTextColor || card.textColor || (df as any).quoteTextColor || textSlot.textColor || '#FFFFFF';
   const isBlack = textColor.toLowerCase() === '#000000' || textColor.toLowerCase() === 'black' || textColor.toLowerCase() === '#0f172a';
 
-  if (textSlot.backgroundColor && textSlot.backgroundColor !== 'transparent') {
+  const hasBg = textSlot.backgroundColor && textSlot.backgroundColor !== 'transparent';
+  const bgOpacity = textSlot.backgroundOpacity !== undefined ? textSlot.backgroundOpacity : 1;
+  const borderWidth = (textSlot.borderWidth || 0) * (width / 1080);
+  const borderColor = textSlot.borderColor || '#FACC15';
+  const borderRadius = (textSlot.borderRadius || 0) * (width / 1080);
+
+  if (hasBg || borderWidth > 0) {
     ctx.save();
-    ctx.fillStyle = textSlot.backgroundColor;
-    ctx.fillRect(hx, hy, hw, hh);
+    if (hasBg) {
+      ctx.globalAlpha = bgOpacity;
+      ctx.fillStyle = textSlot.backgroundColor!;
+      ctx.beginPath();
+      if (borderRadius > 0 && typeof ctx.roundRect === 'function') {
+        ctx.roundRect(hx, hy, hw, hh, borderRadius);
+      } else {
+        ctx.rect(hx, hy, hw, hh);
+      }
+      ctx.fill();
+    }
+    if (borderWidth > 0) {
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = borderWidth;
+      ctx.beginPath();
+      if (borderRadius > 0 && typeof ctx.roundRect === 'function') {
+        ctx.roundRect(hx, hy, hw, hh, borderRadius);
+      } else {
+        ctx.rect(hx, hy, hw, hh);
+      }
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
