@@ -7,6 +7,8 @@ export interface AdditionalImageItem {
   isFeatured?: boolean;
 }
 
+export type NewsImageState = 'SOURCE_IMAGE' | 'EDITORIAL_IMAGE' | 'INTERNET_SEARCH_PLACEHOLDER' | 'IMAGE_UNAVAILABLE';
+
 export interface NewsFeedPost {
   id: string;
   title: string;
@@ -17,6 +19,7 @@ export interface NewsFeedPost {
   categoryName: string;
   publishedTime: string;
   imageUrl?: string;
+  imageState?: NewsImageState;
   breaking: boolean;
   isExclusive?: boolean;
   content?: string;

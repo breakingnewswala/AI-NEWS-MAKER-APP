@@ -15,11 +15,12 @@ function pass(name) {
 // MODULE 1: Browser Tab Title Branding
 // -------------------------------------------------------------
 const appSrc = fs.readFileSync(path.join(__dirname, '../src/App.tsx'), 'utf8');
-assert.ok(appSrc.includes("'AI News Maker | स्मार्ट डिजिटल न्यूज़ स्टूडियो'"), 'Home tab title must be AI News Maker | स्मार्ट डिजिटल न्यूज़ स्टूडियो');
-assert.ok(appSrc.includes('`${pageName} | ${channelName}`'), 'Other pages must use `${pageName} | ${channelName}` with vertical bar');
+assert.ok(appSrc.includes("'AI News Maker - स्मार्ट डिजिटल न्यूज़ स्टूडियो'"), 'Home tab title must be AI News Maker - स्मार्ट डिजिटल न्यूज़ स्टूडियो');
+assert.ok(appSrc.includes('`${pageName} - AI News Maker`'), 'Other pages must use `${pageName} - AI News Maker` with hyphen');
 assert.ok(!appSrc.includes("'Home / AI News Maker'"), 'Obsolete slash title format Home / AI News Maker must be removed');
 assert.ok(!appSrc.includes("'Studio / AI News Maker'"), 'Obsolete slash title format Studio / AI News Maker must be removed');
-pass('Module 1: Browser Tab Title Branding correctly formats Home and Page | Channel');
+assert.ok(!appSrc.includes("`${pageName} | ${channelName}`"), 'Obsolete pipe format with channelName must be removed');
+pass('Module 1: Browser Tab Title Branding correctly formats Home and Page Name - AI News Maker');
 
 // -------------------------------------------------------------
 // MODULE 2: Separate Video Test Frame Systems (Quick Video vs Studio Mode)

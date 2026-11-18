@@ -1884,15 +1884,9 @@ function cleanErrorMessage(err: any): string {
   return raw || "सर्वर त्रुटि हुई";
 }
 
-function getCategoryFallbackImage(category: string = 'general'): string {
-  const cat = (category || '').toLowerCase();
-  if (cat.includes('crime') || cat.includes('अपराध')) return 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=800&q=80';
-  if (cat.includes('politics') || cat.includes('राजनीति')) return 'https://images.unsplash.com/photo-1540910419892-4a36d2c3266c?w=800&q=80';
-  if (cat.includes('sports') || cat.includes('खेल')) return 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&q=80';
-  if (cat.includes('tech') || cat.includes('तकनीक')) return 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80';
-  if (cat.includes('business') || cat.includes('व्यापार')) return 'https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&q=80';
-  if (cat.includes('weather') || cat.includes('मौसम')) return 'https://images.unsplash.com/photo-1504608524841-42fe6f032b4b?w=800&q=80';
-  return '/assets/sample_news_bus.svg';
+function getCategoryFallbackImage(_category: string = 'general'): string {
+  // Module 4: The exact supplied Hindi Internet Photo Search image as canonical fallback
+  return '/assets/internet_photo_search_fallback.jpg';
 }
 
 // Check availability of AI Providers (Gemini & OpenAI)
@@ -2534,10 +2528,58 @@ function getInitialRichNewsPosts(): StoredNewsPost[] {
   ];
 }
 
-// 4-Day Auto Retention Rule: Eligible Home feed news & Video feed items older than 4 days (96 hours) are automatically removed
+// 3-Day Auto Retention Rule (Module 10): 72 hours (3 days) from authoritative publication timestamp
+const EXACT_THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+const THREE_DAYS_MS = EXACT_THREE_DAYS_MS;
 const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000;
-const SEVEN_DAYS_MS = FOUR_DAYS_MS;
-const THREE_DAYS_MS = FOUR_DAYS_MS;
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+const HOME_FEED_RETENTION_FILE = path.join(process.cwd(), "home_feed_retention_config.json");
+
+interface HomeFeedRetentionConfig {
+  enabled: boolean;
+  durationHours: number;
+  updatedAt?: number;
+  updatedBy?: string;
+}
+
+function loadHomeFeedRetentionConfig(): HomeFeedRetentionConfig {
+  try {
+    if (fs.existsSync(HOME_FEED_RETENTION_FILE)) {
+      const raw = fs.readFileSync(HOME_FEED_RETENTION_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (typeof parsed?.enabled === 'boolean') {
+        return { enabled: parsed.enabled, durationHours: 72, updatedAt: parsed.updatedAt };
+      }
+    }
+  } catch {}
+  return { enabled: true, durationHours: 72 };
+}
+
+function saveHomeFeedRetentionConfig(cfg: Partial<HomeFeedRetentionConfig>): HomeFeedRetentionConfig {
+  const current = loadHomeFeedRetentionConfig();
+  const updated: HomeFeedRetentionConfig = {
+    enabled: typeof cfg.enabled === 'boolean' ? cfg.enabled : current.enabled,
+    durationHours: 72,
+    updatedAt: Date.now(),
+    updatedBy: cfg.updatedBy || 'admin'
+  };
+  try {
+    const locs = resolveAllDatabaseLocations("home_feed_retention_config.json");
+    const jsonStr = JSON.stringify(updated, null, 2);
+    for (const loc of locs) {
+      try {
+        const dir = path.dirname(loc);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {}
+    }
+  } catch {}
+  if (centralDb && typeof centralDb.writeDoc === "function") {
+    centralDb.writeDoc("system_config", "home_feed_retention", updated).catch(() => {});
+  }
+  return updated;
+}
 
 // Helper to resolve all candidate database file locations across environments (root, web_studio, cwd)
 function resolveAllDatabaseLocations(filename: string): string[] {
@@ -3064,19 +3106,12 @@ async function parseRssFeedUrl(url: string, channelName: string, category: strin
       const rawDesc = descMatch ? (descMatch[2] || descMatch[3] || '') : '';
       const summary = rawDesc.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
 
-      // Image Extraction
-      let imageUrl = '';
-      const encMatch = itemStr.match(/<enclosure[^>]*url=["']([^"']+)["']/i) || itemStr.match(/<media:(?:thumbnail|content)[^>]*url=["']([^"']+)["']/i);
-      if (encMatch && encMatch[1]) {
-        imageUrl = encMatch[1];
-      } else {
-        const imgMatch = rawDesc.match(/<img[^>]+src=["']([^"']+)["']/i);
-        if (imgMatch && imgMatch[1]) {
-          imageUrl = imgMatch[1];
-        }
-      }
+      // Image Extraction (Strict 9-tier priority: media:content -> enclosure -> og:image -> twitter:image -> jsonld -> article img -> fallback)
+      let imageUrl = await extractBestNewsImage(itemStr, rawDesc, sourceUrl, category);
+      let imageState = 'SOURCE_IMAGE';
       if (!imageUrl) {
         imageUrl = getCategoryFallbackImage(category);
+        imageState = 'INTERNET_SEARCH_PLACEHOLDER';
       }
 
       // PubDate
@@ -3097,6 +3132,7 @@ async function parseRssFeedUrl(url: string, channelName: string, category: strin
         categoryName: category || 'देश',
         publishedTime: formatRelativeTime(timestamp),
         imageUrl,
+        imageState,
         breaking: true,
         fullContent: rawDesc.replace(/<[^>]+>/g, ' ').trim() || summary || title,
         timestamp,
@@ -3326,8 +3362,14 @@ app.get("/api/news-posts", async (req, res) => {
       }
     }
 
-    // 4. 3-day expiration rule for pending/unapproved
-    const postTime = p.timestamp || now;
+    // 4. 3-day (72h) retention rule (Module 10)
+    const retentionCfg = loadHomeFeedRetentionConfig();
+    const postTime = Number(p.timestamp) || now;
+    if (retentionCfg.enabled && !includePending) {
+      if (postTime > 0 && (now - postTime) > EXACT_THREE_DAYS_MS) {
+        return false;
+      }
+    }
     const expiresAt = p.expiresAt || (postTime + THREE_DAYS_MS);
     if (now > expiresAt && !includePending) return false;
 
@@ -7914,17 +7956,19 @@ function saveVideosDatabase(videos: StoredVideoItem[]): boolean {
   }
 }
 
-// Scheduled 4-day automatic feed retention cleanup (runs periodically, non-destructive to permanent configurations)
-function runFourDayFeedRetentionCleanup(): void {
+// Scheduled 3-day automatic feed retention cleanup (Module 10: 72 hours from publication timestamp)
+function runThreeDayFeedRetentionCleanup(): void {
   try {
+    const config = loadHomeFeedRetentionConfig();
+    if (!config.enabled) return;
     const now = Date.now();
-    // 1. Clean eligible expired home news posts (>4 days / 96h)
+    // 1. Clean eligible expired home news posts (>3 days / 72h)
     const newsPosts = loadNewsDatabase();
     if (newsPosts.length > 0) {
       const activeNews = newsPosts.filter((p) => {
         if (!p || !p.id) return false;
         const postTime = Number(p.timestamp) || 0;
-        if (postTime > 0 && (now - postTime) > FOUR_DAYS_MS) {
+        if (postTime > 0 && (now - postTime) > EXACT_THREE_DAYS_MS) {
           return false;
         }
         return true;
@@ -7934,12 +7978,45 @@ function runFourDayFeedRetentionCleanup(): void {
       }
     }
   } catch (err: any) {
-    console.error("Error in runFourDayFeedRetentionCleanup:", err?.message || err);
+    console.error("Error in runThreeDayFeedRetentionCleanup:", err?.message || err);
   }
 }
 
+function runFourDayFeedRetentionCleanup(): void {
+  runThreeDayFeedRetentionCleanup();
+}
+
 // Run cleanup every 30 minutes
-setInterval(runFourDayFeedRetentionCleanup, 30 * 60 * 1000);
+setInterval(runThreeDayFeedRetentionCleanup, 30 * 60 * 1000);
+
+// Module 10: Master Admin 3-Day Feed Retention Controls
+app.get("/api/admin/home-feed-retention", (_req, res) => {
+  const config = loadHomeFeedRetentionConfig();
+  return res.json({ success: true, ...config });
+});
+
+app.post("/api/admin/home-feed-retention", requireMasterAdminMiddleware, (req, res) => {
+  try {
+    const { enabled } = req.body || {};
+    if (typeof enabled !== "boolean") {
+      return res.status(400).json({ error: "enabled (boolean) अनिवार्य है।" });
+    }
+    const user = (req as any).user;
+    const updated = saveHomeFeedRetentionConfig({ enabled, updatedBy: user?.email || 'admin' });
+    if (updated.enabled) {
+      runThreeDayFeedRetentionCleanup();
+    }
+    const actorEmail = user?.email || "breakingnewswala.com@gmail.com";
+    logAdminAudit(actorEmail, "HOME_FEED_RETENTION_TOGGLE", `3-day retention set to ${updated.enabled}`, updated);
+    return res.json({
+      success: true,
+      message: `3 दिन ऑटो डिलीट नियम ${updated.enabled ? 'सक्रिय (Enabled)' : 'निष्क्रिय (Disabled)'} कर दिया गया है।`,
+      ...updated,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 
 // 1. GET /api/videos - Real-time videos for all users & admins
 app.get("/api/videos", (_req, res) => {
@@ -8982,11 +9059,16 @@ app.get("/api/user-favorites", (req, res) => {
 });
 
 // POST /api/user-favorites
-app.post("/api/user-favorites", (req, res) => {
+app.post("/api/user-favorites", async (req, res) => {
   try {
-    const rawEmail = (req.body.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
-    const newsId = (req.body.newsId || "").toString().trim();
-    const action = req.body.action || "toggle"; // toggle, add, remove
+    const user = await resolveAuthenticatedUser(req).catch(() => null);
+    const rawEmail = (user?.email || req.body.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
+    const newsId = (req.body.newsId || req.body.postId || "").toString().trim();
+    let action = req.body.action; // toggle, add, remove
+    if (!action && typeof req.body.favorite === 'boolean') {
+      action = req.body.favorite ? 'add' : 'remove';
+    }
+    if (!action) action = "toggle";
 
     if (!rawEmail) {
       return res.status(400).json({ error: "उपयोगकर्ता ईमेल आवश्यक है।" });
@@ -9106,10 +9188,15 @@ app.get("/api/reminders", requireAuthMiddleware, (req, res) => {
 });
 
 // POST /api/reminders
-app.post("/api/reminders", (req, res) => {
+app.post("/api/reminders", async (req, res) => {
   try {
-    const rawEmail = (req.body.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
-    const { newsId, newsTitle, minutes = 5, action = 'create', id } = req.body || {};
+    const user = await resolveAuthenticatedUser(req).catch(() => null);
+    const rawEmail = (user?.email || req.body.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
+    const newsId = (req.body.newsId || req.body.postId || "").toString().trim();
+    const newsTitle = (req.body.newsTitle || req.body.title || "").toString().trim();
+    const minutes = req.body.minutes || req.body.delayMinutes || 5;
+    const action = req.body.action || 'create';
+    const id = req.body.id;
 
     if (!rawEmail) {
       return res.status(400).json({ error: "उपयोगकर्ता ईमेल आवश्यक है।" });
@@ -9454,9 +9541,18 @@ app.post("/api/admin/notifications/mark-read", requireAdminMiddleware, (req, res
 
     if (id) {
       readIds.add(String(id));
+      if (String(id).startsWith("admin_sys_")) {
+        const rawId = String(id).replace("admin_sys_", "");
+        readIds.add(rawId);
+      }
     }
     if (Array.isArray(ids)) {
-      ids.forEach((i: string) => readIds.add(String(i)));
+      ids.forEach((i: string) => {
+        readIds.add(String(i));
+        if (String(i).startsWith("admin_sys_")) {
+          readIds.add(String(i).replace("admin_sys_", ""));
+        }
+      });
     }
     if (all) {
       if (category === 'rss' || !category) {
@@ -9472,7 +9568,13 @@ app.post("/api/admin/notifications/mark-read", requireAdminMiddleware, (req, res
         loadLimitIncreaseRequests().forEach(r => readIds.add(`admin_req_${r.id || `${r.email}_${r.timestamp}`}`));
       }
       try {
-        loadNotificationsDatabase().forEach(n => readIds.add(String(n.id)));
+        const notifs = loadNotificationsDatabase();
+        notifs.forEach(n => {
+          readIds.add(String(n.id));
+          readIds.add(`admin_sys_${n.id}`);
+          n.unread = false;
+        });
+        saveNotificationsDatabase(notifs);
       } catch {}
     }
 
@@ -10139,19 +10241,36 @@ async function extractBestNewsImage(
     if (resolved && isValidNewsImage(resolved)) return resolved;
   }
 
-  // 4, 5, 6. Fetch actual webpage for og:image, twitter:image, JSON-LD, article main image
+  // 4, 5, 6, 7. Fetch actual webpage for og:image, twitter:image, JSON-LD, article main image
   if (articleUrl && articleUrl.startsWith("http")) {
     try {
       const resp = await fetch(articleUrl, {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0",
         },
-        signal: AbortSignal.timeout(1800),
+        redirect: "follow",
+        signal: AbortSignal.timeout(6000),
       });
       if (resp.ok) {
         const html = await resp.text();
 
-        // Priority 4: JSON-LD image
+        // Priority 4 (Module 3): Original article Open Graph image (og:image)
+        const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
+          html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+        if (ogImageMatch && ogImageMatch[1]) {
+          const resolved = resolveUrl(ogImageMatch[1].trim().replace(/&amp;/g, '&'), articleUrl);
+          if (isValidNewsImage(resolved)) return resolved;
+        }
+
+        // Priority 5 (Module 3): Twitter Card image (twitter:image)
+        const twitterImageMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) ||
+          html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
+        if (twitterImageMatch && twitterImageMatch[1]) {
+          const resolved = resolveUrl(twitterImageMatch[1].trim().replace(/&amp;/g, '&'), articleUrl);
+          if (isValidNewsImage(resolved)) return resolved;
+        }
+
+        // Priority 6 (Module 3): JSON-LD article image
         const ldMatches = html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
         for (const ldMatch of ldMatches) {
           try {
@@ -10165,35 +10284,19 @@ async function extractBestNewsImage(
               else if (item.thumbnailUrl) imgCandidate = item.thumbnailUrl;
 
               if (imgCandidate) {
-                const resolved = resolveUrl(imgCandidate, articleUrl);
+                const resolved = resolveUrl(imgCandidate.trim().replace(/&amp;/g, '&'), articleUrl);
                 if (isValidNewsImage(resolved)) return resolved;
               }
             }
           } catch {}
         }
 
-        // Priority 5: og:image
-        const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) ||
-          html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-        if (ogImageMatch && ogImageMatch[1]) {
-          const resolved = resolveUrl(ogImageMatch[1].trim(), articleUrl);
-          if (isValidNewsImage(resolved)) return resolved;
-        }
-
-        // Priority 6: twitter:image
-        const twitterImageMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) ||
-          html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
-        if (twitterImageMatch && twitterImageMatch[1]) {
-          const resolved = resolveUrl(twitterImageMatch[1].trim(), articleUrl);
-          if (isValidNewsImage(resolved)) return resolved;
-        }
-
-        // Priority 7: Article main image (<article> img or <figure> img or prominent body img)
+        // Priority 7 (Module 3): Article main image (<article> img or <figure> img or prominent body img)
         const articleImgMatch = html.match(/<article[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) ||
           html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) ||
           html.match(/<img[^>]+data-(?:src|original|lazy-src)=["']([^"']+)["']/i);
         if (articleImgMatch && articleImgMatch[1]) {
-          const resolved = resolveUrl(articleImgMatch[1].trim(), articleUrl);
+          const resolved = resolveUrl(articleImgMatch[1].trim().replace(/&amp;/g, '&'), articleUrl);
           if (isValidNewsImage(resolved)) return resolved;
         }
       }
@@ -10403,8 +10506,114 @@ async function processRssItemWithAiEditorial(
     location: fallback.location,
     categoryName: sourceCategory || "देश",
   };
-
 }
+
+// Module 6: AI Script Maker Endpoint (Gated to Pro, VIP Desk, Master Admin)
+app.post("/api/newsroom/script-maker", async (req, res) => {
+  try {
+    const user = await resolveAuthenticatedUser(req);
+    const { tier, role } = resolveUserTierAndRole(req);
+    const cleanTier = (tier || "").toLowerCase().trim();
+    const cleanRole = (role || "").toLowerCase().trim();
+
+    const isMasterAdmin = isAuthorizedMasterAdmin(req) || isProtectedAdminAccount((user?.email || "").toLowerCase().trim());
+    const isAdmin = isAuthorizedAdmin(req) || cleanRole === "admin" || cleanRole === "superadmin" || isMasterAdmin;
+    const isProOrVip = cleanTier === "pro" || cleanTier === "vip" || cleanTier.includes("vip") || cleanTier === "vip_desk";
+
+    if (!isAdmin && !isProOrVip) {
+      return res.status(403).json({
+        success: false,
+        code: "PLAN_RESTRICTED",
+        error: "यह सुविधा Pro और VIP Desk उपयोगकर्ताओं के लिए उपलब्ध है।",
+        requiredTiers: ["pro", "vip", "vip_desk"],
+        currentTier: cleanTier || "basic"
+      });
+    }
+
+    const { rawText, inputType = "प्रेस नोट" } = req.body || {};
+    if (!rawText || typeof rawText !== "string" || rawText.trim().length < 5) {
+      return res.status(400).json({
+        success: false,
+        error: "कृपया उपयुक्त प्रेस नोट, रॉ स्क्रिप्ट या सामग्री दर्ज करें (न्यूनतम 5 अक्षर)।"
+      });
+    }
+
+    const cleanInput = rawText.trim().slice(0, 5000);
+
+    // AI Generation with Gemini
+    let generated: { headline: string; subHeadline: string; fullStory: string } | null = null;
+    try {
+      generated = await executeGeminiWithKeyPool(async (ai) => {
+        const prompt = `आप एक वरिष्ठ भारतीय डिजिटल न्यूज़ संपादक (Senior Hindi Digital News Editor) हैं।
+आपको निम्नलिखित कच्ची सामग्री (इनपुट प्रकार: "${inputType}") दी गई है:
+
+---
+${cleanInput}
+---
+
+कृपया इसे एक अत्यधिक आकर्षक, तथ्यात्मक, सटीक और पठनीय डिजिटल न्यूज़ पैकेज में बदलें।
+कड़े संपादकीय नियम (Strict Editorial Rules):
+1. मुख्य हेडलाइन (headline): आकर्षक, प्रभावशाली, तथ्यात्मक और 10-15 शब्दों में।
+2. सब-हेडलाइन (subHeadline): पूरक सब-हेडलाइन जिसमें मुख्य संदर्भ, कारण या प्रभाव हो (15-25 शब्दों में)।
+3. पूरी न्यूज़ स्टोरी (fullStory): संतुलित, विस्तृत हिंदी न्यूज़ स्टोरी (2-3 पैराग्राफ्स, 120-250 शब्द)। सही पैराग्राफ क्रम और पेशेवर पत्रकारिता शैली हो।
+4. तथ्यात्मक सत्यनिष्ठा (Fact Preservation): दी गई सामग्री में मौजूद सभी नाम, पद, तारीखें, स्थान, संख्याएं और आंकड़े हूबहू बनाए रखें।
+5. मनगढ़ंत तथ्यों पर पूर्ण प्रतिबंध (No Hallucination): अपनी तरफ से कोई भी झूठा तथ्य, अज्ञात सूत्र, काल्पनिक बयान, आरोप या आंकड़े न जोड़ें। यदि प्रेस नोट में कोई विवरण उपलब्ध नहीं है, तो उसे अपनी ओर से न बनाएं।
+6. भाषा शुद्ध, त्रुटिहीन, स्पष्ट और निष्पक्ष हिंदी पत्रकारिता शैली में हो।
+
+उत्तर केवल और केवल वैध JSON प्रारूप में दें, जिसमें निम्न कुंजियाँ (keys) हों:
+{
+  "headline": "मुख्य हेडलाइन",
+  "subHeadline": "सब-हेडलाइन",
+  "fullStory": "पूरी न्यूज़ स्टोरी"
+}`;
+
+        const res = await generateWithFallbackAndRetry(ai, GEMINI_MODELS_POOL.slice(0, 2), {
+          contents: prompt,
+          config: { temperature: 0.3 },
+        });
+
+        const text = res?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed && parsed.headline) {
+            return {
+              headline: String(parsed.headline || "").trim(),
+              subHeadline: String(parsed.subHeadline || "").trim(),
+              fullStory: String(parsed.fullStory || "").trim(),
+            };
+          }
+        }
+        return null;
+      });
+    } catch (e: any) {
+      console.warn("[Script Maker] AI generation error:", e?.message || e);
+    }
+
+    // High quality deterministic fallback if AI is quota-paused or unavailable
+    if (!generated || !generated.headline) {
+      const lines = cleanInput.split(/\n+/).map(l => l.trim()).filter(Boolean);
+      const firstLine = lines[0] || "ताजा डिजिटल समाचार";
+      const secondLine = lines[1] || "";
+      const bodyLines = lines.slice(1).join("\n\n");
+      generated = {
+        headline: firstLine.length > 80 ? firstLine.slice(0, 80) + "..." : firstLine,
+        subHeadline: secondLine ? (secondLine.length > 120 ? secondLine.slice(0, 120) + "..." : secondLine) : `${firstLine} — विस्तृत डिजिटल न्यूज़ बुलेटिन`,
+        fullStory: bodyLines.length > 30 ? bodyLines : `${firstLine}\n\n${cleanInput}`,
+      };
+    }
+
+    return res.json({
+      success: true,
+      headline: generated.headline,
+      subHeadline: generated.subHeadline,
+      fullStory: generated.fullStory,
+      inputType,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 
 function decodeHtmlEntities(str: string): string {
   if (!str) return "";
@@ -10564,7 +10773,12 @@ async function parseRssItemsFromXml(
       }
 
       // 1. Strict Priority Image Selection (media:content -> enclosure -> content img -> og:image -> twitter:image -> article img)
-      const imageUrl = await extractBestNewsImage(itemXml, rawDesc, link, source.category);
+      let imageUrl = await extractBestNewsImage(itemXml, rawDesc, link, source.category);
+      let imageState = 'SOURCE_IMAGE';
+      if (!imageUrl) {
+        imageUrl = getCategoryFallbackImage(source.category);
+        imageState = 'INTERNET_SEARCH_PLACEHOLDER';
+      }
 
       // 2. Article-Aware AI Editorial Headline & Summary Generation
       const editorial = await processRssItemWithAiEditorial(rawTitle, rawDesc, source.category, link);
@@ -10591,6 +10805,7 @@ async function parseRssItemsFromXml(
         categoryName: catName,
         publishedTime: formatRelativeTime(timestamp),
         imageUrl,
+        imageState,
         breaking: editorial.title.includes("बड़ा") || editorial.title.includes("फैसला") || editorial.title.includes("कार्रवाई"),
         isExclusive: false,
         isBonus: false,
@@ -10718,8 +10933,10 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
       }
     }
 
+    let imageState = 'SOURCE_IMAGE';
     if (!imageUrl) {
       imageUrl = getCategoryFallbackImage(source.category);
+      imageState = 'INTERNET_SEARCH_PLACEHOLDER';
     }
 
     // 2. Article-Aware AI Editorial Headline & Summary
@@ -10746,6 +10963,7 @@ async function fetchAndParseWebLink(source: AdminRssSourceRecord): Promise<Store
       categoryName: catName,
       publishedTime: "अभी-अभी",
       imageUrl,
+      imageState,
       breaking: false,
       isExclusive: false,
       timestamp: Date.now(),
@@ -10918,7 +11136,29 @@ interface GeneratedRssFeedRecord {
   xmlContent: string;
   createdAt: number;
 }
+const GENERATED_WEB_RSS_FEEDS_FILE = path.join(process.cwd(), "generated_web_rss_feeds.json");
 const GENERATED_WEB_RSS_FEEDS = new Map<string, GeneratedRssFeedRecord>();
+
+function loadGeneratedWebRssFeedsFromDisk(): void {
+  try {
+    if (fs.existsSync(GENERATED_WEB_RSS_FEEDS_FILE)) {
+      const raw = fs.readFileSync(GENERATED_WEB_RSS_FEEDS_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) {
+        list.forEach((item: GeneratedRssFeedRecord) => {
+          if (item && item.feedId) GENERATED_WEB_RSS_FEEDS.set(item.feedId, item);
+        });
+      }
+    }
+  } catch {}
+}
+function saveGeneratedWebRssFeedsToDisk(): void {
+  try {
+    const list = Array.from(GENERATED_WEB_RSS_FEEDS.values());
+    fs.writeFileSync(GENERATED_WEB_RSS_FEEDS_FILE, JSON.stringify(list, null, 2), "utf-8");
+  } catch {}
+}
+loadGeneratedWebRssFeedsFromDisk();
 
 function isPrivateOrInternalUrl(targetUrl: string): boolean {
   try {
@@ -11265,6 +11505,7 @@ ${it.imageUrl ? `      <enclosure url="${escapeXmlChars(it.imageUrl)}" type="ima
       xmlContent,
       createdAt: Date.now()
     });
+    saveGeneratedWebRssFeedsToDisk();
 
     const host = req.get('host') || 'localhost:8080';
     const proto = req.protocol || 'http';
@@ -11333,6 +11574,7 @@ ${it.imageUrl ? `      <enclosure url="${escapeXmlChars(it.imageUrl)}" type="ima
             createdAt: Date.now(),
           };
           GENERATED_WEB_RSS_FEEDS.set(feedId, record);
+          saveGeneratedWebRssFeedsToDisk();
         } catch {}
       }
     }
@@ -11543,8 +11785,8 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
               (src as any).truncated = sourceTruncated;
               (src as any).pagesFetched = pageIndex;
               fetchedPosts.push(...sourceItems);
-            } else if (firstPageFailed && (src.originalWebUrl || (src as any).webUrl)) {
-              // Resilient fallback for converted web feeds after container restart
+            } else if ((firstPageFailed || sourceItems.length === 0) && (src.originalWebUrl || (src as any).webUrl)) {
+              // Resilient fallback for converted web feeds after container restart or empty response
               const fallbackUrl = src.originalWebUrl || (src as any).webUrl;
               const items = await fetchAndParseWebLink({ ...src, url: fallbackUrl });
               if (items.length > 0) {
@@ -13111,6 +13353,7 @@ interface AdminBrandingRecord {
   customFooterPng?: string;
   showMobileNumber: boolean;
   activeSocialIcons?: string[];
+  playStoreUrl?: string;
   updatedAt: number;
 }
 
@@ -13165,7 +13408,7 @@ function saveAdminBranding(data: AdminBrandingRecord): boolean {
   }
 }
 
-app.get("/api/admin/branding", requireAdminMiddleware, (_req, res) => {
+app.get(["/api/branding", "/api/admin/branding"], (_req, res) => {
   const branding = loadAdminBranding();
   return res.json({ success: true, branding });
 });
@@ -13175,7 +13418,13 @@ app.post("/api/admin/branding", requireMasterAdminMiddleware, (req, res) => {
     if (!isAuthorizedMasterAdmin(req)) {
       return res.status(403).json({ error: "अनधिकृत: केवल मास्टर एडमिन (breakingnewswala.com@gmail.com) ही ब्रांडिंग प्रबंधित कर सकते हैं।" });
     }
-    const payload = req.body;
+    const payload = req.body || {};
+    if (payload.playStoreUrl !== undefined) {
+      const url = String(payload.playStoreUrl || "").trim();
+      if (url && !url.startsWith("https://play.google.com/")) {
+        return res.status(400).json({ error: "playStoreUrl Google Play Store का मान्य लिंक होना चाहिए (https://play.google.com/...)।" });
+      }
+    }
     const existing = loadAdminBranding();
     const updated: AdminBrandingRecord = {
       ...existing,
@@ -14638,6 +14887,50 @@ app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, 
     }
 
     return res.json({ success: true, message: "Frame deleted permanently with durable tombstone." });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 4b. POST /api/admin/video-frames/bulk-delete (Master Admin bulk delete)
+app.post("/api/admin/video-frames/bulk-delete", requireMasterAdminMiddleware, async (req, res) => {
+  try {
+    const { frameIds } = req.body || {};
+    if (!Array.isArray(frameIds) || frameIds.length === 0) {
+      return res.status(400).json({ error: "frameIds array is required" });
+    }
+    const deleted: string[] = [];
+    for (const frameId of frameIds) {
+      if (typeof frameId === 'string' && frameId.trim()) {
+        const id = frameId.trim();
+        await deleteSingleDynamicFrameAsync(id);
+        deleted.push(id);
+      }
+    }
+    const newsTemplateFile = path.join(process.cwd(), "news_template_configs.json");
+    if (fs.existsSync(newsTemplateFile)) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(newsTemplateFile, "utf-8"));
+        let changed = false;
+        deleted.forEach(id => {
+          if (raw[id]) { delete raw[id]; changed = true; }
+        });
+        if (changed) fs.writeFileSync(newsTemplateFile, JSON.stringify(raw, null, 2), "utf-8");
+      } catch {}
+    }
+    const actorEmail = (req as any).user?.email || "breakingnewswala.com@gmail.com";
+    logAdminAudit(actorEmail, "VIDEO_FRAMES_BULK_DELETE", deleted.join(", "), { count: deleted.length, frameIds: deleted });
+    return res.json({ success: true, count: deleted.length, deleted });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 4c. GET /api/admin/video-frames/tombstones
+app.get("/api/admin/video-frames/tombstones", async (_req, res) => {
+  try {
+    const tombstones = await getDurableFrameTombstones();
+    return res.json({ success: true, tombstones: Array.from(tombstones) });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }

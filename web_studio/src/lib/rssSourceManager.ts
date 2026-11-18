@@ -373,10 +373,28 @@ export function isRssPostApproved(post: NewsFeedPost, serverApprovedIds?: Set<st
     return false;
   }
 
-  const authoritativeSet = serverApprovedIds || memoryServerApprovedIds;
+  const authoritativeSet = serverApprovedIds !== undefined ? serverApprovedIds : memoryServerApprovedIds;
+  const isFeed = Boolean(post.id && (post.id.startsWith('rss-') || post.id.startsWith('web-')));
 
   // 2b. Authoritative Server Confirmation:
-  // If the server confirms this post ID is approved and it carries approved status:
+  // For feed items (rss-* / web-*), client-side localStorage cannot forge approval:
+  // strict presence in serverAuthoritativeApprovedIds is mandatory.
+  if (isFeed) {
+    if (authoritativeSet && authoritativeSet.has(post.id)) {
+      if (
+        status === 'APPROVED' ||
+        status === 'PUBLISHED' ||
+        status === 'PRE_PUBLISHED' ||
+        approvalStatus === 'APPROVED' ||
+        (post as any).isApproved === true ||
+        (post as any).isPrePublished === true
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   if (authoritativeSet && authoritativeSet.has(post.id)) {
     if (
       status === 'APPROVED' ||

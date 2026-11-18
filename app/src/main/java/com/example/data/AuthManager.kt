@@ -19,7 +19,8 @@ data class AuthUser(
     val role: UserRole = UserRole.ADMIN,
     val district: String = "सेंट्रल डेस्क / भोपाल",
     val channelName: String = "ब्रेकिंग न्यूज़ वाला",
-    val mobileNumber: String = "9669802408"
+    val mobileNumber: String = "9669802408",
+    val token: String = ""
 )
 
 object AuthManager {

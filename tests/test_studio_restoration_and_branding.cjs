@@ -60,21 +60,21 @@ runTest('Icon Audit: Zero missing lucide icon imports in any JSX component', () 
   assert(output.includes('All JSX icons across all components are properly imported'), 'All JSX icons must be valid');
 });
 
-// 3. Verify Browser Tab Title Branding (Home: AI News Maker | स्मार्ट डिजिटल न्यूज़ स्टूडियो, Other: Page Name | Channel Name)
-runTest('App.tsx: getTabMeta delivers exact "AI News Maker | स्मार्ट डिजिटल न्यूज़ स्टूडियो" & "Page Name | Channel Name" format', () => {
+// 3. Verify Browser Tab Title Branding (Home: AI News Maker - स्मार्ट डिजिटल न्यूज़ स्टूडियो, Other: Page Name - AI News Maker)
+runTest('App.tsx: getTabMeta delivers exact "AI News Maker - स्मार्ट डिजिटल न्यूज़ स्टूडियो" & "Page Name - AI News Maker" format', () => {
   const rootAppPath = path.join(process.cwd(), 'src', 'App.tsx');
   const content = fs.readFileSync(rootAppPath, 'utf8');
 
   // Verify Home Page branding
   assert(
-    content.includes("title: 'AI News Maker | स्मार्ट डिजिटल न्यूज़ स्टूडियो'"),
-    'Home Page tab title must be "AI News Maker | स्मार्ट डिजिटल न्यूज़ स्टूडियो"'
+    content.includes("title: 'AI News Maker - स्मार्ट डिजिटल न्यूज़ स्टूडियो'"),
+    'Home Page tab title must be "AI News Maker - स्मार्ट डिजिटल न्यूज़ स्टूडियो"'
   );
 
-  // Verify central vertical separator | and dynamic channelName
+  // Verify central hyphen separator - and product name AI News Maker
   assert(
-    content.includes('title: `${pageName} | ${channelName}`'),
-    'Other pages must use `${pageName} | ${channelName}`'
+    content.includes('title: `${pageName} - AI News Maker`'),
+    'Other pages must use `${pageName} - AI News Maker`'
   );
 
   // Verify page names
@@ -99,10 +99,11 @@ runTest('App.tsx: getTabMeta delivers exact "AI News Maker | स्मार्�
     );
   });
 
-  // Ensure no slash separator remains in getTabMeta titles
+  // Ensure no slash or pipe separator remains in getTabMeta titles
   assert(!content.includes("'Studio / AI News Maker'"), 'No slash format in Studio');
   assert(!content.includes("'Home / AI News Maker'"), 'No slash format in Home');
   assert(!content.includes('/ AI News Maker / AI News Maker'), 'No double suffix allowed');
+  assert(!content.includes("`${pageName} | ${channelName}`"), 'No pipe format with channelName');
 });
 
 // 4. Verify AST TDZ check

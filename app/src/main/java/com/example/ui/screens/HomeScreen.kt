@@ -176,18 +176,56 @@ fun HomeScreen(
             }
         }
 
-        // 3. Category Filter Chips
+        // 3. Category Filter Chips + Favorites FilterChip
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            // Favorites FilterChip (Module 11)
+            item {
+                val isFavSelected = showOnlyFavorites
+                FilterChip(
+                    selected = isFavSelected,
+                    onClick = { showOnlyFavorites = !showOnlyFavorites },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = if (isFavSelected) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                            contentDescription = "पसंदीदा खबरें",
+                            tint = if (isFavSelected) Slate900 else Red600,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    label = {
+                        Text(
+                            text = if (favoritePostIds.isNotEmpty()) "पसंदीदा (${favoritePostIds.size})" else "पसंदीदा खबरें",
+                            fontSize = 11.sp,
+                            fontWeight = if (isFavSelected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Amber400,
+                        selectedLabelColor = Slate900,
+                        containerColor = Slate800,
+                        labelColor = Color.LightGray
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = isFavSelected,
+                        borderColor = if (isFavSelected) Amber400 else NewsBorder
+                    )
+                )
+            }
+
             items(NewsCategory.entries) { category ->
-                val isSelected = selectedCategory == category
+                val isSelected = !showOnlyFavorites && selectedCategory == category
                 FilterChip(
                     selected = isSelected,
-                    onClick = { selectedCategory = category },
+                    onClick = {
+                        showOnlyFavorites = false
+                        selectedCategory = category
+                    },
                     label = {
                         Text(
                             text = category.displayName,
@@ -211,41 +249,74 @@ fun HomeScreen(
         }
 
         // 4. News Feed List
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .padding(horizontal = 12.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(bottom = 80.dp)
-        ) {
-            items(filteredPosts, key = { it.id }) { post ->
-                val isFav = favoritePostIds.contains(post.id)
-                NewsPostCard(
-                    post = post,
-                    isAdmin = isAdmin,
-                    isFavorite = isFav,
-                    onToggleFavorite = { NewsRepository.toggleFavorite(post.id) },
-                    onSetReminder = { mins ->
-                        NewsRepository.setReminder(post.id, mins) { success ->
-                            Toast.makeText(
-                                context,
-                                if (success) "⏰ $mins मिनट बाद का रिमाइंडर सेट हो गया!" else "रिमाइंडर सेट नहीं हो सका",
-                                Toast.LENGTH_SHORT
-                            ).show()
+        if (filteredPosts.isEmpty() && showOnlyFavorites) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FavoriteBorder,
+                        contentDescription = null,
+                        tint = Red600,
+                        modifier = Modifier.size(56.dp)
+                    )
+                    Text(
+                        text = "कोई पसंदीदा खबर नहीं मिली",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "खबरों पर दिल (Heart) आइकन दबाकर उन्हें यहाँ सहेजें।",
+                        color = Color.Gray,
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(bottom = 80.dp)
+            ) {
+                items(filteredPosts, key = { it.id }) { post ->
+                    val isFav = favoritePostIds.contains(post.id)
+                    NewsPostCard(
+                        post = post,
+                        isAdmin = isAdmin,
+                        isFavorite = isFav,
+                        onToggleFavorite = { NewsRepository.toggleFavorite(post.id) },
+                        onSetReminder = { mins ->
+                            NewsRepository.setReminder(post.id, mins) { success ->
+                                Toast.makeText(
+                                    context,
+                                    if (success) "⏰ $mins मिनट बाद का रिमाइंडर सेट हो गया!" else "रिमाइंडर सेट नहीं हो सका",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
+                        onMakeNews = { onMakeNewsClicked(post) },
+                        onDelete = { NewsRepository.deletePost(post.id) },
+                        onShare = {
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, post.title)
+                                putExtra(Intent.EXTRA_TEXT, "${post.title}\n\n${post.summary}\n\nस्रोत: ${post.sourceChannel}\n${post.sourceUrl}")
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "खबर शेयर करें"))
                         }
-                    },
-                    onMakeNews = { onMakeNewsClicked(post) },
-                    onDelete = { NewsRepository.deletePost(post.id) },
-                    onShare = {
-                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_SUBJECT, post.title)
-                            putExtra(Intent.EXTRA_TEXT, "${post.title}\n\n${post.summary}\n\nस्रोत: ${post.sourceChannel}\n${post.sourceUrl}")
-                        }
-                        context.startActivity(Intent.createChooser(shareIntent, "खबर शेयर करें"))
-                    }
-                )
+                    )
+                }
             }
         }
     }

@@ -709,7 +709,7 @@ export default function App() {
 
     if (tab === 'home') {
       return {
-        title: 'AI News Maker | स्मार्ट डिजिटल न्यूज़ स्टूडियो', // title: 'AI News Maker'
+        title: 'AI News Maker - स्मार्ट डिजिटल न्यूज़ स्टूडियो',
         description: 'भारत का नंबर 1 स्मार्ट एआई न्यूज़ स्टूडियो। ब्रेकिंग न्यूज़ ग्राफ़िक्स, वीडियो रील्स और ई-पेपर बनाएं सेकंडों में।',
         canonical: `${base}/`,
       };
@@ -778,14 +778,14 @@ export default function App() {
         break;
       default:
         return {
-          title: 'AI News Maker | स्मार्ट डिजिटल न्यूज़ स्टूडियो', // title: 'AI News Maker'
+          title: 'AI News Maker - स्मार्ट डिजिटल न्यूज़ स्टूडियो',
           description: 'भारत का नंबर 1 स्मार्ट एआई न्यूज़ स्टूडियो। ब्रेकिंग न्यूज़ ग्राफ़िक्स, वीडियो रील्स और ई-पेपर बनाएं सेकंडों में।',
           canonical: `${base}/`,
         };
     }
 
     return {
-      title: `${pageName} | ${channelName}`,
+      title: `${pageName} - AI News Maker`,
       description,
       canonical,
     };
@@ -867,7 +867,7 @@ export default function App() {
           {
             '@type': 'ListItem',
             position: 2,
-            name: meta.title.split('/')[0].split('—')[0].trim(),
+            name: meta.title.split('-')[0].split('/')[0].split('—')[0].trim(),
             item: meta.canonical,
           },
         ],
@@ -3234,6 +3234,27 @@ export default function App() {
       targetImageForStudio = post.imageUrl.trim();
     }
 
+    // Module 4: Do NOT silently inject the instructional fallback graphic into graphic studio
+    if (
+      targetImageForStudio.includes('internet_photo_search_fallback') ||
+      targetImageForStudio.includes('sample_news_bus') ||
+      targetImageForStudio.includes('placeholder')
+    ) {
+      targetImageForStudio = '';
+    }
+
+    if (!targetImageForStudio) {
+      try {
+        addNotification({
+          title: 'फोटो अपलोड आवश्यक (Step 4)',
+          message: 'इस खबर में मूल फोटो उपलब्ध नहीं है। कृपया अपनी गैलरी से या इंटरनेट से संबंधित फोटो अपलोड करें।',
+          type: 'warning',
+          timestamp: Date.now(),
+          unread: true,
+        });
+      } catch {}
+    }
+
     const safeProxy = (u: string) => {
       if (!u || !u.trim()) return '';
       const trimmed = u.trim();
@@ -3263,6 +3284,8 @@ export default function App() {
       const lower = url.toLowerCase();
       if (
         lower.includes('placeholder') ||
+        lower.includes('internet_photo_search_fallback') ||
+        lower.includes('sample_news_bus') ||
         lower.includes('logo') ||
         lower.includes('icon') ||
         lower.includes('avatar') ||

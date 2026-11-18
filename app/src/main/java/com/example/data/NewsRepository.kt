@@ -197,24 +197,25 @@ object NewsRepository {
 
     fun toggleFavorite(postId: String) {
         val current = _favoritePostIds.value
-        _favoritePostIds.value = if (current.contains(postId)) {
-            current - postId
-        } else {
-            current + postId
-        }
+        val isNowFav = !current.contains(postId)
+        _favoritePostIds.value = if (isNowFav) current + postId else current - postId
         scope.launch(Dispatchers.IO) {
             try {
-                val isFav = _favoritePostIds.value.contains(postId)
+                val email = AuthManager.currentUser.value?.email ?: "breakingnewswala.com@gmail.com"
                 val token = AuthManager.currentUser.value?.token ?: ""
                 val url = java.net.URL("${AuthManager.DEFAULT_CLOUD_SERVER_URL}/api/user-favorites")
                 val conn = url.openConnection() as java.net.HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
+                conn.setRequestProperty("x-user-email", email)
                 if (token.isNotBlank()) conn.setRequestProperty("Authorization", "Bearer $token")
                 conn.doOutput = true
                 val body = JSONObject().apply {
+                    put("newsId", postId)
                     put("postId", postId)
-                    put("favorite", isFav)
+                    put("email", email)
+                    put("action", if (isNowFav) "add" else "remove")
+                    put("favorite", isNowFav)
                 }.toString()
                 conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
                 conn.responseCode
@@ -225,16 +226,25 @@ object NewsRepository {
     fun setReminder(postId: String, delayMinutes: Int, onComplete: ((Boolean) -> Unit)? = null) {
         scope.launch(Dispatchers.IO) {
             try {
+                val email = AuthManager.currentUser.value?.email ?: "breakingnewswala.com@gmail.com"
                 val token = AuthManager.currentUser.value?.token ?: ""
+                val post = _posts.value.find { it.id == postId }
+                val title = post?.title ?: "समाचार"
                 val url = java.net.URL("${AuthManager.DEFAULT_CLOUD_SERVER_URL}/api/reminders")
                 val conn = url.openConnection() as java.net.HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/json")
+                conn.setRequestProperty("x-user-email", email)
                 if (token.isNotBlank()) conn.setRequestProperty("Authorization", "Bearer $token")
                 conn.doOutput = true
                 val body = JSONObject().apply {
+                    put("newsId", postId)
                     put("postId", postId)
+                    put("newsTitle", title)
+                    put("email", email)
+                    put("minutes", delayMinutes)
                     put("delayMinutes", delayMinutes)
+                    put("action", "create")
                     put("scheduledTime", System.currentTimeMillis() + (delayMinutes * 60 * 1000L))
                 }.toString()
                 conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }

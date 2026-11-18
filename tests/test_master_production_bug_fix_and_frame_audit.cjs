@@ -122,7 +122,7 @@ runTest('HomeScreenWeb: Favorites integrity, News thumbnail fallback, PWA instal
   assert(homeCode.includes('[combinedPosts, userFavorites, currentUser?.email]'), 'Favorite reconciliation effect must include [combinedPosts, userFavorites, currentUser?.email] in dependency array');
 
   // Priority 2: News Thumbnail Fallback
-  assert(homeCode.includes('/assets/sample_news_bus.svg'), 'Thumbnail onError must fall back to /assets/sample_news_bus.svg');
+  assert(homeCode.includes('/assets/internet_photo_search_fallback.jpg') || homeCode.includes('/assets/sample_news_bus.svg'), 'Thumbnail onError must fall back to valid placeholder image');
   assert(homeCode.includes('from-slate-800 to-slate-900'), 'Thumbnail container must have neutral gradient placeholder to avoid pitch black box');
 
   // Priority 3: PWA Install Prompt
@@ -149,7 +149,7 @@ runTest('NewsDetailModal: Thumbnail container fallback', () => {
   const modalPath = path.join(process.cwd(), 'src', 'components', 'NewsDetailModal.tsx');
   const modalCode = fs.readFileSync(modalPath, 'utf8');
   assert(!modalCode.includes('(e.target as HTMLElement).style.display = \'none\''), 'NewsDetailModal must NOT hide img and leave empty black box');
-  assert(modalCode.includes('(e.target as HTMLImageElement).src = \'/assets/sample_news_bus.svg\''), 'NewsDetailModal must fall back to sample_news_bus.svg');
+  assert(modalCode.includes('(e.target as HTMLImageElement).src = \'/assets/internet_photo_search_fallback.jpg\'') || modalCode.includes('(e.target as HTMLImageElement).src = \'/assets/sample_news_bus.svg\''), 'NewsDetailModal must fall back to valid placeholder image');
 });
 
 // 8. Verify 100% Mirroring with web_studio/

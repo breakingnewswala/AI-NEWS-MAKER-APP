@@ -70,6 +70,8 @@ import { NewsDetailModal } from './NewsDetailModal';
 import { addNotification } from '../lib/notificationManager';
 import {
   isEffectiveAdmin,
+  isUserMasterAdmin,
+  isEffectiveSuperAdmin,
   getUserSubscription,
   fetchUserDailyDownloadStatus,
   getCachedUserDailyDownloadStatus,
@@ -376,6 +378,40 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [userFavorites, setUserFavorites] = useState<Set<string>>(() => new Set(getUserFavoritesLocal(currentUser?.email)));
   const [activeReminders, setActiveReminders] = useState<UserReminderItem[]>(() => getUserRemindersLocal(currentUser?.email));
   const [activeReminderPortal, setActiveReminderPortal] = useState<{ post: NewsFeedPost; x: number; y: number } | null>(null);
+
+  // Module 10: 3-Day Feed Retention Master Admin State
+  const [retentionConfig, setRetentionConfig] = useState<{ enabled: boolean; durationHours: number }>({ enabled: true, durationHours: 72 });
+  useEffect(() => {
+    fetch(getApiUrl('/api/admin/home-feed-retention'))
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && typeof data.enabled === 'boolean') {
+          setRetentionConfig({ enabled: data.enabled, durationHours: data.durationHours || 72 });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleToggleRetention = async () => {
+    const next = !retentionConfig.enabled;
+    try {
+      const token = getAuthToken();
+      const res = await fetch(getApiUrl('/api/admin/home-feed-retention'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ enabled: next }),
+      });
+      if (res.ok) {
+        setRetentionConfig((prev) => ({ ...prev, enabled: next }));
+        showToast ? showToast(`3 दिन ऑटो डिलीट: ${next ? 'सक्रिय' : 'निष्क्रिय'}`) : null;
+      }
+    } catch (e) {
+      console.warn('Failed to toggle retention:', e);
+    }
+  };
 
   // Priority 3: PWA Install Prompt state (One-time, dismissible, hidden if installed or native APK)
   const [isPwaDismissed, setIsPwaDismissed] = useState<boolean>(() => {
@@ -1769,14 +1805,21 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       clean.includes('photo-1585829365295-ab7cd400c167') ||
       clean.includes('placeholder_news_search_16x9') ||
       clean.includes('typewriter') ||
-      clean.includes('olympia')
+      clean.includes('olympia') ||
+      clean.includes('sample_news_bus')
     ) {
       return false;
     }
     return true;
   };
 
-  // Thumbnail resolver supporting Source, Default, and Manual (rejecting stock typewriter image)
+  const isFallbackThumbnail = (url: string | null | undefined): boolean => {
+    if (!url || typeof url !== 'string') return true;
+    const clean = url.trim().toLowerCase();
+    return clean.includes('internet_photo_search_fallback') || clean.includes('sample_news_bus') || clean.includes('placeholder');
+  };
+
+  // Thumbnail resolver supporting Source, Default, and Manual (fallback to supplied Internet Photo Search asset)
   const getPostThumbnail = (post: NewsFeedPost) => {
     if (post.imageSource === 'manual' && isValidNewsThumbnail(post.manualThumbnailUrl)) {
       return post.manualThumbnailUrl!;
@@ -1793,7 +1836,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     if (Array.isArray(post.additionalPhotos) && isValidNewsThumbnail(post.additionalPhotos[0])) {
       return post.additionalPhotos[0];
     }
-    return '/assets/sample_news_bus.svg';
+    return '/assets/internet_photo_search_fallback.jpg';
   };
 
   // Derive visiblePosts for non-admin readers (unapproved RSS items excluded; web links bypass directly)
@@ -2710,10 +2753,17 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-500"
                         loading="lazy"
                         onError={(e) => {
-                          (e.target as HTMLImageElement).src = '/assets/sample_news_bus.svg';
+                          (e.target as HTMLImageElement).src = '/assets/internet_photo_search_fallback.jpg';
                         }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent" />
+                      {isFallbackThumbnail(getPostThumbnail(post)) && (
+                        <div className="absolute bottom-2 left-2 z-10 pointer-events-none">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/90 text-amber-300 border border-amber-500/80 shadow flex items-center gap-1 backdrop-blur-sm">
+                            🔍 फोटो इंटरनेट से सर्च करें
+                          </span>
+                        </div>
+                      )}
 
                       {/* Top Tag on Image */}
                       <div className="absolute top-2 right-2 flex flex-col items-end gap-1.5 z-10">
@@ -3055,7 +3105,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2 shrink-0 justify-end">
                   {selectedCategory === 'local_alerts' && (
                     <button
                       type="button"
@@ -3096,6 +3146,22 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       </span>
                     )}
                   </button>
+
+                  {/* Module 10: Master Admin 3-Day Feed Retention Status & Toggle (पसंदीदा खबरें | 3 दिन ऑटो डिलीट) */}
+                  {(isUserMasterAdmin(currentUser) || isEffectiveSuperAdmin(currentUser)) && (
+                    <button
+                      type="button"
+                      onClick={handleToggleRetention}
+                      className={`px-3 py-2 text-xs font-bold rounded-xl border flex items-center gap-1.5 cursor-pointer transition active:scale-95 ${
+                        retentionConfig.enabled
+                          ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 shadow-xs'
+                          : 'bg-slate-800 border-slate-700 text-slate-400'
+                      }`}
+                      title="मास्टर एडमिन 3 दिन ऑटो डिलीट नियम: पसंदीदा खबरें | 3 दिन ऑटो डिलीट"
+                    >
+                      <span>⏱️ 3 दिन ऑटो डिलीट: {retentionConfig.enabled ? 'सक्रिय' : 'निष्क्रिय'}</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setIsCategoryModalOpen(true)}
@@ -3339,9 +3405,16 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         loading="lazy"
                         onError={(e) => {
-                          (e.target as HTMLImageElement).src = '/assets/sample_news_bus.svg';
+                          (e.target as HTMLImageElement).src = '/assets/internet_photo_search_fallback.jpg';
                         }}
                       />
+                      {isFallbackThumbnail(displayThumbnail) && (
+                        <div className="absolute bottom-2 left-2 z-10 pointer-events-none">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/90 text-amber-300 border border-amber-500/80 shadow flex items-center gap-1 backdrop-blur-sm">
+                            🔍 फोटो इंटरनेट से सर्च करें
+                          </span>
+                        </div>
+                      )}
                       <div className="absolute top-3 left-3 flex gap-1.5 flex-wrap">
                         {isPaid && (
                           isUnlocked ? (

@@ -15,7 +15,7 @@
     "studio:dev": "npm --prefix web_studio run dev",
     "studio:build": "npm --prefix web_studio run build",
     "lint": "npm --prefix web_studio run lint",
-    "test": "node tests/test_safety_invariants.cjs && node tests/test_master_engineering_repair.cjs && node tests/test_master_product_engineering_repair.cjs && node tests/test_authentication_signup_integration.cjs && node tests/test_rss_workflow_and_navigation.cjs && node tests/test_production_bug_fixes.cjs && node tests/test_security_audit_remediation.cjs && node tests/test_headline_validation.cjs && node tests/test_master_production_fix.cjs && node tests/test_master_production_bug_fix_and_frame_audit.cjs && node tests/test_studio_restoration_and_branding.cjs && node tests/test_master_db_cleanup_and_photo_frame_fix.cjs && node tests/test_master_production_remediation.cjs",
+    "test": "node tests/test_safety_invariants.cjs && node tests/test_master_engineering_repair.cjs && node tests/test_master_product_engineering_repair.cjs && node tests/test_authentication_signup_integration.cjs && node tests/test_rss_workflow_and_navigation.cjs && node tests/test_production_bug_fixes.cjs && node tests/test_security_audit_remediation.cjs && node tests/test_headline_validation.cjs && node tests/test_master_production_fix.cjs && node tests/test_master_production_bug_fix_and_frame_audit.cjs && node tests/test_studio_restoration_and_branding.cjs && node tests/test_master_db_cleanup_and_photo_frame_fix.cjs && node tests/test_master_production_remediation.cjs && node tests/test_master_production_upgrade_and_remediation.cjs",
     "sync-apk": "node web_studio/build_and_sync.js"
   },
   "dependencies": {

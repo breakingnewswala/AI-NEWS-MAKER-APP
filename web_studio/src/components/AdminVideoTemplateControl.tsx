@@ -36,6 +36,8 @@ import {
   getLocalDynamicFrames,
   saveDynamicFrameToApi,
   deleteDynamicFrameFromApi,
+  getDeletedDynamicFrameIds,
+  recordDeletedDynamicFrameId,
 } from '../lib/dynamicFramesManager';
 import { getApiUrl, getAuthToken } from '../lib/apiConfig';
 import { getUserFeatureEntitlements, getAdminSelectedUserEmail, setAdminSelectedUserEmail, isUserMasterAdmin } from '../lib/userPlanManager';
@@ -56,6 +58,22 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
   const [dynamicVideoFrames, setDynamicVideoFrames] = useState<DynamicFrameTemplate[]>([]);
   const [configs, setConfigs] = useState<Record<string, any>>({});
   const [successToast, setSuccessToast] = useState<{ id: string; msg: string } | null>(null);
+  const [selectedFrameIds, setSelectedFrameIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [localTombstonesVersion, setLocalTombstonesVersion] = useState(0);
+
+  useEffect(() => {
+    fetch(getApiUrl('/api/admin/video-frames/tombstones'))
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && Array.isArray(data.tombstones)) {
+          data.tombstones.forEach((id: string) => recordDeletedDynamicFrameId(id));
+          setLocalTombstonesVersion((v) => v + 1);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const isMasterAdmin = useMemo(() => {
     try {
@@ -158,21 +176,66 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
     }
   };
 
-  const handleDeleteFrame = async (frameId: string) => {
-    if (!window.confirm('क्या आप वाकई इस टेस्ट वीडियो फ्रेम को हटाना चाहते हैं?')) return;
+  const handleDeleteFrame = async (frameId: string, frameName?: string) => {
+    if (!window.confirm(`क्या आप वाकई इस वीडियो फ्रेम "${frameName || frameId}" को हटाना चाहते हैं?`)) return;
     try {
+      recordDeletedDynamicFrameId(frameId);
+      if (frameName) recordDeletedDynamicFrameId(frameName);
       const token = getAuthToken();
-      const ok = await deleteDynamicFrameFromApi(frameId, token || undefined);
-      if (ok) {
-        showToast(frameId, '🗑️ टेस्ट वीडियो फ्रेम हटाया गया');
-        refreshFrames();
-        window.dispatchEvent(new CustomEvent('dynamic_frames_updated'));
-        if (previewFrame && previewFrame.id === frameId) {
-          setPreviewFrame(null);
-        }
+      await fetch(getApiUrl('/api/admin/video-frames/bulk-delete'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ frameIds: [frameId] }),
+      }).catch(() => {});
+      await deleteDynamicFrameFromApi(frameId, token || undefined);
+      showToast(frameId, '🗑️ वीडियो फ्रेम हटाया गया');
+      setSelectedFrameIds((prev) => {
+        const next = new Set(prev);
+        next.delete(frameId);
+        return next;
+      });
+      setLocalTombstonesVersion((v) => v + 1);
+      refreshFrames();
+      window.dispatchEvent(new CustomEvent('dynamic_frames_updated'));
+      if (previewFrame && previewFrame.id === frameId) {
+        setPreviewFrame(null);
       }
     } catch (err: any) {
       showToast(frameId, `❌ त्रुटि: ${err?.message || 'अज्ञात'}`);
+    }
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    if (selectedFrameIds.size === 0) return;
+    setIsBulkDeleting(true);
+    try {
+      const ids = Array.from(selectedFrameIds);
+      ids.forEach((id) => recordDeletedDynamicFrameId(id));
+      const token = getAuthToken();
+      await fetch(getApiUrl('/api/admin/video-frames/bulk-delete'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ frameIds: ids }),
+      });
+      for (const id of ids) {
+        await deleteDynamicFrameFromApi(id, token || undefined).catch(() => {});
+      }
+      showToast('bulk', `🗑️ ${ids.length} चयनित फ्रेम हटा दिए गए`);
+      setSelectedFrameIds(new Set());
+      setShowBulkDeleteModal(false);
+      setLocalTombstonesVersion((v) => v + 1);
+      refreshFrames();
+      window.dispatchEvent(new CustomEvent('dynamic_frames_updated'));
+    } catch (err: any) {
+      alert(`त्रुटि: ${err?.message || 'अज्ञात त्रुटि'}`);
+    } finally {
+      setIsBulkDeleting(false);
     }
   };
 
@@ -259,8 +322,11 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
 
   // Canonical Video Frames List: Published Dynamic Video Frames + Video Frame Definitions
   const allVideoItems = useMemo(() => {
+    const tombstones = getDeletedDynamicFrameIds();
     // 1. Dynamic video frames (both published and test frames)
-    const dynamicItems = dynamicVideoFrames.map((df) => {
+    const dynamicItems = dynamicVideoFrames
+      .filter((df) => !tombstones.has(df.id) && !tombstones.has(df.name))
+      .map((df) => {
       const cfg = configs[df.id] || {};
       const ratio = df.aspectRatio || '9:16';
       const isTest = Boolean(
@@ -305,10 +371,10 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
       };
     });
 
-    // 2. Built-in video frame definitions (if not overridden)
+    // 2. Built-in video frame definitions (if not overridden & not tombstoned)
     const dynamicIds = new Set(dynamicItems.map((d) => d.id));
     const staticItems = VIDEO_FRAME_DEFINITIONS
-      .filter((def) => !dynamicIds.has(def.id))
+      .filter((def) => !dynamicIds.has(def.id) && !tombstones.has(def.id) && !tombstones.has(def.name))
       .map((def) => {
         const cfg = configs[def.id] || {};
         const vWin = def.videoWindow || { top: 0.15, bottom: 0.9, left: 0, right: 1 };
@@ -343,18 +409,21 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
       });
 
     return [...dynamicItems, ...staticItems];
-  }, [dynamicVideoFrames, configs]);
+  }, [dynamicVideoFrames, configs, localTombstonesVersion]);
 
   const publishedFrames = useMemo(() => {
+    const tombstones = getDeletedDynamicFrameIds();
     return allVideoItems.filter(
       (f) => !f.isTestFrame &&
              f.approvalStatus !== 'PENDING_TEST' &&
              f.approvalStatus !== 'REJECTED' &&
              !f.id.startsWith('df_test_') &&
              !f.name.toUpperCase().startsWith('TEST') &&
-             f.id !== 'df_1794938610435_g8pec'
+             f.id !== 'df_1794938610435_g8pec' &&
+             !tombstones.has(f.id) &&
+             !tombstones.has(f.name)
     );
-  }, [allVideoItems]);
+  }, [allVideoItems, localTombstonesVersion]);
 
   const testVideoFrames = useMemo(() => {
     return allVideoItems.filter(
@@ -495,38 +564,75 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
       })()}
 
       {/* 0. Top Category Tabs: Published vs Test Frames */}
-      <div className="flex items-center gap-2.5 border-b border-slate-800 pb-3">
-        <button
-          type="button"
-          onClick={() => setActiveCategoryTab('published')}
-          className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black cursor-pointer transition flex items-center gap-2 ${
-            activeCategoryTab === 'published'
-              ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-lg shadow-red-950/50'
-              : 'bg-slate-900/90 text-slate-400 hover:text-white border border-slate-800'
-          }`}
-        >
-          <Film className="w-4 h-4 text-amber-300" />
-          <span>📹 प्रकाशित वीडियो फ्रेम्स ({publishedFrames.length})</span>
-        </button>
-
-        {isMasterAdmin && (
+      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-800 pb-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <button
             type="button"
-            onClick={() => setActiveCategoryTab('test_frames')}
+            onClick={() => setActiveCategoryTab('published')}
             className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black cursor-pointer transition flex items-center gap-2 ${
-              activeCategoryTab === 'test_frames'
-                ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black shadow-lg shadow-amber-950/50'
+              activeCategoryTab === 'published'
+                ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-lg shadow-red-950/50'
                 : 'bg-slate-900/90 text-slate-400 hover:text-white border border-slate-800'
             }`}
           >
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            <span>🧪 टेस्ट वीडियो फ्रेम्स ({testVideoFrames.length})</span>
-            {testVideoFrames.length > 0 && (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white ml-1">
-                {testVideoFrames.length} लंबित
-              </span>
-            )}
+            <Film className="w-4 h-4 text-amber-300" />
+            <span>📹 प्रकाशित वीडियो फ्रेम्स ({publishedFrames.length})</span>
           </button>
+
+          {isMasterAdmin && (
+            <button
+              type="button"
+              onClick={() => setActiveCategoryTab('test_frames')}
+              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black cursor-pointer transition flex items-center gap-2 ${
+                activeCategoryTab === 'test_frames'
+                  ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black shadow-lg shadow-amber-950/50'
+                  : 'bg-slate-900/90 text-slate-400 hover:text-white border border-slate-800'
+              }`}
+            >
+              <Sparkles className="w-4 h-4 text-amber-400" />
+              <span>🧪 टेस्ट वीडियो फ्रेम्स ({testVideoFrames.length})</span>
+              {testVideoFrames.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-600 text-white ml-1">
+                  {testVideoFrames.length} लंबित
+                </span>
+              )}
+            </button>
+          )}
+        </div>
+
+        {isMasterAdmin && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedFrameIds.size === 0) {
+                  const idsToSelect = new Set<string>();
+                  filteredFrames.forEach((it) => idsToSelect.add(it.id));
+                  setSelectedFrameIds(idsToSelect);
+                } else {
+                  setShowBulkDeleteModal(true);
+                }
+              }}
+              className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-1.5 cursor-pointer shadow-md ${
+                selectedFrameIds.size > 0
+                  ? 'bg-red-600 hover:bg-red-700 text-white ring-2 ring-red-400'
+                  : 'bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-700/60'
+              }`}
+              title="चयनित डमी फ्रेम हटाएँ"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-red-300" />
+              <span>चयनित डमी फ्रेम हटाएँ {selectedFrameIds.size > 0 ? `(${selectedFrameIds.size})` : ''}</span>
+            </button>
+            {selectedFrameIds.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedFrameIds(new Set())}
+                className="px-2.5 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white bg-slate-800 border border-slate-700 cursor-pointer"
+              >
+                चयन रद्द
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -690,9 +796,28 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
               <div>
                 {/* Header Badge Row */}
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="font-mono text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20 truncate max-w-[150px]">
-                    {frame.id}
-                  </span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    {isMasterAdmin && (
+                      <input
+                        type="checkbox"
+                        checked={selectedFrameIds.has(frame.id)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          setSelectedFrameIds((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(frame.id)) next.delete(frame.id);
+                            else next.add(frame.id);
+                            return next;
+                          });
+                        }}
+                        className="w-4 h-4 rounded text-red-600 bg-slate-950 border-slate-700 cursor-pointer accent-red-600 shrink-0"
+                        title="हटाने के लिए चुनें"
+                      />
+                    )}
+                    <span className="font-mono text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20 truncate max-w-[130px]">
+                      {frame.id}
+                    </span>
+                  </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <span className="px-2 py-0.5 text-[9.5px] font-black rounded bg-red-500/20 text-red-300 border border-red-500/30">
                       {frame.aspectRatio} वीडियो
@@ -866,6 +991,16 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
                   </button>
 
                   <div className="flex items-center gap-1.5">
+                    {isMasterAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFrame(frame.id, frame.nameHi || frame.name)}
+                        className="p-1.5 bg-red-950/60 hover:bg-red-900 border border-red-600/40 text-red-300 rounded-lg text-xs font-bold transition flex items-center justify-center cursor-pointer"
+                        title="इस फ्रेम को हटाएं"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setPreviewFrame(frame)}
@@ -1171,6 +1306,66 @@ export const AdminVideoTemplateControl: React.FC<AdminVideoTemplateControlProps>
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Module 2: Master Admin Bulk Delete Confirmation Modal */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-red-600/50 rounded-2xl p-6 max-w-lg w-full space-y-4 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-black text-red-400 flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-red-500" />
+                <span>डमी वीडियो फ्रेम हटाने की पुष्टि ({selectedFrameIds.size})</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              क्या आप वाकई निम्नलिखित <strong>{selectedFrameIds.size}</strong> चयनित वीडियो फ्रेम्स को कैटलॉग से स्थायी रूप से हटाना चाहते हैं? यह क्रिया स्थायी है और सर्वर टॉम्बस्टोन में दर्ज हो जाएगी।
+            </p>
+
+            <div className="max-h-48 overflow-y-auto space-y-1.5 bg-slate-950 p-3 rounded-xl border border-slate-800">
+              {Array.from(selectedFrameIds).map((id) => {
+                const item = allVideoItems.find((f) => f.id === id);
+                return (
+                  <div key={id} className="flex items-center justify-between text-xs py-1 border-b border-slate-900/60 last:border-b-0">
+                    <span className="font-bold text-white truncate max-w-[220px]">
+                      {item?.nameHi || item?.name || id}
+                    </span>
+                    <span className="font-mono text-[10px] text-amber-400 bg-slate-900 px-1.5 py-0.5 rounded">
+                      {id}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteModal(false)}
+                disabled={isBulkDeleting}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold cursor-pointer"
+              >
+                रद्द करें
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkDeleteConfirm}
+                disabled={isBulkDeleting}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-lg shadow-red-950/50 disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{isBulkDeleting ? 'हटाया जा रहा है...' : 'पुष्टि करें एवं हटाएं'}</span>
+              </button>
             </div>
           </div>
         </div>

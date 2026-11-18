@@ -192,7 +192,7 @@ export const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
               alt={headline}
               className="w-full h-full object-cover"
               onError={(e) => {
-                (e.target as HTMLImageElement).src = '/assets/sample_news_bus.svg';
+                (e.target as HTMLImageElement).src = '/assets/internet_photo_search_fallback.jpg';
               }}
             />
           </div>

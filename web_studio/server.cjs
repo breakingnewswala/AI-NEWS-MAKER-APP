@@ -14393,15 +14393,8 @@ function cleanErrorMessage(err) {
   }
   return raw || "\u0938\u0930\u094D\u0935\u0930 \u0924\u094D\u0930\u0941\u091F\u093F \u0939\u0941\u0908";
 }
-function getCategoryFallbackImage(category = "general") {
-  const cat = (category || "").toLowerCase();
-  if (cat.includes("crime") || cat.includes("\u0905\u092A\u0930\u093E\u0927")) return "https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=800&q=80";
-  if (cat.includes("politics") || cat.includes("\u0930\u093E\u091C\u0928\u0940\u0924\u093F")) return "https://images.unsplash.com/photo-1540910419892-4a36d2c3266c?w=800&q=80";
-  if (cat.includes("sports") || cat.includes("\u0916\u0947\u0932")) return "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&q=80";
-  if (cat.includes("tech") || cat.includes("\u0924\u0915\u0928\u0940\u0915")) return "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&q=80";
-  if (cat.includes("business") || cat.includes("\u0935\u094D\u092F\u093E\u092A\u093E\u0930")) return "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=800&q=80";
-  if (cat.includes("weather") || cat.includes("\u092E\u094C\u0938\u092E")) return "https://images.unsplash.com/photo-1504608524841-42fe6f032b4b?w=800&q=80";
-  return "/assets/sample_news_bus.svg";
+function getCategoryFallbackImage(_category = "general") {
+  return "/assets/internet_photo_search_fallback.jpg";
 }
 app.get("/api/ai-providers-status", (req, res) => {
   const geminiKey = process.env.GEMINI_API_KEY;
@@ -14874,9 +14867,51 @@ function getInitialRichNewsPosts() {
     }
   ];
 }
+var EXACT_THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1e3;
+var THREE_DAYS_MS = EXACT_THREE_DAYS_MS;
 var FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1e3;
-var SEVEN_DAYS_MS = FOUR_DAYS_MS;
-var THREE_DAYS_MS = FOUR_DAYS_MS;
+var SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1e3;
+var HOME_FEED_RETENTION_FILE = import_path2.default.join(process.cwd(), "home_feed_retention_config.json");
+function loadHomeFeedRetentionConfig() {
+  try {
+    if (import_fs2.default.existsSync(HOME_FEED_RETENTION_FILE)) {
+      const raw = import_fs2.default.readFileSync(HOME_FEED_RETENTION_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      if (typeof parsed?.enabled === "boolean") {
+        return { enabled: parsed.enabled, durationHours: 72, updatedAt: parsed.updatedAt };
+      }
+    }
+  } catch {
+  }
+  return { enabled: true, durationHours: 72 };
+}
+function saveHomeFeedRetentionConfig(cfg) {
+  const current = loadHomeFeedRetentionConfig();
+  const updated = {
+    enabled: typeof cfg.enabled === "boolean" ? cfg.enabled : current.enabled,
+    durationHours: 72,
+    updatedAt: Date.now(),
+    updatedBy: cfg.updatedBy || "admin"
+  };
+  try {
+    const locs = resolveAllDatabaseLocations("home_feed_retention_config.json");
+    const jsonStr = JSON.stringify(updated, null, 2);
+    for (const loc of locs) {
+      try {
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {
+      }
+    }
+  } catch {
+  }
+  if (centralDb && typeof centralDb.writeDoc === "function") {
+    centralDb.writeDoc("system_config", "home_feed_retention", updated).catch(() => {
+    });
+  }
+  return updated;
+}
 function resolveAllDatabaseLocations(filename) {
   const cwd = process.cwd();
   const candidates = [
@@ -15390,7 +15425,13 @@ app.get("/api/news-posts", async (req, res) => {
         return false;
       }
     }
-    const postTime = p.timestamp || now;
+    const retentionCfg = loadHomeFeedRetentionConfig();
+    const postTime = Number(p.timestamp) || now;
+    if (retentionCfg.enabled && !includePending) {
+      if (postTime > 0 && now - postTime > EXACT_THREE_DAYS_MS) {
+        return false;
+      }
+    }
     const expiresAt = p.expiresAt || postTime + THREE_DAYS_MS;
     if (now > expiresAt && !includePending) return false;
     if ((p.approvalStatus === "PENDING_APPROVAL" || p.status === "PENDING_APPROVAL" || p.status === "pending") && !includePending) {
@@ -19184,15 +19225,17 @@ function saveVideosDatabase(videos) {
     return false;
   }
 }
-function runFourDayFeedRetentionCleanup() {
+function runThreeDayFeedRetentionCleanup() {
   try {
+    const config = loadHomeFeedRetentionConfig();
+    if (!config.enabled) return;
     const now = Date.now();
     const newsPosts = loadNewsDatabase();
     if (newsPosts.length > 0) {
       const activeNews = newsPosts.filter((p) => {
         if (!p || !p.id) return false;
         const postTime = Number(p.timestamp) || 0;
-        if (postTime > 0 && now - postTime > FOUR_DAYS_MS) {
+        if (postTime > 0 && now - postTime > EXACT_THREE_DAYS_MS) {
           return false;
         }
         return true;
@@ -19202,10 +19245,36 @@ function runFourDayFeedRetentionCleanup() {
       }
     }
   } catch (err) {
-    console.error("Error in runFourDayFeedRetentionCleanup:", err?.message || err);
+    console.error("Error in runThreeDayFeedRetentionCleanup:", err?.message || err);
   }
 }
-setInterval(runFourDayFeedRetentionCleanup, 30 * 60 * 1e3);
+setInterval(runThreeDayFeedRetentionCleanup, 30 * 60 * 1e3);
+app.get("/api/admin/home-feed-retention", (_req, res) => {
+  const config = loadHomeFeedRetentionConfig();
+  return res.json({ success: true, ...config });
+});
+app.post("/api/admin/home-feed-retention", requireMasterAdminMiddleware, (req, res) => {
+  try {
+    const { enabled } = req.body || {};
+    if (typeof enabled !== "boolean") {
+      return res.status(400).json({ error: "enabled (boolean) \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0964" });
+    }
+    const user = req.user;
+    const updated = saveHomeFeedRetentionConfig({ enabled, updatedBy: user?.email || "admin" });
+    if (updated.enabled) {
+      runThreeDayFeedRetentionCleanup();
+    }
+    const actorEmail = user?.email || "breakingnewswala.com@gmail.com";
+    logAdminAudit(actorEmail, "HOME_FEED_RETENTION_TOGGLE", `3-day retention set to ${updated.enabled}`, updated);
+    return res.json({
+      success: true,
+      message: `3 \u0926\u093F\u0928 \u0911\u091F\u094B \u0921\u093F\u0932\u0940\u091F \u0928\u093F\u092F\u092E ${updated.enabled ? "\u0938\u0915\u094D\u0930\u093F\u092F (Enabled)" : "\u0928\u093F\u0937\u094D\u0915\u094D\u0930\u093F\u092F (Disabled)"} \u0915\u0930 \u0926\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964`,
+      ...updated
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 app.get("/api/videos", (_req, res) => {
   try {
     const videos = loadVideosDatabase();
@@ -20104,11 +20173,16 @@ app.get("/api/user-favorites", (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/user-favorites", (req, res) => {
+app.post("/api/user-favorites", async (req, res) => {
   try {
-    const rawEmail = (req.body.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
-    const newsId2 = (req.body.newsId || "").toString().trim();
-    const action = req.body.action || "toggle";
+    const user = await resolveAuthenticatedUser(req).catch(() => null);
+    const rawEmail = (user?.email || req.body.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
+    const newsId2 = (req.body.newsId || req.body.postId || "").toString().trim();
+    let action = req.body.action;
+    if (!action && typeof req.body.favorite === "boolean") {
+      action = req.body.favorite ? "add" : "remove";
+    }
+    if (!action) action = "toggle";
     if (!rawEmail) {
       return res.status(400).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0908\u092E\u0947\u0932 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
     }
@@ -20210,10 +20284,15 @@ app.get("/api/reminders", requireAuthMiddleware, (req, res) => {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/reminders", (req, res) => {
+app.post("/api/reminders", async (req, res) => {
   try {
-    const rawEmail = (req.body.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
-    const { newsId: newsId2, newsTitle, minutes = 5, action = "create", id } = req.body || {};
+    const user = await resolveAuthenticatedUser(req).catch(() => null);
+    const rawEmail = (user?.email || req.body.email || req.headers["x-user-email"] || "").toString().toLowerCase().trim();
+    const newsId2 = (req.body.newsId || req.body.postId || "").toString().trim();
+    const newsTitle = (req.body.newsTitle || req.body.title || "").toString().trim();
+    const minutes = req.body.minutes || req.body.delayMinutes || 5;
+    const action = req.body.action || "create";
+    const id = req.body.id;
     if (!rawEmail) {
       return res.status(400).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0908\u092E\u0947\u0932 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
     }
@@ -20519,9 +20598,18 @@ app.post("/api/admin/notifications/mark-read", requireAdminMiddleware, (req, res
     const readIds = loadAdminReadNotificationIds();
     if (id) {
       readIds.add(String(id));
+      if (String(id).startsWith("admin_sys_")) {
+        const rawId = String(id).replace("admin_sys_", "");
+        readIds.add(rawId);
+      }
     }
     if (Array.isArray(ids)) {
-      ids.forEach((i) => readIds.add(String(i)));
+      ids.forEach((i) => {
+        readIds.add(String(i));
+        if (String(i).startsWith("admin_sys_")) {
+          readIds.add(String(i).replace("admin_sys_", ""));
+        }
+      });
     }
     if (all) {
       if (category === "rss" || !category) {
@@ -20537,7 +20625,13 @@ app.post("/api/admin/notifications/mark-read", requireAdminMiddleware, (req, res
         loadLimitIncreaseRequests().forEach((r) => readIds.add(`admin_req_${r.id || `${r.email}_${r.timestamp}`}`));
       }
       try {
-        loadNotificationsDatabase().forEach((n) => readIds.add(String(n.id)));
+        const notifs = loadNotificationsDatabase();
+        notifs.forEach((n) => {
+          readIds.add(String(n.id));
+          readIds.add(`admin_sys_${n.id}`);
+          n.unread = false;
+        });
+        saveNotificationsDatabase(notifs);
       } catch {
       }
     }
@@ -21130,10 +21224,21 @@ async function extractBestNewsImage(itemXml, rawDesc, articleUrl, fallbackCatego
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0"
         },
-        signal: AbortSignal.timeout(1800)
+        redirect: "follow",
+        signal: AbortSignal.timeout(6e3)
       });
       if (resp.ok) {
         const html = await resp.text();
+        const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+        if (ogImageMatch && ogImageMatch[1]) {
+          const resolved = resolveUrl(ogImageMatch[1].trim().replace(/&amp;/g, "&"), articleUrl);
+          if (isValidNewsImage(resolved)) return resolved;
+        }
+        const twitterImageMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
+        if (twitterImageMatch && twitterImageMatch[1]) {
+          const resolved = resolveUrl(twitterImageMatch[1].trim().replace(/&amp;/g, "&"), articleUrl);
+          if (isValidNewsImage(resolved)) return resolved;
+        }
         const ldMatches = html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
         for (const ldMatch of ldMatches) {
           try {
@@ -21146,26 +21251,16 @@ async function extractBestNewsImage(itemXml, rawDesc, articleUrl, fallbackCatego
               else if (item.image?.url) imgCandidate = item.image.url;
               else if (item.thumbnailUrl) imgCandidate = item.thumbnailUrl;
               if (imgCandidate) {
-                const resolved = resolveUrl(imgCandidate, articleUrl);
+                const resolved = resolveUrl(imgCandidate.trim().replace(/&amp;/g, "&"), articleUrl);
                 if (isValidNewsImage(resolved)) return resolved;
               }
             }
           } catch {
           }
         }
-        const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
-        if (ogImageMatch && ogImageMatch[1]) {
-          const resolved = resolveUrl(ogImageMatch[1].trim(), articleUrl);
-          if (isValidNewsImage(resolved)) return resolved;
-        }
-        const twitterImageMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
-        if (twitterImageMatch && twitterImageMatch[1]) {
-          const resolved = resolveUrl(twitterImageMatch[1].trim(), articleUrl);
-          if (isValidNewsImage(resolved)) return resolved;
-        }
         const articleImgMatch = html.match(/<article[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) || html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) || html.match(/<img[^>]+data-(?:src|original|lazy-src)=["']([^"']+)["']/i);
         if (articleImgMatch && articleImgMatch[1]) {
-          const resolved = resolveUrl(articleImgMatch[1].trim(), articleUrl);
+          const resolved = resolveUrl(articleImgMatch[1].trim().replace(/&amp;/g, "&"), articleUrl);
           if (isValidNewsImage(resolved)) return resolved;
         }
       }
@@ -21389,6 +21484,102 @@ async function processRssItemWithAiEditorial(rawTitle, rawDesc, sourceCategory, 
     categoryName: sourceCategory || "\u0926\u0947\u0936"
   };
 }
+app.post("/api/newsroom/script-maker", async (req, res) => {
+  try {
+    const user = await resolveAuthenticatedUser(req);
+    const { tier, role } = resolveUserTierAndRole(req);
+    const cleanTier = (tier || "").toLowerCase().trim();
+    const cleanRole = (role || "").toLowerCase().trim();
+    const isMasterAdmin = isAuthorizedMasterAdmin(req) || isProtectedAdminAccount((user?.email || "").toLowerCase().trim());
+    const isAdmin = isAuthorizedAdmin(req) || cleanRole === "admin" || cleanRole === "superadmin" || isMasterAdmin;
+    const isProOrVip = cleanTier === "pro" || cleanTier === "vip" || cleanTier.includes("vip") || cleanTier === "vip_desk";
+    if (!isAdmin && !isProOrVip) {
+      return res.status(403).json({
+        success: false,
+        code: "PLAN_RESTRICTED",
+        error: "\u092F\u0939 \u0938\u0941\u0935\u093F\u0927\u093E Pro \u0914\u0930 VIP Desk \u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E\u0913\u0902 \u0915\u0947 \u0932\u093F\u090F \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964",
+        requiredTiers: ["pro", "vip", "vip_desk"],
+        currentTier: cleanTier || "basic"
+      });
+    }
+    const { rawText, inputType = "\u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F" } = req.body || {};
+    if (!rawText || typeof rawText !== "string" || rawText.trim().length < 5) {
+      return res.status(400).json({
+        success: false,
+        error: "\u0915\u0943\u092A\u092F\u093E \u0909\u092A\u092F\u0941\u0915\u094D\u0924 \u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F, \u0930\u0949 \u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u091F \u092F\u093E \u0938\u093E\u092E\u0917\u094D\u0930\u0940 \u0926\u0930\u094D\u091C \u0915\u0930\u0947\u0902 (\u0928\u094D\u092F\u0942\u0928\u0924\u092E 5 \u0905\u0915\u094D\u0937\u0930)\u0964"
+      });
+    }
+    const cleanInput = rawText.trim().slice(0, 5e3);
+    let generated = null;
+    try {
+      generated = await executeGeminiWithKeyPool(async (ai) => {
+        const prompt = `\u0906\u092A \u090F\u0915 \u0935\u0930\u093F\u0937\u094D\u0920 \u092D\u093E\u0930\u0924\u0940\u092F \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u0902\u092A\u093E\u0926\u0915 (Senior Hindi Digital News Editor) \u0939\u0948\u0902\u0964
+\u0906\u092A\u0915\u094B \u0928\u093F\u092E\u094D\u0928\u0932\u093F\u0916\u093F\u0924 \u0915\u091A\u094D\u091A\u0940 \u0938\u093E\u092E\u0917\u094D\u0930\u0940 (\u0907\u0928\u092A\u0941\u091F \u092A\u094D\u0930\u0915\u093E\u0930: "${inputType}") \u0926\u0940 \u0917\u0908 \u0939\u0948:
+
+---
+${cleanInput}
+---
+
+\u0915\u0943\u092A\u092F\u093E \u0907\u0938\u0947 \u090F\u0915 \u0905\u0924\u094D\u092F\u0927\u093F\u0915 \u0906\u0915\u0930\u094D\u0937\u0915, \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915, \u0938\u091F\u0940\u0915 \u0914\u0930 \u092A\u0920\u0928\u0940\u092F \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u092A\u0948\u0915\u0947\u091C \u092E\u0947\u0902 \u092C\u0926\u0932\u0947\u0902\u0964
+\u0915\u0921\u093C\u0947 \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0928\u093F\u092F\u092E (Strict Editorial Rules):
+1. \u092E\u0941\u0916\u094D\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (headline): \u0906\u0915\u0930\u094D\u0937\u0915, \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940, \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0914\u0930 10-15 \u0936\u092C\u094D\u0926\u094B\u0902 \u092E\u0947\u0902\u0964
+2. \u0938\u092C-\u0939\u0947\u0921\u0932\u093E\u0907\u0928 (subHeadline): \u092A\u0942\u0930\u0915 \u0938\u092C-\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u091C\u093F\u0938\u092E\u0947\u0902 \u092E\u0941\u0916\u094D\u092F \u0938\u0902\u0926\u0930\u094D\u092D, \u0915\u093E\u0930\u0923 \u092F\u093E \u092A\u094D\u0930\u092D\u093E\u0935 \u0939\u094B (15-25 \u0936\u092C\u094D\u0926\u094B\u0902 \u092E\u0947\u0902)\u0964
+3. \u092A\u0942\u0930\u0940 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u094B\u0930\u0940 (fullStory): \u0938\u0902\u0924\u0941\u0932\u093F\u0924, \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0939\u093F\u0902\u0926\u0940 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u094B\u0930\u0940 (2-3 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B\u094D\u0938, 120-250 \u0936\u092C\u094D\u0926)\u0964 \u0938\u0939\u0940 \u092A\u0948\u0930\u093E\u0917\u094D\u0930\u093E\u092B \u0915\u094D\u0930\u092E \u0914\u0930 \u092A\u0947\u0936\u0947\u0935\u0930 \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u093F\u0924\u093E \u0936\u0948\u0932\u0940 \u0939\u094B\u0964
+4. \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0938\u0924\u094D\u092F\u0928\u093F\u0937\u094D\u0920\u093E (Fact Preservation): \u0926\u0940 \u0917\u0908 \u0938\u093E\u092E\u0917\u094D\u0930\u0940 \u092E\u0947\u0902 \u092E\u094C\u091C\u0942\u0926 \u0938\u092D\u0940 \u0928\u093E\u092E, \u092A\u0926, \u0924\u093E\u0930\u0940\u0916\u0947\u0902, \u0938\u094D\u0925\u093E\u0928, \u0938\u0902\u0916\u094D\u092F\u093E\u090F\u0902 \u0914\u0930 \u0906\u0902\u0915\u0921\u093C\u0947 \u0939\u0942\u092C\u0939\u0942 \u092C\u0928\u093E\u090F \u0930\u0916\u0947\u0902\u0964
+5. \u092E\u0928\u0917\u0922\u093C\u0902\u0924 \u0924\u0925\u094D\u092F\u094B\u0902 \u092A\u0930 \u092A\u0942\u0930\u094D\u0923 \u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927 (No Hallucination): \u0905\u092A\u0928\u0940 \u0924\u0930\u092B \u0938\u0947 \u0915\u094B\u0908 \u092D\u0940 \u091D\u0942\u0920\u093E \u0924\u0925\u094D\u092F, \u0905\u091C\u094D\u091E\u093E\u0924 \u0938\u0942\u0924\u094D\u0930, \u0915\u093E\u0932\u094D\u092A\u0928\u093F\u0915 \u092C\u092F\u093E\u0928, \u0906\u0930\u094B\u092A \u092F\u093E \u0906\u0902\u0915\u0921\u093C\u0947 \u0928 \u091C\u094B\u0921\u093C\u0947\u0902\u0964 \u092F\u0926\u093F \u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F \u092E\u0947\u0902 \u0915\u094B\u0908 \u0935\u093F\u0935\u0930\u0923 \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948, \u0924\u094B \u0909\u0938\u0947 \u0905\u092A\u0928\u0940 \u0913\u0930 \u0938\u0947 \u0928 \u092C\u0928\u093E\u090F\u0902\u0964
+6. \u092D\u093E\u0937\u093E \u0936\u0941\u0926\u094D\u0927, \u0924\u094D\u0930\u0941\u091F\u093F\u0939\u0940\u0928, \u0938\u094D\u092A\u0937\u094D\u091F \u0914\u0930 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u0939\u093F\u0902\u0926\u0940 \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u093F\u0924\u093E \u0936\u0948\u0932\u0940 \u092E\u0947\u0902 \u0939\u094B\u0964
+
+\u0909\u0924\u094D\u0924\u0930 \u0915\u0947\u0935\u0932 \u0914\u0930 \u0915\u0947\u0935\u0932 \u0935\u0948\u0927 JSON \u092A\u094D\u0930\u093E\u0930\u0942\u092A \u092E\u0947\u0902 \u0926\u0947\u0902, \u091C\u093F\u0938\u092E\u0947\u0902 \u0928\u093F\u092E\u094D\u0928 \u0915\u0941\u0902\u091C\u093F\u092F\u093E\u0901 (keys) \u0939\u094B\u0902:
+{
+  "headline": "\u092E\u0941\u0916\u094D\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0928",
+  "subHeadline": "\u0938\u092C-\u0939\u0947\u0921\u0932\u093E\u0907\u0928",
+  "fullStory": "\u092A\u0942\u0930\u0940 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u094B\u0930\u0940"
+}`;
+        const res2 = await generateWithFallbackAndRetry(ai, GEMINI_MODELS_POOL.slice(0, 2), {
+          contents: prompt,
+          config: { temperature: 0.3 }
+        });
+        const text = res2?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed && parsed.headline) {
+            return {
+              headline: String(parsed.headline || "").trim(),
+              subHeadline: String(parsed.subHeadline || "").trim(),
+              fullStory: String(parsed.fullStory || "").trim()
+            };
+          }
+        }
+        return null;
+      });
+    } catch (e) {
+      console.warn("[Script Maker] AI generation error:", e?.message || e);
+    }
+    if (!generated || !generated.headline) {
+      const lines = cleanInput.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+      const firstLine = lines[0] || "\u0924\u093E\u091C\u093E \u0921\u093F\u091C\u093F\u091F\u0932 \u0938\u092E\u093E\u091A\u093E\u0930";
+      const secondLine = lines[1] || "";
+      const bodyLines = lines.slice(1).join("\n\n");
+      generated = {
+        headline: firstLine.length > 80 ? firstLine.slice(0, 80) + "..." : firstLine,
+        subHeadline: secondLine ? secondLine.length > 120 ? secondLine.slice(0, 120) + "..." : secondLine : `${firstLine} \u2014 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u092C\u0941\u0932\u0947\u091F\u093F\u0928`,
+        fullStory: bodyLines.length > 30 ? bodyLines : `${firstLine}
+
+${cleanInput}`
+      };
+    }
+    return res.json({
+      success: true,
+      headline: generated.headline,
+      subHeadline: generated.subHeadline,
+      fullStory: generated.fullStory,
+      inputType
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 function decodeHtmlEntities(str) {
   if (!str) return "";
   return str.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&#39;/g, "'").replace(/&apos;/g, "'").replace(/&nbsp;/g, " ").replace(/&ndash;/g, "\u2013").replace(/&mdash;/g, "\u2014").replace(/&lsquo;/g, "\xE2\u20AC\u02DC").replace(/&rsquo;/g, "\xE2\u20AC\u2122").replace(/&ldquo;/g, "\xE2\u20AC\u0153").replace(/&rdquo;/g, "\xE2\u20AC\x9D").replace(/&hellip;/g, "...").replace(/&#x([0-9a-fA-F]{1,6});/gi, (_match, hexStr) => {
@@ -21497,7 +21688,12 @@ async function parseRssItemsFromXml(xmlText, source, knownFilter, maxItems = MAX
           };
         }
       }
-      const imageUrl = await extractBestNewsImage(itemXml, rawDesc, link, source.category);
+      let imageUrl = await extractBestNewsImage(itemXml, rawDesc, link, source.category);
+      let imageState = "SOURCE_IMAGE";
+      if (!imageUrl) {
+        imageUrl = getCategoryFallbackImage(source.category);
+        imageState = "INTERNET_SEARCH_PLACEHOLDER";
+      }
       const editorial = await processRssItemWithAiEditorial(rawTitle, rawDesc, source.category, link);
       const catName = editorial.categoryName || source.category || "\u0926\u0947\u0936";
       const catKey = resolveCategoryKeyFromName(catName, link || source.url);
@@ -21518,6 +21714,7 @@ async function parseRssItemsFromXml(xmlText, source, knownFilter, maxItems = MAX
         categoryName: catName,
         publishedTime: formatRelativeTime(timestamp),
         imageUrl,
+        imageState,
         breaking: editorial.title.includes("\u092C\u0921\u093C\u093E") || editorial.title.includes("\u092B\u0948\u0938\u0932\u093E") || editorial.title.includes("\u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908"),
         isExclusive: false,
         isBonus: false,
@@ -21625,8 +21822,10 @@ async function fetchAndParseWebLink(source) {
         if (isValidNewsImage(resolved)) imageUrl = resolved;
       }
     }
+    let imageState = "SOURCE_IMAGE";
     if (!imageUrl) {
       imageUrl = getCategoryFallbackImage(source.category);
+      imageState = "INTERNET_SEARCH_PLACEHOLDER";
     }
     const editorial = await processRssItemWithAiEditorial(rawTitle, fullArticleText, source.category, source.url);
     const catName = editorial.categoryName || source.category || "\u0926\u0947\u0936";
@@ -21648,6 +21847,7 @@ async function fetchAndParseWebLink(source) {
       categoryName: catName,
       publishedTime: "\u0905\u092D\u0940-\u0905\u092D\u0940",
       imageUrl,
+      imageState,
       breaking: false,
       isExclusive: false,
       timestamp: Date.now(),
@@ -21799,7 +21999,30 @@ app.delete(["/api/admin/delete-rss-source/:id", "/api/admin/rss-sources/:id"], r
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+var GENERATED_WEB_RSS_FEEDS_FILE = import_path2.default.join(process.cwd(), "generated_web_rss_feeds.json");
 var GENERATED_WEB_RSS_FEEDS = /* @__PURE__ */ new Map();
+function loadGeneratedWebRssFeedsFromDisk() {
+  try {
+    if (import_fs2.default.existsSync(GENERATED_WEB_RSS_FEEDS_FILE)) {
+      const raw = import_fs2.default.readFileSync(GENERATED_WEB_RSS_FEEDS_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) {
+        list.forEach((item) => {
+          if (item && item.feedId) GENERATED_WEB_RSS_FEEDS.set(item.feedId, item);
+        });
+      }
+    }
+  } catch {
+  }
+}
+function saveGeneratedWebRssFeedsToDisk() {
+  try {
+    const list = Array.from(GENERATED_WEB_RSS_FEEDS.values());
+    import_fs2.default.writeFileSync(GENERATED_WEB_RSS_FEEDS_FILE, JSON.stringify(list, null, 2), "utf-8");
+  } catch {
+  }
+}
+loadGeneratedWebRssFeedsFromDisk();
 function isPrivateOrInternalUrl(targetUrl) {
   try {
     const parsed = new URL(targetUrl);
@@ -22046,6 +22269,7 @@ ${it.imageUrl ? `      <enclosure url="${escapeXmlChars(it.imageUrl)}" type="ima
       xmlContent,
       createdAt: Date.now()
     });
+    saveGeneratedWebRssFeedsToDisk();
     const host = req.get("host") || "localhost:8080";
     const proto = req.protocol || "http";
     const generatedFeedUrl = `${proto}://${host}/api/rss/web-feed?feedId=${feedId}`;
@@ -22109,6 +22333,7 @@ ${it.imageUrl ? `      <enclosure url="${escapeXmlChars(it.imageUrl)}" type="ima
             createdAt: Date.now()
           };
           GENERATED_WEB_RSS_FEEDS.set(feedId, record);
+          saveGeneratedWebRssFeedsToDisk();
         } catch {
         }
       }
@@ -22271,7 +22496,7 @@ async function executeRssSynchronization() {
               src.truncated = sourceTruncated;
               src.pagesFetched = pageIndex;
               fetchedPosts.push(...sourceItems);
-            } else if (firstPageFailed && (src.originalWebUrl || src.webUrl)) {
+            } else if ((firstPageFailed || sourceItems.length === 0) && (src.originalWebUrl || src.webUrl)) {
               const fallbackUrl = src.originalWebUrl || src.webUrl;
               const items = await fetchAndParseWebLink({ ...src, url: fallbackUrl });
               if (items.length > 0) {
@@ -23582,7 +23807,7 @@ function saveAdminBranding(data) {
     return false;
   }
 }
-app.get("/api/admin/branding", requireAdminMiddleware, (_req, res) => {
+app.get(["/api/branding", "/api/admin/branding"], (_req, res) => {
   const branding = loadAdminBranding();
   return res.json({ success: true, branding });
 });
@@ -23591,7 +23816,13 @@ app.post("/api/admin/branding", requireMasterAdminMiddleware, (req, res) => {
     if (!isAuthorizedMasterAdmin(req)) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u0915\u0947\u0935\u0932 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 (breakingnewswala.com@gmail.com) \u0939\u0940 \u092C\u094D\u0930\u093E\u0902\u0921\u093F\u0902\u0917 \u092A\u094D\u0930\u092C\u0902\u0927\u093F\u0924 \u0915\u0930 \u0938\u0915\u0924\u0947 \u0939\u0948\u0902\u0964" });
     }
-    const payload = req.body;
+    const payload = req.body || {};
+    if (payload.playStoreUrl !== void 0) {
+      const url = String(payload.playStoreUrl || "").trim();
+      if (url && !url.startsWith("https://play.google.com/")) {
+        return res.status(400).json({ error: "playStoreUrl Google Play Store \u0915\u093E \u092E\u093E\u0928\u094D\u092F \u0932\u093F\u0902\u0915 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F (https://play.google.com/...)\u0964" });
+      }
+    }
     const existing = loadAdminBranding();
     const updated = {
       ...existing,
@@ -24867,6 +25098,50 @@ app.delete("/api/dynamic-frames/:id", requireMasterAdminMiddleware, async (req, 
       }
     }
     return res.json({ success: true, message: "Frame deleted permanently with durable tombstone." });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/video-frames/bulk-delete", requireMasterAdminMiddleware, async (req, res) => {
+  try {
+    const { frameIds } = req.body || {};
+    if (!Array.isArray(frameIds) || frameIds.length === 0) {
+      return res.status(400).json({ error: "frameIds array is required" });
+    }
+    const deleted = [];
+    for (const frameId of frameIds) {
+      if (typeof frameId === "string" && frameId.trim()) {
+        const id = frameId.trim();
+        await deleteSingleDynamicFrameAsync(id);
+        deleted.push(id);
+      }
+    }
+    const newsTemplateFile = import_path2.default.join(process.cwd(), "news_template_configs.json");
+    if (import_fs2.default.existsSync(newsTemplateFile)) {
+      try {
+        const raw = JSON.parse(import_fs2.default.readFileSync(newsTemplateFile, "utf-8"));
+        let changed = false;
+        deleted.forEach((id) => {
+          if (raw[id]) {
+            delete raw[id];
+            changed = true;
+          }
+        });
+        if (changed) import_fs2.default.writeFileSync(newsTemplateFile, JSON.stringify(raw, null, 2), "utf-8");
+      } catch {
+      }
+    }
+    const actorEmail = req.user?.email || "breakingnewswala.com@gmail.com";
+    logAdminAudit(actorEmail, "VIDEO_FRAMES_BULK_DELETE", deleted.join(", "), { count: deleted.length, frameIds: deleted });
+    return res.json({ success: true, count: deleted.length, deleted });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/admin/video-frames/tombstones", async (_req, res) => {
+  try {
+    const tombstones = await getDurableFrameTombstones();
+    return res.json({ success: true, tombstones: Array.from(tombstones) });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }

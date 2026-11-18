@@ -83,7 +83,12 @@ runTest('Issue 2: getTabMeta returns exact 5 canonical titles', () => {
     assert.ok(code.includes("title: 'Video & Reels / AI News Maker'") || code.includes("title: 'Video & Reels'"), `${label}: Videos tab title must be 'Video & Reels / AI News Maker'`);
     assert.ok(code.includes("title: 'Newsroom / AI News Maker'") || code.includes("title: 'Newsroom'"), `${label}: Newsroom tab title must be 'Newsroom / AI News Maker'`);
     assert.ok(code.includes("title: 'Profile / AI News Maker'") || code.includes("title: 'Profile'"), `${label}: Profile tab title must be 'Profile / AI News Maker'`);
-    assert.ok(code.includes("title: 'Home / AI News Maker'") || code.includes("title: 'AI News Maker'"), `${label}: Home/Default tab title must be 'Home / AI News Maker'`);
+    assert.ok(
+      code.includes("title: 'AI News Maker - स्मार्ट डिजिटल न्यूज़ स्टूडियो'") ||
+      code.includes("title: 'Home / AI News Maker'") ||
+      code.includes("title: 'AI News Maker'"),
+      `${label}: Home/Default tab title must match canonical format`
+    );
 
     // Verify obsolete titles are removed from getTabMeta
     assert.ok(!code.includes("title: 'फोटो न्यूज़ स्टूडियो — AI News Maker'"), `${label}: Obsolete photo studio title removed`);
@@ -121,7 +126,11 @@ runTest('Issue 2: index.html has exact canonical title <title>AI News Maker</tit
   const studioIndex = fs.readFileSync(path.join(__dirname, '../web_studio/index.html'), 'utf8');
 
   for (const [label, code] of [['root index.html', rootIndex], ['web_studio index.html', studioIndex]]) {
-    assert.ok(code.includes('<title>AI News Maker</title>'), `${label}: title must be <title>AI News Maker</title>`);
+    assert.ok(
+      code.includes('<title>AI News Maker - स्मार्ट डिजिटल न्यूज़ स्टूडियो</title>') ||
+      code.includes('<title>AI News Maker</title>'),
+      `${label}: title must match canonical branding`
+    );
     assert.ok(!code.includes('<title>AI News Maker — स्मार्ट डिजिटल न्यूज़ स्टूडियो</title>'), `${label}: Obsolete title removed`);
   }
 });

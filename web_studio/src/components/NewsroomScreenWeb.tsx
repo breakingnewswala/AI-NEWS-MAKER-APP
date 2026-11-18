@@ -31,13 +31,19 @@ import {
   Video,
   Smartphone,
   Download,
+  Lock,
+  Copy,
+  Bookmark,
+  FileText,
+  Settings,
 } from 'lucide-react';
 import { InstallPwaModal } from './InstallPwaModal';
 import { WhatsAppLiveInbox } from './WhatsAppLiveInbox';
 import { NewsDraft } from '../types';
-import { getSavedDrafts, deleteDraft } from '../lib/draftsManager';
+import { getSavedDrafts, deleteDraft, saveDraft } from '../lib/draftsManager';
 import { ReporterUser } from './LoginModal';
-import { isEffectiveAdmin, unblockUserAuthoritative } from '../lib/userPlanManager';
+import { isEffectiveAdmin, unblockUserAuthoritative, getEffectiveUserTier, getUserSubscription } from '../lib/userPlanManager';
+import { getAuthHeaders } from '../lib/apiConfig';
 import {
   SupportInquiry,
   getSupportInquiries,
@@ -177,6 +183,161 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
   const [previewAttachment, setPreviewAttachment] = useState<{ url: string; name?: string } | null>(null);
 
   const isAdmin = isEffectiveAdmin(currentUser);
+
+  // Module 8: Master Admin configurable Play Store URL with fallback
+  const [playStoreUrl, setPlayStoreUrl] = useState<string>('https://play.google.com/store/apps/details?id=com.aistudio.ainewsmaker.hzwptx');
+  useEffect(() => {
+    fetch('/api/branding')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.branding?.playStoreUrl) {
+          setPlayStoreUrl(d.branding.playStoreUrl);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Module 6: Pro / VIP Access check
+  const userTier = getEffectiveUserTier(currentUser);
+  const userSub = getUserSubscription();
+  const isProOrVip =
+    isAdmin ||
+    userTier === 'professional' ||
+    userTier === 'ultra' ||
+    userSub.planName === 'PRO' ||
+    userSub.planName === 'VIP DESK' ||
+    (currentUser as any)?.plan === 'pro' ||
+    (currentUser as any)?.plan === 'vip' ||
+    (currentUser as any)?.role === 'admin' ||
+    (currentUser as any)?.role === 'superadmin';
+
+  // Module 6: AI Script Maker States & Handlers
+  const [scriptInputType, setScriptInputType] = useState<'प्रेस नोट' | 'रॉ स्क्रिप्ट' | 'अन्य समाचार सामग्री'>('प्रेस नोट');
+  const [rawScriptText, setRawScriptText] = useState('');
+  const [isGeneratingScript, setIsGeneratingScript] = useState(false);
+  const [scriptError, setScriptError] = useState<string | null>(null);
+  const [generatedScript, setGeneratedScript] = useState<{
+    headline: string;
+    subHeadline: string;
+    fullStory: string;
+  } | null>(null);
+  const [scriptCopiedField, setScriptCopiedField] = useState<'headline' | 'subheadline' | 'story' | 'all' | null>(null);
+  const [scriptSavedDraftSuccess, setScriptSavedDraftSuccess] = useState(false);
+
+  // Module 8: Master Admin Play Store URL Management State
+  const [isEditingPlayStoreUrl, setIsEditingPlayStoreUrl] = useState(false);
+  const [playStoreInput, setPlayStoreInput] = useState<string>('');
+  const [playStoreSaveMsg, setPlayStoreSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleSavePlayStoreUrl = async () => {
+    const trimmed = playStoreInput.trim();
+    if (trimmed && !trimmed.startsWith('https://play.google.com/')) {
+      setPlayStoreSaveMsg({
+        type: 'error',
+        text: 'Google Play Store का मान्य लिंक होना चाहिए (https://play.google.com/...)।',
+      });
+      return;
+    }
+    try {
+      const res = await fetch('/api/admin/branding', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ playStoreUrl: trimmed }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setPlayStoreUrl(trimmed);
+        setIsEditingPlayStoreUrl(false);
+        setPlayStoreSaveMsg({ type: 'success', text: '✅ Google Play Store App Link सुरक्षित हो गया!' });
+        setTimeout(() => setPlayStoreSaveMsg(null), 3000);
+      } else {
+        setPlayStoreSaveMsg({ type: 'error', text: data.error || 'सुरक्षित करने में त्रुटि आई' });
+      }
+    } catch {
+      setPlayStoreSaveMsg({ type: 'error', text: 'सर्वर से संपर्क नहीं हो सका' });
+    }
+  };
+
+  const handleGenerateScript = async () => {
+    if (!rawScriptText.trim() || rawScriptText.trim().length < 5) {
+      setScriptError('कृपया उपयुक्त प्रेस नोट या सामग्री दर्ज करें (न्यूनतम 5 अक्षर)।');
+      return;
+    }
+    setScriptError(null);
+    setIsGeneratingScript(true);
+    try {
+      const res = await fetch('/api/newsroom/script-maker', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          rawText: rawScriptText,
+          inputType: scriptInputType,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setScriptError(data.error || 'न्यूज़ स्टोरी तैयार करने में त्रुटि आई। कृपया पुनः प्रयास करें।');
+      } else {
+        setGeneratedScript({
+          headline: data.headline || '',
+          subHeadline: data.subHeadline || '',
+          fullStory: data.fullStory || '',
+        });
+        setScriptSavedDraftSuccess(false);
+      }
+    } catch (err: any) {
+      setScriptError(err?.message || 'सर्वर से संपर्क नहीं हो सका।');
+    } finally {
+      setIsGeneratingScript(false);
+    }
+  };
+
+  const handleCopyScriptField = (field: 'headline' | 'story' | 'all', text: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+    }
+    setScriptCopiedField(field);
+    setTimeout(() => setScriptCopiedField(null), 2000);
+  };
+
+  const handleSaveScriptAsDraft = () => {
+    if (!generatedScript) return;
+    try {
+      saveDraft(
+        {
+          templateId: 'graphic_001',
+          frameDesign: 'classic_breaking',
+          headline: generatedScript.headline,
+          formattedHeadline: generatedScript.headline,
+          highlightWords: [],
+          category: 'संपादकीय',
+          location: '',
+          date: 'आज की ताज़ा ख़बर',
+          summary: generatedScript.subHeadline
+            ? `${generatedScript.subHeadline}\n\n${generatedScript.fullStory}`
+            : generatedScript.fullStory,
+          photoUrl: '',
+        } as any,
+        {
+          title: generatedScript.headline,
+          anchorScript: generatedScript.fullStory,
+          tags: ['#AIScriptMaker', '#NewsStory', '#AINewsMaker'],
+        }
+      );
+      setDrafts(getSavedDrafts());
+      setProjectHistory(loadUserProjectHistory());
+      setScriptSavedDraftSuccess(true);
+      setTimeout(() => setScriptSavedDraftSuccess(false), 3000);
+    } catch (err) {
+      console.error('Failed to save script as draft:', err);
+    }
+  };
 
   // Load and sync drafts & inquiries on mount
   useEffect(() => {
@@ -468,85 +629,296 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
         </div>
       </div>
 
-      {/* 2. Top Studio Cards - Balanced & Theme-Aware (Part 4) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div
-          onClick={onNavigateToStudio}
-          className="bg-gradient-to-br from-amber-50/50 dark:from-amber-950/40 via-white dark:via-slate-900 to-slate-50 dark:to-slate-950 border-2 border-amber-400/60 dark:border-amber-500/50 hover:border-amber-500 rounded-3xl p-5 sm:p-6 transition-all hover:shadow-xl shadow-xs cursor-pointer group flex flex-col justify-between space-y-4 min-h-[170px]"
-        >
-          <div className="space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-500 dark:text-amber-400 group-hover:scale-110 transition-transform">
-              <ImageIcon className="w-6 h-6" />
+      {/* Module 6: AI News Script Maker (Press Note to News Story) */}
+      <div className="w-full bg-gradient-to-br from-slate-900 via-slate-900/95 to-slate-950 border border-amber-500/40 rounded-3xl p-5 sm:p-7 shadow-2xl space-y-5">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-600 flex items-center justify-center text-slate-950 shadow-md shrink-0">
+              <Sparkles className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors">
-                  नया न्यूज़ ग्राफ़िक बनाएँ
+                <h3 className="text-base sm:text-lg font-black text-white">
+                  AI न्यूज़ स्क्रिप्ट मेकर
                 </h3>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30">
-                  1080x1350 HD
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                  प्रेस नोट से न्यूज़ स्टोरी
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 font-bold border border-red-500/30">
+                  PRO & VIP DESK
                 </span>
               </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                5 संतुलित AI हेडलाइन्स, टीवी न्यूज़ फ्रेम्स, 1-4 फोटो लेआउट और चैनल हेडर-फुटर के साथ पेशेवर सोशल मीडिया न्यूज़ कार्ड बनाएं।
+              <p className="text-xs text-slate-400 mt-1">
+                प्रेस विज्ञप्ति, बयान या कच्ची स्क्रिप्ट से AI द्वारा मुख्य हेडलाइन, सब-हेडलाइन और संपूर्ण न्यूज़ स्टोरी तैयार करें
               </p>
             </div>
           </div>
-          <div className="flex items-center justify-between text-xs font-black text-amber-600 dark:text-amber-400 pt-2 border-t border-slate-200 dark:border-slate-800">
-            <span>ग्राफ़िक स्टूडियो खोलें ➔</span>
-            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">9 न्यूज़ फ्रेम्स उपलब्ध</span>
-          </div>
         </div>
 
-        <div
-          onClick={onNavigateToVideos}
-          className="bg-gradient-to-br from-red-50/50 dark:from-red-950/40 via-white dark:via-slate-900 to-slate-50 dark:to-slate-950 border-2 border-red-400/60 dark:border-red-500/50 hover:border-red-500 rounded-3xl p-5 sm:p-6 transition-all hover:shadow-xl shadow-xs cursor-pointer group flex flex-col justify-between space-y-4 min-h-[170px]"
-        >
-          <div className="space-y-3">
-            <div className="w-12 h-12 rounded-2xl bg-red-600/20 border border-red-500/40 flex items-center justify-center text-red-500 dark:text-red-400 group-hover:scale-110 transition-transform">
-              <Video className="w-6 h-6" />
+        {!isProOrVip ? (
+          /* Locked State for Basic / Free Users */
+          <div className="bg-amber-950/20 border border-amber-500/30 rounded-2xl p-6 text-center space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto text-amber-400">
+              <Lock className="w-6 h-6" />
             </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white group-hover:text-red-600 dark:group-hover:text-red-300 transition-colors">
-                  नई वीडियो बनाएँ
-                </h3>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-600/20 text-red-700 dark:text-red-300 font-bold border border-red-500/30">
-                  रील्स व टीवी
-                </span>
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
-                9:16 रील्स/शॉर्ट्स, 16:9 टीवी स्क्रीन या 1:1 स्क्वायर वीडियो न्यूज़ बनाएं। ब्रेकिंग टिकर, न्यूज़ बीट्स ऑडियो व लोगो जोड़ें।
+            <div className="space-y-1.5 max-w-lg mx-auto">
+              <h4 className="text-base font-black text-amber-300">
+                यह सुविधा Pro और VIP Desk उपयोगकर्ताओं के लिए उपलब्ध है।
+              </h4>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                AI न्यूज़ स्क्रिप्ट मेकर किसी भी प्रेस नोट या रॉ रिपोर्ट को केवल 5 सेकंड में टीवी व सोशल मीडिया के लिए व्यावसायिक हेडलाइन, सब-हेडलाइन और संपूर्ण 3-पैराग्राफ हिंदी न्यूज़ स्टोरी में बदल देता है।
               </p>
             </div>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  toggleSection('support');
+                  setTimeout(() => {
+                    const el = document.getElementById('new-support-ticket-form');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }, 150);
+                }}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 active:scale-95 text-slate-950 font-black text-xs sm:text-sm shadow-lg transition-all cursor-pointer inline-flex items-center gap-2"
+              >
+                <span>Pro या VIP में अपग्रेड करें ➔</span>
+              </button>
+            </div>
           </div>
-          <div className="flex items-center justify-between text-xs font-black text-red-600 dark:text-red-400 pt-2 border-t border-slate-200 dark:border-slate-800">
-            <span>वीडियो स्टूडियो खोलें ➔</span>
-            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-normal">मल्टी-रेश्यो रेंडरिंग</span>
+        ) : (
+          /* Unlocked Editor for Pro / VIP / Master Admin */
+          <div className="space-y-4">
+            {/* Input Type Selector */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-slate-300">सामग्री प्रकार:</span>
+              {(['प्रेस नोट', 'रॉ स्क्रिप्ट', 'अन्य समाचार सामग्री'] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => setScriptInputType(type)}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    scriptInputType === type
+                      ? 'bg-amber-500 text-slate-950 shadow-sm'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+
+            {/* Raw Text Textarea */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
+                <span>प्रेस नोट / रॉ टेक्स्ट / बयान दर्ज करें:</span>
+                <span className="text-[11px] text-slate-500">{rawScriptText.length} वर्ण</span>
+              </label>
+              <textarea
+                value={rawScriptText}
+                onChange={(e) => setRawScriptText(e.target.value)}
+                placeholder="यहाँ प्रेस नोट या अपनी रॉ न्यूज़ स्क्रिप्ट पेस्ट करें..."
+                rows={4}
+                className="w-full bg-slate-950/80 border border-slate-700 focus:border-amber-400 rounded-xl p-3 text-sm text-white placeholder-slate-500 focus:outline-none transition resize-y min-h-[100px]"
+              />
+            </div>
+
+            {/* Error message */}
+            {scriptError && (
+              <div className="p-3 bg-red-950/50 border border-red-500/40 rounded-xl text-xs text-red-200 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{scriptError}</span>
+              </div>
+            )}
+
+            {/* Generate Button */}
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                disabled={isGeneratingScript || !rawScriptText.trim()}
+                onClick={handleGenerateScript}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-black text-xs sm:text-sm shadow-lg transition-all cursor-pointer flex items-center gap-2"
+              >
+                {isGeneratingScript ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>AI स्टोरी तैयार कर रहा है...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    <span>न्यूज़ स्क्रिप्ट तैयार करें</span>
+                  </>
+                )}
+              </button>
+              {rawScriptText.trim() && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRawScriptText('');
+                    setGeneratedScript(null);
+                    setScriptError(null);
+                  }}
+                  className="text-xs text-slate-400 hover:text-slate-200 underline cursor-pointer"
+                >
+                  साफ़ करें
+                </button>
+              )}
+            </div>
+
+            {/* Generated Output Sections */}
+            {generatedScript && (
+              <div className="pt-4 border-t border-slate-800 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-black text-amber-400 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    तैयार न्यूज़ स्टोरी पैकेज (संपादनीय)
+                  </h4>
+                  <span className="text-[11px] text-slate-400">सीधे बॉक्स में एडिट कर सकते हैं</span>
+                </div>
+
+                {/* 1. Main Headline */}
+                <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black text-amber-300 uppercase tracking-wide">
+                      1. मुख्य हेडलाइन (Main Headline)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyScriptField('headline', generatedScript.headline)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {scriptCopiedField === 'headline' ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-emerald-400">कॉपी हो गया!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-amber-400" />
+                          <span>कॉपी हेडलाइन</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={generatedScript.headline}
+                    onChange={(e) => setGeneratedScript({ ...generatedScript, headline: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-xl px-3 py-2 text-sm sm:text-base font-bold text-white focus:outline-none transition"
+                  />
+                </div>
+
+                {/* 2. Sub-Headline */}
+                <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black text-amber-300 uppercase tracking-wide">
+                      2. सब-हेडलाइन (Sub-Headline)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyScriptField('subheadline', generatedScript.subHeadline)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {scriptCopiedField === 'subheadline' ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-emerald-400">कॉपी हो गया!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-amber-400" />
+                          <span>कॉपी सब-हेडलाइन</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={generatedScript.subHeadline}
+                    onChange={(e) => setGeneratedScript({ ...generatedScript, subHeadline: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-xl p-3 text-xs sm:text-sm text-slate-200 focus:outline-none transition resize-y"
+                  />
+                </div>
+
+                {/* 3. Full Story */}
+                <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-black text-amber-300 uppercase tracking-wide">
+                      3. पूरी न्यूज़ स्टोरी (Full Story)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyScriptField('story', generatedScript.fullStory)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {scriptCopiedField === 'story' ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-emerald-400">कॉपी हो गया!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-amber-400" />
+                          <span>पूरी स्टोरी कॉपी करें</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <textarea
+                    rows={6}
+                    value={generatedScript.fullStory}
+                    onChange={(e) => setGeneratedScript({ ...generatedScript, fullStory: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-xl p-3 text-xs sm:text-sm leading-relaxed text-slate-200 focus:outline-none transition resize-y"
+                  />
+                </div>
+
+                {/* Action Bar */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleCopyScriptField(
+                          'all',
+                          `${generatedScript.headline}\n\n${generatedScript.subHeadline ? `${generatedScript.subHeadline}\n\n` : ''}${generatedScript.fullStory}`
+                        )
+                      }
+                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {scriptCopiedField === 'all' ? (
+                        <>
+                          <Check className="w-4 h-4 text-emerald-400" />
+                          <span className="text-emerald-400">सभी कॉपी हो गया!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4 text-amber-400" />
+                          <span>सभी कॉपी करें</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveScriptAsDraft}
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-xs font-bold text-white shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Bookmark className="w-4 h-4" />
+                      <span>ड्राफ्ट के रूप में सहेजें</span>
+                    </button>
+                  </div>
+
+                  {scriptSavedDraftSuccess && (
+                    <div className="text-xs font-bold text-emerald-400 flex items-center gap-1 animate-in fade-in duration-200">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>ड्राफ्ट सफलतापूर्वक सहेजा गया! नीचे ड्राफ्ट्स में देखें।</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      </div>
-
-      {/* Mobile App Download Box (Part 3: Horizontal Box, Left text only, Right touch-friendly button) */}
-      <div className="bg-gradient-to-r from-amber-500/10 via-slate-900 to-amber-500/10 border border-amber-500/30 hover:border-amber-400/60 rounded-2xl px-4 py-3 shadow-md transition-all flex flex-row items-center justify-between gap-3 text-left">
-        {/* Left Side: Strictly Text Only (No icon, No logo per Part 3) */}
-        <div className="min-w-0 flex-1">
-          <h4 className="text-xs sm:text-sm font-black text-amber-400 tracking-wide uppercase truncate">
-            AI NEWS MAKER
-          </h4>
-          <p className="text-[11px] sm:text-xs font-medium text-slate-300 mt-0.5 line-clamp-1">
-            अपना न्यूज़ स्टूडियो मोबाइल पर इंस्टॉल करें
-          </p>
-        </div>
-
-        {/* Right Side: Clear Touch-Friendly Install Button */}
-        <button
-          type="button"
-          onClick={() => setIsInstallModalOpen(true)}
-          className="shrink-0 px-3.5 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 active:scale-95 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer flex items-center justify-center whitespace-nowrap min-h-[38px]"
-        >
-          इंस्टॉल करें
-        </button>
+        )}
       </div>
 
       {/* 3. The Clean Accordion Sections: WhatsApp Live Inbox (Master Admin) -> Support -> History -> Drafts -> ePaper */}
@@ -1418,6 +1790,107 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
             </div>
           )}
         </div>
+      </div>
+
+      {/* Module 8: AI News Maker Mobile App Section (Repositioned to bottom after E-Paper) */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 border border-amber-500/30 hover:border-amber-400/50 rounded-2xl p-4 sm:p-6 shadow-xl transition-all space-y-4 text-left">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+              <Smartphone className="w-5 h-5 sm:w-6 sm:h-6" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="text-sm sm:text-base font-black text-amber-400 tracking-wide uppercase">
+                  AI NEWS MAKER APP
+                </h4>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                  Android & PWA
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                अपने मोबाइल पर संपूर्ण डिजिटल न्यूज़ स्टूडियो इंस्टॉल करें और तुरंत न्यूज़ स्टोरी, कार्ड व वीडियो बनाएं।
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto justify-end flex-wrap">
+            {/* PWA Install Button */}
+            <button
+              type="button"
+              onClick={() => setIsInstallModalOpen(true)}
+              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 active:scale-95 text-slate-950 font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer flex items-center gap-2"
+            >
+              <Download className="w-4 h-4" />
+              <span>PWA इंस्टॉल करें</span>
+            </button>
+
+            {/* Google Play Store Button */}
+            {playStoreUrl && playStoreUrl.startsWith('https://play.google.com/') && (
+              <a
+                href={playStoreUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs sm:text-sm shadow-md transition-all cursor-pointer flex items-center gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                <span>Google Play Store</span>
+              </a>
+            )}
+
+            {/* Master Admin Manage Link Button */}
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setPlayStoreInput(playStoreUrl);
+                  setIsEditingPlayStoreUrl(!isEditingPlayStoreUrl);
+                }}
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold border border-amber-500/40 flex items-center gap-1.5 cursor-pointer transition"
+                title="Google Play Store App Link प्रबंधित करें"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                <span>{isEditingPlayStoreUrl ? 'बंद करें' : 'Play Store लिंक'}</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Master Admin Play Store URL Setting Panel */}
+        {isAdmin && isEditingPlayStoreUrl && (
+          <div className="pt-3 border-t border-slate-800/80 bg-slate-950/80 rounded-xl p-4 space-y-3 animate-in fade-in duration-150">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <label className="text-xs font-black text-amber-300 flex items-center gap-2">
+                <span>Google Play Store App Link</span>
+                <span className="text-[10px] text-slate-400 font-normal">(केवल मास्टर एडमिन)</span>
+              </label>
+              {playStoreSaveMsg && (
+                <span className={`text-xs font-bold ${playStoreSaveMsg.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {playStoreSaveMsg.text}
+                </span>
+              )}
+            </div>
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+              <input
+                type="url"
+                value={playStoreInput}
+                onChange={(e) => setPlayStoreInput(e.target.value)}
+                placeholder="https://play.google.com/store/apps/details?id=com.aistudio.ainewsmaker.hzwptx"
+                className="flex-1 w-full bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none transition font-mono"
+              />
+              <button
+                type="button"
+                onClick={handleSavePlayStoreUrl}
+                className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl shadow cursor-pointer transition shrink-0"
+              >
+                सेव करें
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              नोट: केवल https://play.google.com/ से शुरू होने वाला आधिकारिक Google Play Store लिंक ही मान्य होगा।
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Full Size In-App Attachment Preview Modal */}
