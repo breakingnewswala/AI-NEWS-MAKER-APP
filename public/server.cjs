@@ -19400,7 +19400,7 @@ function runThreeDayFeedRetentionCleanup() {
   }
 }
 setInterval(runThreeDayFeedRetentionCleanup, 30 * 60 * 1e3);
-app.get("/api/admin/home-feed-retention", (_req, res) => {
+app.get(["/api/admin/home-feed-retention", "/api/home-feed-retention"], (_req, res) => {
   const config = loadHomeFeedRetentionConfig();
   return res.json({ success: true, ...config });
 });
@@ -21897,7 +21897,7 @@ async function parseRssItemsFromXml(xmlText, source, knownFilter, maxItems = MAX
     items = syntheticItems;
   }
   let encounteredOlderThanCutoff = false;
-  const twelveHoursAgo = Date.now() - 12 * 3600 * 1e3;
+  const seventyTwoHoursAgo = Date.now() - 72 * 3600 * 1e3;
   const candidateXmls = items.slice(0, maxItems);
   const parsedPromises = candidateXmls.map(async (itemXml) => {
     try {
@@ -21915,7 +21915,7 @@ async function parseRssItemsFromXml(xmlText, source, knownFilter, maxItems = MAX
         const parsedTime = Date.parse(pubDateStr);
         if (!isNaN(parsedTime)) timestamp = parsedTime;
       }
-      if (timestamp < twelveHoursAgo) {
+      if (timestamp < seventyTwoHoursAgo) {
         encounteredOlderThanCutoff = true;
         return null;
       }
@@ -21927,8 +21927,8 @@ async function parseRssItemsFromXml(xmlText, source, knownFilter, maxItems = MAX
       }
       if (knownFilter) {
         const normLink = (link || "").trim().toLowerCase();
-        const fallbackTitleKey = cleanAndCraftHindiHeadline(rawTitle, rawDesc).title.trim().toLowerCase().slice(0, 40);
-        const rawTitleKey = rawTitle.trim().toLowerCase().slice(0, 40);
+        const fallbackTitleKey = cleanAndCraftHindiHeadline(rawTitle, rawDesc).title.trim().toLowerCase();
+        const rawTitleKey = rawTitle.trim().toLowerCase();
         if (normLink && knownFilter.existingUrls.has(normLink) || knownFilter.existingTitles.has(rawTitleKey) || knownFilter.existingTitles.has(fallbackTitleKey)) {
           const dupCatName = source.category || "\u0926\u0947\u0936";
           const dupCatKey = resolveCategoryKeyFromName(dupCatName, link || source.url);
@@ -22623,7 +22623,7 @@ ${it.imageUrl ? `      <enclosure url="${escapeXmlChars(it.imageUrl)}" type="ima
 });
 var isRssSyncRunning = false;
 var lastRssSyncResult = null;
-var RSS_SYNC_INTERVAL_MS = 15 * 60 * 1e3;
+var RSS_SYNC_INTERVAL_MS = 10 * 60 * 1e3;
 async function executeRssSynchronization() {
   if (isRssSyncRunning) {
     console.log("[RSS Auto-Sync] Job already running, skipping overlapping cycle.");
@@ -22674,7 +22674,7 @@ async function executeRssSynchronization() {
     }
     const preloadedPosts = loadNewsDatabase();
     const preloadedUrls = new Set(preloadedPosts.filter((p) => p.sourceUrl).map((p) => p.sourceUrl.trim().toLowerCase()));
-    const preloadedTitles = new Set(preloadedPosts.map((p) => p.title.trim().toLowerCase().slice(0, 40)));
+    const preloadedTitles = new Set(preloadedPosts.map((p) => p.title.trim().toLowerCase()));
     const preloadedDeletedIds = loadDeletedNewsIds();
     const knownFilter = {
       existingUrls: preloadedUrls,
@@ -22817,7 +22817,7 @@ async function executeRssSynchronization() {
       let existingPosts = loadNewsDatabase();
       const existingIds = new Set(existingPosts.map((p) => p.id));
       const existingUrls = new Set(existingPosts.filter((p) => p.sourceUrl).map((p) => p.sourceUrl.trim().toLowerCase()));
-      const existingTitles = new Set(existingPosts.map((p) => p.title.trim().toLowerCase().slice(0, 40)));
+      const existingTitles = new Set(existingPosts.map((p) => p.title.trim().toLowerCase()));
       const deletedNewsIds = loadDeletedNewsIds();
       const editorialDb = loadApprovedEditorialDatabase();
       const trulyNew = [];
@@ -22837,7 +22837,7 @@ async function executeRssSynchronization() {
         p.editorialApproved = false;
         p.visibility = "draft";
         p.pendingCreatedAt = Date.now();
-        const titleKey = p.title.trim().toLowerCase().slice(0, 40);
+        const titleKey = p.title.trim().toLowerCase();
         const normUrl = (p.sourceUrl || "").trim().toLowerCase();
         const isDuplicate = existingIds.has(p.id) || normUrl && existingUrls.has(normUrl) || existingTitles.has(titleKey);
         if (!isDuplicate) {
@@ -22850,7 +22850,7 @@ async function executeRssSynchronization() {
         } else {
           skippedDuplicatesCount++;
           const match = existingPosts.find(
-            (ep) => ep.id === p.id || normUrl && ep.sourceUrl && ep.sourceUrl.trim().toLowerCase() === normUrl || ep.title.trim().toLowerCase().slice(0, 40) === titleKey
+            (ep) => ep.id === p.id || normUrl && ep.sourceUrl && ep.sourceUrl.trim().toLowerCase() === normUrl || ep.title.trim().toLowerCase() === titleKey
           );
           if (match) {
             match.sourceFeedUrl = p.sourceFeedUrl || match.sourceFeedUrl;
@@ -22979,7 +22979,7 @@ async function executeWebScrapeSynchronization() {
       let existingPosts = loadNewsDatabase();
       const existingIds = new Set(existingPosts.map((p) => p.id));
       const existingUrls = new Set(existingPosts.filter((p) => p.sourceUrl).map((p) => p.sourceUrl.trim().toLowerCase()));
-      const existingTitles = new Set(existingPosts.map((p) => p.title.trim().toLowerCase().slice(0, 40)));
+      const existingTitles = new Set(existingPosts.map((p) => p.title.trim().toLowerCase()));
       const deletedNewsIds = loadDeletedNewsIds();
       const trulyNew = [];
       for (const p of fetchedPosts) {
@@ -22997,7 +22997,7 @@ async function executeWebScrapeSynchronization() {
         p.editorialApproved = false;
         p.visibility = "draft";
         p.pendingCreatedAt = Date.now();
-        const titleKey = p.title.trim().toLowerCase().slice(0, 40);
+        const titleKey = p.title.trim().toLowerCase();
         const normUrl = (p.sourceUrl || "").trim().toLowerCase();
         const isDuplicate = existingIds.has(p.id) || normUrl && existingUrls.has(normUrl) || existingTitles.has(titleKey);
         if (!isDuplicate) {
@@ -23069,7 +23069,7 @@ app.get("/api/admin/rss-sync-status", requireAdminMiddleware, (_req, res) => {
     success: true,
     lastSyncResult: lastRssSyncResult,
     isSyncRunning: isRssSyncRunning,
-    intervalMinutes: 15,
+    intervalMinutes: 10,
     nextScheduledSync: (lastRssSyncResult?.timestamp || Date.now()) + RSS_SYNC_INTERVAL_MS
   });
 });
@@ -23183,7 +23183,7 @@ app.get("/api/scheduler/rss-sync", (_req, res) => {
     telemetry: {
       ...schedulerSyncTelemetry,
       nextScheduledSyncAt: schedulerSyncTelemetry.nextScheduledSyncAt || Date.now() + RSS_SYNC_INTERVAL_MS,
-      intervalMinutes: 15
+      intervalMinutes: 10
     }
   });
 });
@@ -38228,7 +38228,7 @@ async function startServer() {
                   }
                   ogImage = cleanThumb;
                 } else {
-                  ogImage = `${cleanBase}/assets/breaking_news_wala_logo.png`;
+                  ogImage = `${cleanBase}/assets/ai_news_maker_logo.png?v=2`;
                 }
                 ogType = "article";
                 const isoDate = found.timestamp ? new Date(found.timestamp).toISOString() : (/* @__PURE__ */ new Date()).toISOString();

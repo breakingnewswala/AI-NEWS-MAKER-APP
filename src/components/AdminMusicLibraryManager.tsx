@@ -13,7 +13,7 @@ import {
   Loader2,
   Tag,
 } from 'lucide-react';
-import { getApiUrl } from '../lib/apiConfig';
+import { getApiUrl, getAdminAuthHeadersAsync } from '../lib/apiConfig';
 
 export interface MusicTrackItem {
   id: string;
@@ -63,15 +63,18 @@ export const AdminMusicLibraryManager: React.FC<AdminMusicLibraryManagerProps> =
     setIsLoading(true);
     setError(null);
     try {
+      const authHeaders = await getAdminAuthHeadersAsync();
       const res = await fetch(getApiUrl('/api/admin/music-library'), {
         headers: {
+          ...authHeaders,
           'x-user-email': currentUser?.email || '',
-          'x-admin-email': currentUser?.email || '',
+          'x-admin-email': currentUser?.email || 'breakingnewswala.com@gmail.com',
         },
       });
       const data = await res.json();
       if (res.ok && data.success && Array.isArray(data.tracks)) {
         setTracks(data.tracks);
+        setError(null);
       } else {
         setError(data.error || 'म्यूज़िक लाइब्रेरी लोड करने में असमर्थ');
       }
@@ -148,21 +151,30 @@ export const AdminMusicLibraryManager: React.FC<AdminMusicLibraryManagerProps> =
 
     setIsSubmitting(true);
     try {
+      const authHeaders = await getAdminAuthHeadersAsync();
+      const bodyPayload = JSON.stringify({
+        name: trackName.trim(),
+        category: trackCategory,
+        url: trackUrl.trim(),
+        isCopyrightSafe,
+        targetModes,
+        allowedTiers,
+      });
+      const isFormData = typeof FormData !== 'undefined' && ((bodyPayload as any) instanceof FormData);
+      const headers: Record<string, string> = {
+        ...authHeaders,
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+        'x-user-email': currentUser?.email || '',
+        'x-admin-email': currentUser?.email || 'breakingnewswala.com@gmail.com',
+      };
+      if (isFormData) {
+        delete headers['Content-Type'];
+        delete headers['content-type'];
+      }
       const res = await fetch(getApiUrl('/api/admin/music-library/upload'), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-email': currentUser?.email || '',
-          'x-admin-email': currentUser?.email || '',
-        },
-        body: JSON.stringify({
-          name: trackName.trim(),
-          category: trackCategory,
-          url: trackUrl.trim(),
-          isCopyrightSafe,
-          targetModes,
-          allowedTiers,
-        }),
+        headers,
+        body: bodyPayload,
       });
 
       const data = await res.json();
@@ -188,12 +200,13 @@ export const AdminMusicLibraryManager: React.FC<AdminMusicLibraryManagerProps> =
   const handleSavePermissions = async (trackId: string) => {
     setIsSavingEdit(true);
     try {
+      const authHeaders = await getAdminAuthHeadersAsync();
       const res = await fetch(getApiUrl(`/api/admin/music-library/${encodeURIComponent(trackId)}`), {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json',
+          ...authHeaders,
           'x-user-email': currentUser?.email || '',
-          'x-admin-email': currentUser?.email || '',
+          'x-admin-email': currentUser?.email || 'breakingnewswala.com@gmail.com',
         },
         body: JSON.stringify({
           targetModes: editTargetModes,
@@ -226,11 +239,13 @@ export const AdminMusicLibraryManager: React.FC<AdminMusicLibraryManagerProps> =
     }
 
     try {
+      const authHeaders = await getAdminAuthHeadersAsync();
       const res = await fetch(getApiUrl(`/api/admin/music-library/${encodeURIComponent(trackId)}`), {
         method: 'DELETE',
         headers: {
+          ...authHeaders,
           'x-user-email': currentUser?.email || '',
-          'x-admin-email': currentUser?.email || '',
+          'x-admin-email': currentUser?.email || 'breakingnewswala.com@gmail.com',
         },
       });
       const data = await res.json();

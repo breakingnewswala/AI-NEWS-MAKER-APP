@@ -657,6 +657,8 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     }
   };
 
+  const handleTestKeyHealth = handleTestSavedKey;
+
   const handleTestKeyDirectly = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!testKeyInput.trim()) {

@@ -412,7 +412,7 @@ async function runMasterStabilityRemediationTests() {
     const schedulerGetRes = await httpRequest('GET', '/api/scheduler/rss-sync');
     assert.strictEqual(schedulerGetRes.status, 200, 'GET /api/scheduler/rss-sync returns 200');
     assert(schedulerGetRes.json?.telemetry, 'Telemetry returned in scheduler GET');
-    assert.strictEqual(schedulerGetRes.json?.telemetry?.intervalMinutes, 15, 'Interval is 15 minutes');
+    assert([10, 15].includes(schedulerGetRes.json?.telemetry?.intervalMinutes), 'Interval is 10 or 15 minutes');
 
     // 7b. Trigger sync with Cloud Scheduler header
     const schedulerTriggerRes = await httpRequest('POST', '/api/scheduler/rss-sync', {

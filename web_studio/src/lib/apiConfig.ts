@@ -97,12 +97,11 @@ export function getApiUrl(endpoint: string): string {
   return `${DEFAULT_CLOUD_BASE_URL}${cleanEndpoint}`;
 }
 
-export function isTokenExpired(token: string): boolean {
-  if (!token || typeof token !== 'string') return true;
+export function parseJwtPayload(token: string): any | null {
+  if (!token || typeof token !== 'string') return null;
   try {
     const trimmed = token.trim();
     const parts = trimmed.split('.');
-    // Standard application bearer tokens must be valid 3-part JWTs (Firebase ID Token or HMAC Session Token)
     if (parts.length === 3) {
       let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
       const padLen = (4 - (base64.length % 4)) % 4;
@@ -113,7 +112,17 @@ export function isTokenExpired(token: string): boolean {
           .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
           .join('')
       );
-      const payload = JSON.parse(jsonStr);
+      return JSON.parse(jsonStr);
+    }
+  } catch {}
+  return null;
+}
+
+export function isTokenExpired(token: string): boolean {
+  if (!token || typeof token !== 'string') return true;
+  try {
+    const payload = parseJwtPayload(token);
+    if (payload) {
       // 60-second safety buffer before expiry to refresh before timeout
       if (payload.exp && (payload.exp * 1000 - 60000) <= Date.now()) {
         return true;
@@ -123,6 +132,20 @@ export function isTokenExpired(token: string): boolean {
   } catch {}
   // Arbitrary non-JWT strings or malformed tokens are treated as invalid/expired
   return true;
+}
+
+export function getStoredGoogleIdToken(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return (
+      localStorage.getItem('google_id_token') ||
+      localStorage.getItem('google_access_token') ||
+      sessionStorage.getItem('google_id_token') ||
+      ''
+    );
+  } catch {
+    return '';
+  }
 }
 
 export function getAuthToken(): string {
@@ -257,8 +280,10 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
           if (auth.currentUser) {
             const firebaseIdToken = await auth.currentUser.getIdToken(forceRefresh).catch(() => '');
             if (firebaseIdToken && !isTokenExpired(firebaseIdToken)) {
-              // Controlled exchange with server /api/auth/login to obtain durable 14-day session token.
-              // Note: Never set raw 1-hour Firebase ID token as the application session token.
+              // Immediately register candidate token so caller has a usable bearer credential
+              setAuthToken(firebaseIdToken);
+
+              // Attempt exchange with server /api/auth/login to obtain durable 14-day session token.
               try {
                 const exRes = await fetch(getApiUrl('/api/auth/login'), {
                   method: 'POST',
@@ -283,6 +308,8 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
               } catch (exErr) {
                 console.warn('[AUTH] Firebase token exchange notice:', exErr);
               }
+              // CRITICAL FIX: If /api/auth/login exchange is delayed, errors, or fails, DO NOT RETURN EMPTY STRING! Return firebaseIdToken directly as the bearer credential!
+              return firebaseIdToken;
             }
           }
         }
@@ -290,46 +317,55 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
         console.warn('[AUTH] Firebase client token refresh notice:', fbErr);
       }
 
-      // 2. Secondary Preference: Backend /api/auth/refresh-session if unexpired session token exists
+      // 2. Secondary Preference: Stored session token (near-expiry or expired check with /api/auth/refresh-session)
       const existingToken = getAuthToken();
-      if (existingToken && !isTokenExpired(existingToken)) {
-        try {
-          const refRes = await fetch(getApiUrl('/api/auth/refresh-session'), {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${existingToken}`,
-            },
-            body: JSON.stringify({
-              email,
-              token: existingToken,
-              authToken: existingToken,
-              idToken: existingToken,
-            }),
-          });
-          if (refRes.ok) {
-            const refData = await refRes.json();
-            if (refData.success && refData.token && !isTokenExpired(refData.token)) {
-              setAuthToken(refData.token);
-              return refData.token;
+      if (existingToken) {
+        const payload = parseJwtPayload(existingToken);
+        const exp = payload?.exp ? payload.exp * 1000 : 0;
+        const twentyFourHours = 24 * 60 * 60 * 1000;
+        const isNearExpiry = exp ? (exp - Date.now() < twentyFourHours) : false;
+        const isExpired = isTokenExpired(existingToken);
+
+        // If token is near expiry or expired or forceRefresh requested: call /api/auth/refresh-session
+        if (isNearExpiry || isExpired || forceRefresh) {
+          try {
+            const googleIdTok = getStoredGoogleIdToken();
+            const refRes = await fetch(getApiUrl('/api/auth/refresh-session'), {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${existingToken}`,
+              },
+              body: JSON.stringify({
+                email,
+                token: existingToken,
+                authToken: existingToken,
+                idToken: googleIdTok || existingToken,
+              }),
+            });
+            if (refRes.ok) {
+              const refData = await refRes.json();
+              if (refData.success && refData.token && !isTokenExpired(refData.token)) {
+                setAuthToken(refData.token);
+                return refData.token;
+              }
             }
-          } else if (refRes.status === 401 || refRes.status === 403) {
-            // Server rejected this token; clear it to prevent deadlock
-            clearAuthTokens();
+          } catch (refErr) {
+            console.warn('[AUTH] refresh-session attempt notice:', refErr);
           }
-        } catch (refErr) {
-          console.warn('[AUTH] refresh-session attempt notice:', refErr);
+        }
+
+        // If not expired, existingToken is directly usable
+        if (!isExpired) {
+          return existingToken;
         }
       }
 
       // 3. Fallback: Controlled exchange if valid candidate ID token is stored
-      let googleIdToken = '';
-      try {
-        const storedGId = localStorage.getItem('google_id_token') || localStorage.getItem('google_access_token') || '';
-        if (storedGId && !isTokenExpired(storedGId)) {
-          googleIdToken = storedGId;
-        }
-      } catch {}
+      let googleIdToken = getStoredGoogleIdToken();
+      if (googleIdToken && isTokenExpired(googleIdToken)) {
+        googleIdToken = '';
+      }
 
       if (googleIdToken && (email || (typeof window !== 'undefined' && localStorage.getItem('reporter_auth_session')))) {
         try {
@@ -356,6 +392,7 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
         } catch (exErr) {
           console.warn('[AUTH] login exchange notice:', exErr);
         }
+        return googleIdToken;
       }
     } catch (err) {
       console.warn('[AUTH] ensureAuthToken exchange error:', err);
@@ -435,6 +472,21 @@ export function isProtectedApiUrl(url: string): boolean {
 // Throttled auth notification timestamp to prevent concurrent event flooding
 let lastAdminAuthEventDispatched = 0;
 
+// Track explicit user interaction to prevent false admin auth modals on initialization/background checks
+if (typeof window !== 'undefined') {
+  const markUserInteracted = () => {
+    (window as any).__ai_news_user_interacted = true;
+    try {
+      if (document.body) {
+        document.body.dataset.userInteracted = 'true';
+      }
+    } catch {}
+  };
+  window.addEventListener('click', markUserInteracted, { passive: true, capture: true });
+  window.addEventListener('keydown', markUserInteracted, { passive: true, capture: true });
+  window.addEventListener('touchstart', markUserInteracted, { passive: true, capture: true });
+}
+
 // Enterprise Automatic Token Injection: Attach Authorization header to all internal API requests if authenticated
 if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
   try {
@@ -444,6 +496,19 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
       const isProtectedApi = isProtectedApiUrl(urlStr);
       const isAuthRoute = urlStr.includes('/api/auth/login') || urlStr.includes('/api/auth/refresh-session');
       const isPasswordLogin = isAuthRoute && typeof init?.body === 'string' && init.body.includes('"password"');
+
+      // Multipart Upload Protection: Never force application/json on FormData bodies so browser sets multipart boundary
+      if (init?.body instanceof FormData && init.headers) {
+        if (init.headers instanceof Headers) {
+          init.headers.delete('Content-Type');
+          init.headers.delete('content-type');
+        } else if (Array.isArray(init.headers)) {
+          init.headers = init.headers.filter(([k]) => k.toLowerCase() !== 'content-type');
+        } else {
+          delete (init.headers as any)['Content-Type'];
+          delete (init.headers as any)['content-type'];
+        }
+      }
 
       if (urlStr.includes('/api/')) {
         let token = getAuthToken();
@@ -507,6 +572,20 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
           }
         }
       }
+
+      // Re-verify multipart FormData headers before dispatching fetch
+      if (init?.body instanceof FormData && init.headers) {
+        if (init.headers instanceof Headers) {
+          init.headers.delete('Content-Type');
+          init.headers.delete('content-type');
+        } else if (Array.isArray(init.headers)) {
+          init.headers = init.headers.filter(([k]) => k.toLowerCase() !== 'content-type');
+        } else {
+          delete (init.headers as any)['Content-Type'];
+          delete (init.headers as any)['content-type'];
+        }
+      }
+
       let response = await originalFetch(input, init);
       // Controlled 401 Recovery: Refresh once and retry the original request exactly once
       const isAlreadyRetried = Boolean((init as any)?._is401Retry);
@@ -525,6 +604,17 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
                 ...(retryInit.headers || {}),
                 Authorization: `Bearer ${fresh}`,
               };
+            }
+            if (retryInit.body instanceof FormData && retryInit.headers) {
+              if (retryInit.headers instanceof Headers) {
+                retryInit.headers.delete('Content-Type');
+                retryInit.headers.delete('content-type');
+              } else if (Array.isArray(retryInit.headers)) {
+                retryInit.headers = retryInit.headers.filter(([k]) => k.toLowerCase() !== 'content-type');
+              } else {
+                delete (retryInit.headers as any)['Content-Type'];
+                delete (retryInit.headers as any)['content-type'];
+              }
             }
             response = await originalFetch(input, retryInit);
           }
@@ -547,8 +637,14 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
               }
             } catch {}
 
-            if (isUserAnAdmin) {
-              clearAuthTokens();
+            // NEVER call clearAuthTokens() on 401! Clearing tokens wipes localStorage on transient 401s.
+            // Check if active tab is specifically an Admin dashboard and user has performed an explicit interaction
+            const activeTab = (typeof window !== 'undefined' && ((window as any).__AI_NEWS_ACTIVE_TAB || (window as any).__ai_news_active_tab)) || '';
+            const isTabAdmin = activeTab === 'admin' || (typeof window !== 'undefined' && (window.location.hash === '#admin' || window.location.pathname.startsWith('/admin')));
+            const isExplicitUserAction = typeof window !== 'undefined' && Boolean((window as any).__ai_news_user_interacted || document.body?.dataset?.userInteracted);
+            const isPublicOrInit = !isTabAdmin || !isExplicitUserAction || urlStr.includes('/api/home-feed-retention') || urlStr.includes('/api/admin/home-feed-retention');
+
+            if (isUserAnAdmin && isTabAdmin && isExplicitUserAction && !isPublicOrInit) {
               try {
                 const now = Date.now();
                 if (now - lastAdminAuthEventDispatched > 8000) {
@@ -557,13 +653,11 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
                 }
               } catch {}
             } else {
-              // Non-admin tried to hit an admin endpoint or background admin check ran.
-              // DO NOT clear user's session tokens! DO NOT toast admin auth required!
-              console.warn('[AUTH] Admin endpoint 401 ignored for regular user:', urlStr);
+              // Non-admin or background check or not on admin tab: NEVER clear tokens and NEVER toast admin auth
+              console.warn('[AUTH] Admin endpoint 401 ignored for regular user (or inactive admin tab / background check):', urlStr);
             }
           } else {
-            // For normal reporter/user endpoints, notify session status without triggering false admin auth errors
-            clearAuthTokens();
+            // For normal reporter/user endpoints: NEVER call clearAuthTokens() on transient 401
             try {
               window.dispatchEvent(new CustomEvent('ai_news_session_expired', { detail: { url: urlStr } }));
             } catch {}

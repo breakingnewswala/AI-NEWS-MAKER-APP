@@ -5429,8 +5429,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       <Rss className="w-5 h-5" />
                     </div>
                     <div>
-                      <h3 className="text-base font-black text-white tracking-wide">
-                        RSS Links Dashboard
+                      <h3 className="text-base font-black text-white tracking-wide flex items-center gap-2 flex-wrap">
+                        <span>RSS Links Dashboard</span>
+                        <span className="px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 rounded text-[11px] font-bold">
+                          RSS Auto Sync: प्रत्येक 10 मिनट
+                        </span>
                       </h3>
                       <p className="text-xs text-slate-300">
                         विभिन्न न्यूज़ चैनलों की लाइव RSS 2.0 XML Feeds जोड़ें। लाइव फेच सीधे प्रोडक्शन सर्वर से वास्तविक समाचार लाएगा।

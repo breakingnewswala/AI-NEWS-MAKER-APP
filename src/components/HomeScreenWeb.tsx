@@ -80,7 +80,7 @@ import {
 import { isNewsGraphicCreated } from '../lib/newsGraphicTracker';
 import { FeaturePromotionCard, PromoLayoutRatio } from './FeaturePromotionCard';
 import { ReporterUser } from './LoginModal';
-import { getApiUrl, getAuthHeaders, ensureAuthToken, getAuthToken, getAdminAuthHeaders } from '../lib/apiConfig';
+import { getApiUrl, getAuthHeaders, ensureAuthToken, getAuthToken, getAdminAuthHeaders, getAdminAuthHeadersAsync } from '../lib/apiConfig';
 import { showAppNotification, showAppSuccess, showAppError, showAppWarning, showAppConfirm } from '../lib/notificationService';
 import {
   getActiveRssNewsPosts,
@@ -382,7 +382,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   // Module 10: 3-Day Feed Retention Master Admin State
   const [retentionConfig, setRetentionConfig] = useState<{ enabled: boolean; durationHours: number }>({ enabled: true, durationHours: 72 });
   useEffect(() => {
-    fetch(getApiUrl('/api/admin/home-feed-retention'))
+    fetch(getApiUrl('/api/home-feed-retention'))
       .then((res) => res.json())
       .then((data) => {
         if (data && typeof data.enabled === 'boolean') {
@@ -395,11 +395,13 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const handleToggleRetention = async () => {
     const next = !retentionConfig.enabled;
     try {
+      const authHeaders = await getAdminAuthHeadersAsync().catch(() => ({}));
       const token = getAuthToken();
       const res = await fetch(getApiUrl('/api/admin/home-feed-retention'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...authHeaders,
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ enabled: next }),

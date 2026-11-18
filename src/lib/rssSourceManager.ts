@@ -311,15 +311,37 @@ export function deleteAdminRssSource(id: string): AdminRssSource[] {
   addDeletedSourceId(id);
   const list = getAdminRssSources().filter((s) => s.id !== id);
   saveAdminRssSources(list);
-  fetch(getApiUrl(`/api/admin/delete-rss-source/${encodeURIComponent(id)}`), {
-    method: 'DELETE',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-user-role': 'admin',
-      ...getAdminAuthHeaders(),
-    },
-    body: JSON.stringify({ userRole: 'admin' }),
+  getAdminAuthHeadersAsync().then((authHeaders) => {
+    fetch(getApiUrl(`/api/admin/delete-rss-source/${encodeURIComponent(id)}`), {
+      method: 'DELETE',
+      headers: {
+        'x-user-role': 'admin',
+        ...authHeaders,
+      },
+      body: JSON.stringify({ userRole: 'admin' }),
+    }).catch(() => {});
   }).catch(() => {});
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+  }
+  return list;
+}
+
+export async function deleteAdminRssSourceAsync(id: string): Promise<AdminRssSource[]> {
+  addDeletedSourceId(id);
+  const list = getAdminRssSources().filter((s) => s.id !== id);
+  saveAdminRssSources(list);
+  try {
+    const authHeaders = await getAdminAuthHeadersAsync();
+    await fetch(getApiUrl(`/api/admin/delete-rss-source/${encodeURIComponent(id)}`), {
+      method: 'DELETE',
+      headers: {
+        'x-user-role': 'admin',
+        ...authHeaders,
+      },
+      body: JSON.stringify({ userRole: 'admin' }),
+    });
+  } catch {}
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
   }
@@ -702,10 +724,14 @@ export interface RssSyncResult {
 
 export async function syncAllSourcesLive(): Promise<RssSyncResult> {
   try {
-    let token = await ensureAuthToken();
+    const authHeaders = await getAdminAuthHeadersAsync();
+    let token = getAuthToken();
+    if (!token || isTokenExpired(token)) {
+      token = await ensureAuthToken(true);
+    }
     const headers: Record<string, string> = {
+      ...authHeaders,
       'Content-Type': 'application/json',
-      ...getAdminAuthHeaders(),
     };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
@@ -802,10 +828,14 @@ export async function syncAllSourcesLive(): Promise<RssSyncResult> {
 
 export async function scrapeAllWebSourcesLive(): Promise<RssSyncResult> {
   try {
-    let token = await ensureAuthToken();
+    const authHeaders = await getAdminAuthHeadersAsync();
+    let token = getAuthToken();
+    if (!token || isTokenExpired(token)) {
+      token = await ensureAuthToken(true);
+    }
     const headers: Record<string, string> = {
+      ...authHeaders,
       'Content-Type': 'application/json',
-      ...getAdminAuthHeaders(),
     };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;

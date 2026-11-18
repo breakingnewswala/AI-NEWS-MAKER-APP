@@ -7990,7 +7990,7 @@ function runFourDayFeedRetentionCleanup(): void {
 setInterval(runThreeDayFeedRetentionCleanup, 30 * 60 * 1000);
 
 // Module 10: Master Admin 3-Day Feed Retention Controls
-app.get("/api/admin/home-feed-retention", (_req, res) => {
+app.get(["/api/admin/home-feed-retention", "/api/home-feed-retention"], (_req, res) => {
   const config = loadHomeFeedRetentionConfig();
   return res.json({ success: true, ...config });
 });
@@ -10818,7 +10818,7 @@ async function parseRssItemsFromXml(
   }
 
   let encounteredOlderThanCutoff = false;
-  const twelveHoursAgo = Date.now() - 12 * 3600 * 1000;
+  const seventyTwoHoursAgo = Date.now() - 72 * 3600 * 1000; // 72 hours (3 days) freshness window matching retention policy
   const candidateXmls = items.slice(0, maxItems);
   const parsedPromises = candidateXmls.map(async (itemXml) => {
     try {
@@ -10844,7 +10844,7 @@ async function parseRssItemsFromXml(
       }
 
       // 12-Hour Freshness Window: Skip RSS articles older than 12 hours (Part 21)
-      if (timestamp < twelveHoursAgo) {
+      if (timestamp < seventyTwoHoursAgo) {
         encounteredOlderThanCutoff = true;
         return null;
       }
@@ -10859,8 +10859,8 @@ async function parseRssItemsFromXml(
       // Skip expensive AI rewriting & remote image scraping for already-known/duplicate items
       if (knownFilter) {
         const normLink = (link || "").trim().toLowerCase();
-        const fallbackTitleKey = cleanAndCraftHindiHeadline(rawTitle, rawDesc).title.trim().toLowerCase().slice(0, 40);
-        const rawTitleKey = rawTitle.trim().toLowerCase().slice(0, 40);
+        const fallbackTitleKey = cleanAndCraftHindiHeadline(rawTitle, rawDesc).title.trim().toLowerCase();
+        const rawTitleKey = rawTitle.trim().toLowerCase();
         if (
           (normLink && knownFilter.existingUrls.has(normLink)) ||
           knownFilter.existingTitles.has(rawTitleKey) ||
@@ -11734,7 +11734,7 @@ interface RssSyncResult {
 
 let isRssSyncRunning = false;
 let lastRssSyncResult: RssSyncResult | null = null;
-const RSS_SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes background synchronization
+const RSS_SYNC_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes background synchronization
 
 async function executeRssSynchronization(): Promise<RssSyncResult> {
   if (isRssSyncRunning) {
@@ -11790,7 +11790,7 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
 
     const preloadedPosts = loadNewsDatabase();
     const preloadedUrls = new Set(preloadedPosts.filter((p) => p.sourceUrl).map((p) => p.sourceUrl.trim().toLowerCase()));
-    const preloadedTitles = new Set(preloadedPosts.map((p) => p.title.trim().toLowerCase().slice(0, 40)));
+    const preloadedTitles = new Set(preloadedPosts.map((p) => p.title.trim().toLowerCase()));
     const preloadedDeletedIds = loadDeletedNewsIds();
     const knownFilter = {
       existingUrls: preloadedUrls,
@@ -11960,7 +11960,7 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
       let existingPosts = loadNewsDatabase();
       const existingIds = new Set(existingPosts.map((p) => p.id));
       const existingUrls = new Set(existingPosts.filter((p) => p.sourceUrl).map((p) => p.sourceUrl.trim().toLowerCase()));
-      const existingTitles = new Set(existingPosts.map((p) => p.title.trim().toLowerCase().slice(0, 40)));
+      const existingTitles = new Set(existingPosts.map((p) => p.title.trim().toLowerCase()));
       const deletedNewsIds = loadDeletedNewsIds();
       const editorialDb = loadApprovedEditorialDatabase();
 
@@ -11984,7 +11984,7 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
         p.editorialApproved = false;
         p.visibility = "draft";
         (p as any).pendingCreatedAt = Date.now();
-        const titleKey = p.title.trim().toLowerCase().slice(0, 40);
+        const titleKey = p.title.trim().toLowerCase();
         const normUrl = (p.sourceUrl || "").trim().toLowerCase();
 
         const isDuplicate = existingIds.has(p.id) || (normUrl && existingUrls.has(normUrl)) || existingTitles.has(titleKey);
@@ -12003,7 +12003,7 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
             (ep) =>
               ep.id === p.id ||
               (normUrl && ep.sourceUrl && ep.sourceUrl.trim().toLowerCase() === normUrl) ||
-              ep.title.trim().toLowerCase().slice(0, 40) === titleKey
+              ep.title.trim().toLowerCase() === titleKey
           );
           if (match) {
             // Preserve existing editorial status intact (do NOT overwrite pending or unapproved records)
@@ -12144,7 +12144,7 @@ async function executeWebScrapeSynchronization(): Promise<RssSyncResult> {
       let existingPosts = loadNewsDatabase();
       const existingIds = new Set(existingPosts.map((p) => p.id));
       const existingUrls = new Set(existingPosts.filter((p) => p.sourceUrl).map((p) => p.sourceUrl.trim().toLowerCase()));
-      const existingTitles = new Set(existingPosts.map((p) => p.title.trim().toLowerCase().slice(0, 40)));
+      const existingTitles = new Set(existingPosts.map((p) => p.title.trim().toLowerCase()));
       const deletedNewsIds = loadDeletedNewsIds();
 
       const trulyNew: StoredNewsPost[] = [];
@@ -12165,7 +12165,7 @@ async function executeWebScrapeSynchronization(): Promise<RssSyncResult> {
         p.editorialApproved = false;
         p.visibility = "draft";
         (p as any).pendingCreatedAt = Date.now();
-        const titleKey = p.title.trim().toLowerCase().slice(0, 40);
+        const titleKey = p.title.trim().toLowerCase();
         const normUrl = (p.sourceUrl || "").trim().toLowerCase();
         const isDuplicate = existingIds.has(p.id) || (normUrl && existingUrls.has(normUrl)) || existingTitles.has(titleKey);
 
@@ -12243,7 +12243,7 @@ app.get("/api/admin/rss-sync-status", requireAdminMiddleware, (_req, res) => {
     success: true,
     lastSyncResult: lastRssSyncResult,
     isSyncRunning: isRssSyncRunning,
-    intervalMinutes: 15,
+    intervalMinutes: 10,
     nextScheduledSync: (lastRssSyncResult?.timestamp || Date.now()) + RSS_SYNC_INTERVAL_MS,
   });
 });
@@ -12383,7 +12383,7 @@ app.get("/api/scheduler/rss-sync", (_req, res) => {
     telemetry: {
       ...schedulerSyncTelemetry,
       nextScheduledSyncAt: schedulerSyncTelemetry.nextScheduledSyncAt || (Date.now() + RSS_SYNC_INTERVAL_MS),
-      intervalMinutes: 15,
+      intervalMinutes: 10,
     },
   });
 });
@@ -31130,7 +31130,7 @@ async function startServer() {
                   }
                   ogImage = cleanThumb;
                 } else {
-                  ogImage = `${cleanBase}/assets/breaking_news_wala_logo.png`;
+                  ogImage = `${cleanBase}/assets/ai_news_maker_logo.png?v=2`;
                 }
 
                 ogType = "article";

@@ -881,6 +881,8 @@ export default function App() {
   // Dynamic document title, meta tags & SPA Google Analytics 4 / GTM tracking without duplicates
   useEffect(() => {
     if (typeof document === 'undefined' || typeof window === 'undefined') return;
+    (window as any).__AI_NEWS_ACTIVE_TAB = currentTab;
+    (window as any).__ai_news_active_tab = currentTab;
     applyPageMeta(currentTab);
 
     const currentPath = window.location.pathname || '/';
@@ -2046,6 +2048,9 @@ export default function App() {
       // Priority 5: Strictly ignore if user is unauthenticated or not an admin
       if (currentUser && !isUserAdmin(currentUser)) return;
       if (!currentUser) return;
+      // Requirement 6: Check active tab. If user is on 'home', 'studio', 'videos', or 'newsroom', suppress the toast!
+      const activeTab = currentTab;
+      if (activeTab !== 'admin' || ['home', 'studio', 'videos', 'newsroom'].includes(activeTab)) return;
       const now = Date.now();
       if (now - lastAdminAuthToastTime > 10000) {
         lastAdminAuthToastTime = now;
@@ -2081,7 +2086,7 @@ export default function App() {
       window.removeEventListener('open_login_modal', handleOpenAdminLogin);
       window.removeEventListener('open_admin_login', handleOpenAdminLogin);
     };
-  }, [currentUser?.email]);
+  }, [currentUser?.email, currentTab]);
 
   // Deep linking listeners for notifications & external triggers
   useEffect(() => {
