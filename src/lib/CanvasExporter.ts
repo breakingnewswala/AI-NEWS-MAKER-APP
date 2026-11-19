@@ -6646,28 +6646,36 @@ function drawPhotoDisclaimerWatermark(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  // Generous horizontal space (44px padding) before and after text
-  const textWidth = ctx.measureText(disclaimerText).width + 44;
-  const pillH = 32;
+  // Compact padding & box control
+  const showBox = card.photoTagShowBox !== false;
+  const boxBg = card.photoTagBoxColor || 'rgba(0, 0, 0, 0.85)';
+  const textWidth = ctx.measureText(disclaimerText).width + 20;
+  const pillH = 24;
 
-  // Translucent dark backdrop
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.80)';
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-  ctx.shadowBlur = 10;
-  ctx.beginPath();
-  ctx.roundRect(-textWidth / 2, -pillH / 2, textWidth, pillH, 6);
-  ctx.fill();
+  if (showBox) {
+    // Translucent styled backdrop
+    ctx.fillStyle = boxBg;
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.roundRect(-textWidth / 2, -pillH / 2, textWidth, pillH, 5);
+    ctx.fill();
 
-  // Subtle border
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+    // Subtle border
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
 
-  // High contrast crisp white text
-  ctx.shadowColor = 'transparent';
-  ctx.fillStyle = '#FFFFFF';
+    ctx.shadowColor = 'transparent';
+    ctx.fillStyle = '#FFFFFF';
+  } else {
+    // Text-only mode: crisp white text with strong dark drop shadow
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+    ctx.shadowBlur = 6;
+    ctx.fillStyle = '#FFFFFF';
+  }
+
   ctx.fillText(disclaimerText, 0, 0);
-
   ctx.restore();
 }
 
@@ -7005,14 +7013,16 @@ function drawQuoteVectorIcon(
 
 // Render Subtle Watermark across canvas/photo area with Text or uploaded PNG Image Logo
 async function drawUniversalWatermark(
-  _ctx: CanvasRenderingContext2D,
-  _width: number,
-  _height: number,
-  _card: NewsCardData
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  card: NewsCardData
 ) {
-  // Watermark overlays permanently eliminated across exports (Master Branding enforced instead)
-  return;
+  const isTextWmActive = Boolean(card.showTextWatermark === true || card.showSuperBreakingWatermark === true || (card.watermarkMode === 'text' && card.showWatermark));
   const isImageWatermark = card.watermarkType === 'image' && !!card.watermarkImage;
+
+  if (!isTextWmActive && !isImageWatermark) return;
+
   const opacity = card.textWatermarkOpacity ?? card.watermarkOpacity ?? (card.breakingWatermarkOpacity ?? 0.15);
   const color = card.textWatermarkColor || card.watermarkColor || (card.breakingWatermarkColor ?? 'white');
 

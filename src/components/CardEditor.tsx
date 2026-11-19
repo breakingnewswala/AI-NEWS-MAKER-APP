@@ -2610,7 +2610,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             placeholder="यहाँ अपनी मुख्य खबर की हेडलाइन दर्ज करें (उदा. कृपया स्टेप 5 में जाकर अपनी मुख्य खबर का शीर्षक दर्ज करें...)"
             className="w-full bg-neutral-950 border border-neutral-700 rounded-lg p-3 text-base text-white font-['Baloo_2'] focus:border-yellow-400 focus:outline-none leading-relaxed"
           />
-          {/* Live Editorial Validation Warning Banner */}
+          {/* Live Editorial Validation Warning Banner - संपादकीय गुणवत्ता चेतावनी removed from UI view per user requirements */}
           {(() => {
             const currentHeadline = (card.headline || '').replace(/\r?\n/g, ' ').trim();
             if (!currentHeadline) return null;
@@ -2618,21 +2618,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               ...(card.sourcePublisherNames || []),
               card.publisherName || ''
             ].filter(Boolean);
-            const valRes = validateGeneralHeadline(currentHeadline, pubList, 200);
-            if (valRes.valid) return null;
-            return (
-              <div className="mt-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-start gap-2 animate-in fade-in">
-                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                <div className="flex-1 space-y-1">
-                  <span className="font-bold text-amber-200">संपादकीय गुणवत्ता चेतावनी (Editorial Warning):</span>
-                  <ul className="list-disc list-inside space-y-0.5 text-[11px] text-neutral-300">
-                    {valRes.errors.map((err, errIdx) => (
-                      <li key={errIdx}>{err}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            );
+            // संपादकीय गुणवत्ता चेतावनी (Editorial Warning)
+            return null;
           })()}
           <p className="text-[10px] text-neutral-400 mt-1">
             💡 <b>सुझाव:</b> हेडलाइन को 3 लाइनों में करने के लिए कीबोर्ड पर <b>Enter</b> दबाकर लाइन तोड़ सकते हैं, या ऊपर <b>'3 लाइनों में बांटें'</b> बटन पर क्लिक करें। माइक बटन से बोलकर भी टाइप कर सकते हैं।
@@ -4462,28 +4449,76 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             </div>
             )}
 
-            {/* Optional custom text input if representative or ai is active */}
+            {/* Optional custom text input, box toggle & color selector if representative or ai is active */}
             {(card.photoDisclaimerType === 'representative' || card.photoDisclaimerType === 'ai') && (
-              <div className="pt-1 flex items-center gap-2">
-                <label className="text-[11px] text-neutral-400 whitespace-nowrap">
-                  टैग टेक्स्ट:
-                </label>
-                <input
-                  type="text"
-                  value={
-                    card.photoDisclaimerType === 'representative'
-                      ? (card.representativePhotoText || 'प्रतीकात्मक फोटो')
-                      : (card.aiGeneratedText || 'AI GENERATED')
-                  }
-                  onChange={(e) => {
-                    if (card.photoDisclaimerType === 'representative') {
-                      onChange({ representativePhotoText: e.target.value });
-                    } else {
-                      onChange({ aiGeneratedText: e.target.value });
+              <div className="pt-2 space-y-2 border-t border-neutral-800/80">
+                <div className="flex items-center gap-2">
+                  <label className="text-[11px] text-neutral-400 whitespace-nowrap">
+                    टैग टेक्स्ट:
+                  </label>
+                  <input
+                    type="text"
+                    value={
+                      card.photoDisclaimerType === 'representative'
+                        ? (card.representativePhotoText || 'प्रतीकात्मक फोटो')
+                        : (card.aiGeneratedText || 'AI GENERATED')
                     }
-                  }}
-                  className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-amber-400 font-['Baloo_2']"
-                />
+                    onChange={(e) => {
+                      if (card.photoDisclaimerType === 'representative') {
+                        onChange({ representativePhotoText: e.target.value });
+                      } else {
+                        onChange({ aiGeneratedText: e.target.value });
+                      }
+                    }}
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-amber-400 font-['Baloo_2']"
+                  />
+                </div>
+
+                {/* Box enable/disable toggle & color selection */}
+                <div className="flex items-center justify-between gap-2 flex-wrap pt-1 bg-neutral-900/60 p-2 rounded-lg border border-neutral-800">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onChange({ photoTagShowBox: !(card.photoTagShowBox !== false) });
+                      }}
+                      className={`px-2 py-1 rounded text-[11px] font-bold border transition flex items-center gap-1 cursor-pointer ${
+                        card.photoTagShowBox !== false
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                          : 'bg-neutral-800 text-neutral-400 border-neutral-700'
+                      }`}
+                    >
+                      <span>{card.photoTagShowBox !== false ? '✓ बॉक्स सहित (With Box)' : '✕ बिना बॉक्स (Text Only)'}</span>
+                    </button>
+                  </div>
+
+                  {card.photoTagShowBox !== false && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-neutral-400 font-semibold">बॉक्स रंग:</span>
+                      {[
+                        { color: 'rgba(0,0,0,0.85)', label: 'काला', hex: '#000000' },
+                        { color: '#dc2626', label: 'लाल', hex: '#dc2626' },
+                        { color: '#2563eb', label: 'नीला', hex: '#2563eb' },
+                        { color: '#d97706', label: 'अंबर', hex: '#d97706' },
+                        { color: '#16a34a', label: 'हरा', hex: '#16a34a' },
+                      ].map((c) => {
+                        const isSel = (card.photoTagBoxColor || 'rgba(0,0,0,0.85)') === c.color;
+                        return (
+                          <button
+                            key={c.hex}
+                            type="button"
+                            onClick={() => onChange({ photoTagBoxColor: c.color })}
+                            className={`w-5 h-5 rounded-full border transition cursor-pointer ${
+                              isSel ? 'ring-2 ring-amber-400 scale-110 border-white' : 'border-neutral-600 hover:scale-105'
+                            }`}
+                            style={{ backgroundColor: c.hex }}
+                            title={c.label}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -5336,26 +5371,33 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             <span className="flex items-center gap-1.5 text-amber-300 font-bold">
               <span>📢 स्टोरी कॉलआउट (Story Callout)</span>
             </span>
-            <button
-              type="button"
-              onClick={() => {
-                const nextState = card.showCallout === false ? true : false;
-                onChange({ showCallout: nextState });
-              }}
-              className={`px-2.5 py-1 rounded-full text-[10px] font-black border transition-all flex items-center gap-1 cursor-pointer ${
-                card.showCallout !== false
-                  ? 'bg-amber-500 text-neutral-950 border-amber-400 shadow-sm'
-                  : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-white'
-              }`}
-            >
-              <span>{card.showCallout !== false ? '✓ चालू (ON)' : '✕ बंद (OFF)'}</span>
-            </button>
+            {(() => {
+              const isCalloutExplicitlyOn = Boolean(
+                card.showCallout === true ||
+                (card.showCallout !== false && currentDynamicFrame?.fullStoryCalloutConfig?.enabled)
+              );
+              return (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange({ showCallout: !isCalloutExplicitlyOn });
+                  }}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-black border transition-all flex items-center gap-1 cursor-pointer ${
+                    isCalloutExplicitlyOn
+                      ? 'bg-amber-500 text-neutral-950 border-amber-400 shadow-sm'
+                      : 'bg-neutral-800 text-neutral-400 border-neutral-700 hover:text-white'
+                  }`}
+                >
+                  <span>{isCalloutExplicitlyOn ? '✓ चालू (ON)' : '✕ बंद (OFF)'}</span>
+                </button>
+              );
+            })()}
           </div>
           <p className="text-[11px] text-neutral-400 leading-relaxed">
-            'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें' कॉलआउट का डिज़ाइन व साइज सेट करें। पोज़ीशन एडमिन द्वारा सेफ ज़ोन में फिक्स रहती है।
+            'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें' कॉलआउट का डिज़ाइन व साइज सेट करें। डिफ़ॉल्ट रूप से यह बंद (OFF) रहता है।
           </p>
 
-          {card.showCallout !== false && (
+          {Boolean(card.showCallout === true || (card.showCallout !== false && currentDynamicFrame?.fullStoryCalloutConfig?.enabled)) && (
             <div className="space-y-3 pt-2 border-t border-neutral-800 animate-in fade-in duration-150">
               {/* Category Filter Pills */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">

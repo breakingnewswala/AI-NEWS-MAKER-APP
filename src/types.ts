@@ -307,6 +307,9 @@ export interface NewsCardData {
   aiGeneratedText?: string;
   photoDisclaimerType?: 'none' | 'ai' | 'representative'; // Disclaimers: None, AI Generated, or प्रतीकात्मक फोटो
   representativePhotoText?: string; // Default: 'प्रतीकात्मक फोटो'
+  photoTagShowBox?: boolean; // Default true: with box pill; false: text only without box
+  photoTagBoxColor?: string; // Box background color, e.g. '#000000', '#DC2626', etc.
+  photoTagTextColor?: string; // Text color for photo tag
   
   // Contact & Social
   socialHandle: string;

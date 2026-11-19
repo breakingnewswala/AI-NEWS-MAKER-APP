@@ -56,65 +56,86 @@ export const AppNotificationModal: React.FC = () => {
   return (
     <>
       {/* 1. Centered Notification Toast / Overlay */}
-      {notification && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none p-4"
-        >
+      {notification && (() => {
+        const isNewsPublished = notification.type === 'warning' ||
+          Boolean(notification.title?.includes('प्रकाशित') ||
+          notification.title?.includes('समाचार') ||
+          notification.message?.includes('प्रकाशित') ||
+          notification.message?.includes('नई न्यूज') ||
+          notification.message?.includes('ताज़ा खबर'));
+
+        return (
           <div
-            className={`pointer-events-auto max-w-md w-full rounded-2xl shadow-2xl border p-4 sm:p-5 flex items-start gap-3.5 backdrop-blur-md transform transition-all duration-300 animate-in fade-in zoom-in-95 ${
-              notification.type === 'success'
-                ? 'bg-slate-900/95 border-emerald-500/80 text-white shadow-emerald-950/50'
-                : notification.type === 'error'
-                ? 'bg-slate-900/95 border-rose-500/80 text-white shadow-rose-950/50'
-                : notification.type === 'warning'
-                ? 'bg-slate-900/95 border-amber-500/80 text-white shadow-amber-950/50'
-                : 'bg-slate-900/95 border-cyan-500/80 text-white shadow-cyan-950/50'
-            }`}
+            role="status"
+            aria-live="polite"
+            className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none p-4"
           >
-            <div className="shrink-0 mt-0.5">
-              {notification.type === 'success' ? (
-                <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-                  <CheckCircle2 className="w-5 h-5" />
-                </div>
-              ) : notification.type === 'error' ? (
-                <div className="w-8 h-8 rounded-full bg-rose-500/20 flex items-center justify-center text-rose-400">
-                  <AlertTriangle className="w-5 h-5" />
-                </div>
-              ) : notification.type === 'warning' ? (
-                <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400">
-                  <AlertCircle className="w-5 h-5" />
-                </div>
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400">
-                  <Info className="w-5 h-5" />
-                </div>
-              )}
-            </div>
-
-            <div className="flex-1 min-w-0 pr-1">
-              {notification.title && (
-                <h4 className="text-sm font-bold text-white mb-1">
-                  {notification.title}
-                </h4>
-              )}
-              <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-medium whitespace-pre-line">
-                {notification.message}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setNotification(null)}
-              className="shrink-0 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
-              title="बंद करें"
+            <div
+              className={`pointer-events-auto max-w-md w-full rounded-2xl shadow-2xl border p-4 sm:p-5 flex items-start gap-3.5 backdrop-blur-md transform transition-all duration-300 animate-in fade-in zoom-in-95 ${
+                isNewsPublished
+                  ? 'bg-gradient-to-br from-slate-900 via-amber-950/40 to-slate-900 border-amber-400 text-white shadow-amber-500/30 ring-1 ring-amber-400/50'
+                  : notification.type === 'success'
+                  ? 'bg-slate-900/95 border-emerald-500/80 text-white shadow-emerald-950/50'
+                  : notification.type === 'error'
+                  ? 'bg-slate-900/95 border-rose-500/80 text-white shadow-rose-950/50'
+                  : notification.type === 'warning'
+                  ? 'bg-slate-900/95 border-amber-500/80 text-white shadow-amber-950/50'
+                  : 'bg-slate-900/95 border-cyan-500/80 text-white shadow-cyan-950/50'
+              }`}
             >
-              <X className="w-4 h-4" />
-            </button>
+              <div className="shrink-0 mt-0.5">
+                {isNewsPublished ? (
+                  <div className="w-9 h-9 rounded-full bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-amber-300 relative shadow-sm">
+                    <span className="absolute w-2 h-2 -top-0.5 -right-0.5 rounded-full bg-amber-400 animate-ping" />
+                    <AlertCircle className="w-5 h-5 text-amber-400" />
+                  </div>
+                ) : notification.type === 'success' ? (
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                ) : notification.type === 'error' ? (
+                  <div className="w-8 h-8 rounded-full bg-rose-500/20 flex items-center justify-center text-rose-400">
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
+                ) : notification.type === 'warning' ? (
+                  <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400">
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400">
+                    <Info className="w-5 h-5" />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-1 min-w-0 pr-1">
+                {notification.title && (
+                  <h4 className="text-sm font-bold text-white mb-1 flex items-center gap-1.5">
+                    {isNewsPublished && (
+                      <span className="px-1.5 py-0.5 text-[10px] bg-amber-400 text-slate-950 rounded font-black uppercase">
+                        नया अपडेट
+                      </span>
+                    )}
+                    <span>{notification.title}</span>
+                  </h4>
+                )}
+                <p className="text-xs sm:text-sm text-slate-200 leading-relaxed font-medium whitespace-pre-line">
+                  {notification.message}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setNotification(null)}
+                className="shrink-0 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                title="बंद करें"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 2. Centered Confirmation Dialog */}
       {confirmDialog && (
@@ -125,19 +146,32 @@ export const AppNotificationModal: React.FC = () => {
         >
           <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-sm sm:max-w-md w-full p-5 sm:p-6 shadow-2xl space-y-4">
             <div className="flex items-start gap-3.5">
-              <div
-                className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                  confirmDialog.isDestructive
-                    ? 'bg-rose-500/20 text-rose-400'
-                    : 'bg-amber-500/20 text-amber-400'
-                }`}
-              >
-                {confirmDialog.isDestructive ? (
-                  <AlertTriangle className="w-5 h-5" />
-                ) : (
-                  <HelpCircle className="w-5 h-5" />
-                )}
-              </div>
+              {confirmDialog.channelLogo ? (
+                <div className="w-12 h-12 rounded-xl bg-slate-950 border border-amber-500/40 p-1 flex items-center justify-center shrink-0 shadow-md">
+                  <img
+                    src={confirmDialog.channelLogo}
+                    alt="Channel Logo"
+                    className="w-full h-full object-contain rounded"
+                    onError={(e: any) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </div>
+              ) : (
+                <div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                    confirmDialog.isDestructive
+                      ? 'bg-rose-500/20 text-rose-400'
+                      : 'bg-amber-500/20 text-amber-400'
+                  }`}
+                >
+                  {confirmDialog.isDestructive ? (
+                    <AlertTriangle className="w-5 h-5" />
+                  ) : (
+                    <HelpCircle className="w-5 h-5" />
+                  )}
+                </div>
+              )}
               <div className="flex-1">
                 <h3 className="text-base font-bold text-white mb-1">
                   {confirmDialog.title || 'कार्रवाई की पुष्टि करें'}

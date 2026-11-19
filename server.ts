@@ -9834,7 +9834,11 @@ ${itemsXml}
 app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
   try {
     const posts = loadNewsDatabase();
-    const rssXml = generateRssFeedXml(posts);
+    const deletedIds = loadDeletedNewsIds();
+    const now = Date.now();
+    const window72h = 72 * 60 * 60 * 1000;
+    const activePosts = (posts || []).filter((p) => p && p.id && !deletedIds.has(p.id) && p._deleted !== true && (now - (p.timestamp || 0) <= window72h));
+    const rssXml = generateRssFeedXml(activePosts);
     res.header("Content-Type", "application/rss+xml; charset=utf-8");
     res.header("Cache-Control", "public, max-age=180");
     return res.send(rssXml);
@@ -9880,9 +9884,12 @@ function generateSitemapXml(baseUrl = "https://www.ainewsmaker.online"): string 
     if (Array.isArray(posts) && posts.length > 0) {
       let editorialDb: any = {};
       try { editorialDb = loadApprovedEditorialDatabase(); } catch {}
+      const now = Date.now();
+      const window72h = 72 * 60 * 60 * 1000;
       const published = posts
         .filter((p) => {
           if (!p || !p.id || deletedIds.has(p.id) || p._deleted === true) return false;
+          if (p.timestamp && (now - p.timestamp > window72h)) return false;
           if (p.status === "DRAFT" || p.publicationStatus === "draft" || p.status === "PENDING_APPROVAL") return false;
           return (
             p.publicationStatus === "PUBLISHED" ||
@@ -9983,9 +9990,9 @@ function generateNewsSitemapXml(baseUrl = "https://www.ainewsmaker.online"): str
           );
         }
       );
-      // Include articles published in the last 48 hours; fallback to recent 20 if none within 48h
+      // Include articles published in the last 48 hours; fallback to recent articles within 72h if none within 48h
       const recent = published.filter((p) => p.timestamp && now - p.timestamp <= twoDaysMs);
-      const targetPosts = recent.length > 0 ? recent : published.slice(0, 20);
+      const targetPosts = recent.length > 0 ? recent : published.filter((p) => p.timestamp && now - p.timestamp <= 72 * 60 * 60 * 1000).slice(0, 20);
 
       const seenUrls = new Set<string>();
       const entryStrings: string[] = [];
@@ -31483,6 +31490,35 @@ async function startServer() {
           let ogType = "website";
           let extraJsonLd = "";
           let prerenderContent = "";
+
+          if (!articleId && (req.path === "/" || req.path === "" || req.path === "/index.html")) {
+            try {
+              const posts = loadNewsDatabase();
+              const deletedIds = loadDeletedNewsIds();
+              const now = Date.now();
+              const window72h = 72 * 60 * 60 * 1000;
+              const activePosts = (posts || []).filter((p) => p && p.id && !deletedIds.has(p.id) && p._deleted !== true && (now - (p.timestamp || 0) <= window72h));
+              if (activePosts.length > 0) {
+                const headlines = activePosts.slice(0, 4).map((p) => p.title || p.approvedHeadline).filter(Boolean);
+                if (headlines.length > 0) {
+                  description = `ताज़ा सुर्खियां: ${headlines.join(" | ").slice(0, 180)}... भारत का स्मार्ट डिजिटल न्यूज़ स्टूडियो।`;
+                  prerenderContent = `
+                    <div class="bot-home-prerender" style="max-width:900px;margin:20px auto;padding:20px;font-family:sans-serif;color:#f8fafc;">
+                      <h1 style="font-size:24px;color:#f59e0b;margin-bottom:12px;">AI News Maker — ताज़ा लाइव समाचार</h1>
+                      <ul style="list-style:none;padding:0;display:flex;flex-direction:column;gap:12px;">
+                        ${activePosts.slice(0, 10).map((p) => `
+                          <li style="border-bottom:1px solid #334155;padding-bottom:10px;">
+                            <a href="${cleanBase}/newsroom?article=${encodeURIComponent(p.id)}" style="color:#38bdf8;font-weight:600;text-decoration:none;font-size:16px;">${p.title || p.approvedHeadline || 'ताज़ा समाचार'}</a>
+                            <p style="color:#94a3b8;font-size:13px;margin:4px 0 0 0;">${(p.summary || '').slice(0, 140)}...</p>
+                          </li>
+                        `).join("")}
+                      </ul>
+                    </div>
+                  `;
+                }
+              }
+            } catch {}
+          }
 
           // Check if article requested
           if (articleId) {

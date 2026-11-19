@@ -2211,14 +2211,32 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   {/* Active Plan Pill */}
                   <div className="px-3 py-1 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 flex items-center gap-2">
                     <span>वर्तमान प्लान:</span>
-                    <span className="text-amber-400 font-black">{activePlanDetail.nameHi}</span>
+                    <span className="text-amber-400 font-black">
+                      {subscription.isProTrial ? 'PRO (7-Day Trial Active)' : activePlanDetail.nameHi}
+                    </span>
                   </div>
                 </div>
               </div>
 
               {/* Master Branding / Plan Status Alert Banner (User Only) */}
               {!isAdmin && (
-                subscription.tier === 'basic' ? (
+                subscription.isProTrial ? (
+                  <div className="p-4 bg-purple-950/60 border border-purple-500/70 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-300 shrink-0">
+                        <Sparkles className="w-5 h-5 text-purple-400" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-black text-purple-300 uppercase">
+                          PRO (7-Day Trial Active) — {subscription.daysRemaining} दिन शेष
+                        </div>
+                        <div className="text-xs text-slate-300 mt-0.5">
+                          बधाई! आपको 7 दिनों के लिए प्रो (PRO) प्लान का पूर्ण ट्रायल एक्सेस दिया गया है। 1080p Full HD, 40 ग्राफ़िक्स/दिन व AI टूल्स की सभी सुविधाएं सक्रिय हैं। 7 दिन बाद सेवा जारी रखने के लिए नीचे दिए गए प्लान में अपग्रेड करें।
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : subscription.tier === 'basic' ? (
                   <div className="p-4 bg-amber-950/60 border border-amber-600/70 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shrink-0">
@@ -3683,16 +3701,16 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     )}
                     {/* Active Plan Tier Badge */}
                     <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 border shadow-xs ${
-                      subscription.tier === 'basic'
+                      subscription.isProTrial || subscription.tier === 'professional'
+                        ? 'bg-purple-950/80 border-purple-500/60 text-purple-300'
+                        : subscription.tier === 'basic'
                         ? 'bg-amber-950/80 border-amber-500/60 text-amber-300'
                         : subscription.tier === 'advanced'
                         ? 'bg-blue-950/80 border-blue-500/60 text-blue-300'
-                        : subscription.tier === 'professional'
-                        ? 'bg-purple-950/80 border-purple-500/60 text-purple-300'
                         : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
                     }`}>
                       <Crown className="w-3 h-3" />
-                      <span>{activePlanDetail.nameHi}</span>
+                      <span>{subscription.isProTrial ? 'PRO (7-Day Trial Active)' : activePlanDetail.nameHi}</span>
                     </span>
                   </div>
 
@@ -3751,7 +3769,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     <div className="flex items-center gap-1.5 font-black text-xs sm:text-sm text-white">
                       <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
                       <span>
-                        {subscription.hasActivePaidPlan || subscription.tier !== 'basic'
+                        {subscription.isProTrial
+                          ? 'PRO (7-Day Trial Active)'
+                          : subscription.hasActivePaidPlan || subscription.tier !== 'basic'
                           ? `${subscription.planName} प्लान`
                           : '7-Day Free Trial'}
                       </span>

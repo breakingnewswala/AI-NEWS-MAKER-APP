@@ -61,6 +61,7 @@ export interface UserSubscriptionInfo {
   trialStartedAt: number;
   trialEndsAt: number;
   isTrialActive: boolean;
+  isProTrial?: boolean;
   daysRemaining: number;
   planKey?: PlanKeyName;
   hoursRemaining?: number;
@@ -117,7 +118,7 @@ export const DEFAULT_PLAN_DETAILS: PlanFeatureDetail[] = [
   {
     id: 'basic',
     planKey: 'BASIC',
-    nameHi: 'बेसिक (BASIC)',
+    nameHi: 'BASIC',
     nameEn: 'BASIC',
     regularPriceNum: 2999,
     regularPriceDisplay: '₹2,999',
@@ -148,7 +149,7 @@ export const DEFAULT_PLAN_DETAILS: PlanFeatureDetail[] = [
   {
     id: 'advanced',
     planKey: 'ADVANCE',
-    nameHi: 'एडवांस (ADVANCE)',
+    nameHi: 'ADVANCE',
     nameEn: 'ADVANCE',
     regularPriceNum: 4999,
     regularPriceDisplay: '₹4,999',
@@ -179,7 +180,7 @@ export const DEFAULT_PLAN_DETAILS: PlanFeatureDetail[] = [
   {
     id: 'professional',
     planKey: 'PRO',
-    nameHi: 'प्रो (PRO)',
+    nameHi: 'PRO',
     nameEn: 'PRO',
     regularPriceNum: 6999,
     regularPriceDisplay: '₹6,999',
@@ -209,7 +210,7 @@ export const DEFAULT_PLAN_DETAILS: PlanFeatureDetail[] = [
   {
     id: 'ultra',
     planKey: 'VIP DESK',
-    nameHi: 'वीआईपी डेस्क (VIP DESK)',
+    nameHi: 'VIP DESK',
     nameEn: 'VIP DESK',
     regularPriceNum: 9999,
     regularPriceDisplay: '₹9,999',
@@ -1092,8 +1093,8 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
   const hasPaidPlan = false;
   const isTrialActive = !isExpired;
 
-  const effectiveTier: UserPlanTier = 'basic';
-  const effectivePlanName: PlanKeyName = 'BASIC';
+  const effectiveTier: UserPlanTier = isTrialActive ? 'professional' : 'basic';
+  const effectivePlanName: PlanKeyName = isTrialActive ? 'PRO' : 'BASIC';
 
   const primaryMobile = matchedUser?.mobile || localStorage.getItem(STORAGE_KEY_PRIMARY_MOBILE) || '';
   const isMobileLocked = Boolean(primaryMobile.trim());
@@ -1104,6 +1105,7 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
     trialStartedAt: startTime,
     trialEndsAt: expiresAt,
     isTrialActive,
+    isProTrial: isTrialActive,
     isTrialExpired: isExpired,
     isPlanExpired: isExpired,
     daysRemaining,

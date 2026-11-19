@@ -2605,10 +2605,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               <div
                 key={currentTickerPost.id}
                 className="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-900 dark:text-amber-300 truncate animate-in fade-in slide-in-from-bottom-2 duration-300 cursor-pointer hover:text-red-600 dark:hover:text-white"
-                onClick={() => handleOpenStudioSafe(currentTickerPost)}
-                title="क्लिक करके स्टूडियो में कार्ड बनाएं"
+                onClick={() => setSelectedPostForDetail(currentTickerPost)}
+                title="क्लिक करके पूरी खबर देखें"
               >
-                
                 <span className="truncate">{cleanViewerHeadline(currentTickerPost.title)}</span>
               </div>
 
@@ -2620,19 +2619,15 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               </div>
             </div>
 
-            {/* Right: Studio Quick Action & Prev/Next navigation */}
+            {/* Right: View News Action & Prev/Next navigation */}
             <div className="flex items-center gap-1.5 shrink-0">
               <button
-                onClick={() => onOpenStudioWithNews(currentTickerPost)}
-                className="px-2.5 py-1 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs font-bold rounded-lg shadow flex items-center gap-1 transition-transform active:scale-95"
-                title="इस खबर से ग्राफिक बनाएं"
+                onClick={() => setSelectedPostForDetail(currentTickerPost)}
+                className="px-2.5 py-1 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white text-xs font-bold rounded-lg shadow flex items-center gap-1 transition-transform active:scale-95 cursor-pointer"
+                title="पूरी खबर देखें"
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-200" />
-                <span className="hidden md:inline">
-                  {canModerate
-                    ? "खबर से ग्राफिक बनाएं"
-                    : `खबर से ग्राफिक बनाएं · शेष ${dailyQuotaStatus?.unlimited ? "असीमित" : (dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : 10)}`}
-                </span>
+                <Eye className="w-3.5 h-3.5 text-amber-200" />
+                <span className="hidden md:inline">खबर देखें</span>
               </button>
 
               <div className="flex items-center">
@@ -5830,7 +5825,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       key={`ticker-item-${item.id || idx}-${idx}`}
                       onClick={() => {
                         if (item.id && !String(item.id).startsWith('fallback-ticker-')) {
-                          onOpenStudioWithNews(item);
+                          setSelectedPostForDetail(item);
                         } else if (onNavigateToTab) {
                           onNavigateToTab('newsroom');
                         }

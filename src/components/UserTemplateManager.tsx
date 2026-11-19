@@ -119,6 +119,7 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
 
   // New Frame Creation State
   const [isAddingFrame, setIsAddingFrame] = useState(false);
+  const [customUploadType, setCustomUploadType] = useState<'frame' | 'header' | 'footer'>('frame');
   const [newFrameName, setNewFrameName] = useState('');
   const [newFrameAsset, setNewFrameAsset] = useState('');
   const [frameError, setFrameError] = useState('');
@@ -209,12 +210,40 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
 
   const handleSaveFrame = () => {
     if (!newFrameAsset) {
-      setFrameError('कृपया 4:5 कस्टम फ्रेम इमेज फाइल (PNG) चुनें');
+      setFrameError('कृपया PNG इमेज फाइल चुनें');
       return;
     }
+    const email = currentUser?.email || 'user';
+    if (customUploadType === 'header') {
+      const current = getAssignedCustomHeaderFooter(email);
+      assignCustomHeaderFooterToUser(email, {
+        headerUrl: newFrameAsset,
+        footerUrl: current.footerUrl || '',
+      });
+      setNewFrameName('');
+      setNewFrameAsset('');
+      setIsAddingFrame(false);
+      refreshData();
+      showToast(`✅ कस्टम हेडर PNG सफलतापूर्वक अपलोड व सक्रिय किया गया!`);
+      return;
+    }
+    if (customUploadType === 'footer') {
+      const current = getAssignedCustomHeaderFooter(email);
+      assignCustomHeaderFooterToUser(email, {
+        headerUrl: current.headerUrl || '',
+        footerUrl: newFrameAsset,
+      });
+      setNewFrameName('');
+      setNewFrameAsset('');
+      setIsAddingFrame(false);
+      refreshData();
+      showToast(`✅ कस्टम फुटर PNG सफलतापूर्वक अपलोड व सक्रिय किया गया!`);
+      return;
+    }
+
     const name = newFrameName.trim() || 'कस्टम 4:5 फ्रेम';
     saveCustomFrame({
-      userId: currentUser?.email || 'user',
+      userId: email,
       name,
       assetUrl: newFrameAsset,
     });
@@ -995,10 +1024,48 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
             {/* Upload New Frame Drawer */}
             {isAddingFrame && (
               <div className="p-4 bg-slate-900 border border-purple-500/40 rounded-xl space-y-3 animate-in fade-in">
-                <h5 className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <Upload className="w-3.5 h-3.5 text-purple-400" />
-                  नई कस्टम 4:5 फ्रेम अपलोड करें
-                </h5>
+                <div className="flex items-center justify-between">
+                  <h5 className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Upload className="w-3.5 h-3.5 text-purple-400" />
+                    नया कस्टम ग्राफिक अपलोड करें
+                  </h5>
+                  {/* Type Selector Pills */}
+                  <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setCustomUploadType('frame')}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded cursor-pointer transition ${
+                        customUploadType === 'frame'
+                          ? 'bg-purple-600 text-white shadow-xs'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      4:5 फ्रेम
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomUploadType('header')}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded cursor-pointer transition ${
+                        customUploadType === 'header'
+                          ? 'bg-purple-600 text-white shadow-xs'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      हेडर PNG
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomUploadType('footer')}
+                      className={`px-2 py-0.5 text-[10px] font-bold rounded cursor-pointer transition ${
+                        customUploadType === 'footer'
+                          ? 'bg-purple-600 text-white shadow-xs'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      फुटर PNG
+                    </button>
+                  </div>
+                </div>
 
                 {frameError && (
                   <div className="p-2 bg-red-950/50 border border-red-500 text-red-300 text-xs rounded-lg">
@@ -1009,11 +1076,11 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                      फ्रेम का नाम:
+                      {customUploadType === 'frame' ? 'फ्रेम का नाम:' : customUploadType === 'header' ? 'हेडर का नाम / लेबल:' : 'फुटर का नाम / लेबल:'}
                     </label>
                     <input
                       type="text"
-                      placeholder="उदा. VIP ब्यूरो 4:5 फ्रेम"
+                      placeholder={customUploadType === 'frame' ? 'उदा. VIP ब्यूरो 4:5 फ्रेम' : customUploadType === 'header' ? 'उदा. चैनल कस्टम हेडर' : 'उदा. चैनल कस्टम फुटर'}
                       value={newFrameName}
                       onChange={(e) => setNewFrameName(e.target.value)}
                       className="w-full bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:border-purple-500"
@@ -1022,7 +1089,7 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
 
                   <div>
                     <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                      4:5 ट्रांसपेरेंट PNG इमेज चुनें:
+                      {customUploadType === 'frame' ? '4:5 ट्रांसपेरेंट PNG चुनें:' : customUploadType === 'header' ? 'हेडर ट्रांसपेरेंट PNG चुनें:' : 'फुटर ट्रांसपेरेंट PNG चुनें:'}
                     </label>
                     <input
                       type="file"

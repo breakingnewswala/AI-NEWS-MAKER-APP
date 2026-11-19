@@ -19,6 +19,7 @@ export interface AppConfirmOptions {
   confirmText?: string;
   cancelText?: string;
   isDestructive?: boolean;
+  channelLogo?: string;
   onConfirm: () => void;
   onCancel?: () => void;
 }

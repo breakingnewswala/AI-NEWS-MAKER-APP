@@ -26,7 +26,7 @@ import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
 import { BrandedNewsLoadingModal, BrandedLoaderMode } from './components/BrandedNewsLoadingModal';
 import { NewsDetailModal } from './components/NewsDetailModal';
 import { AppNotificationModal } from './components/AppNotificationModal';
-import { showAppSuccess } from './lib/notificationService';
+import { showAppSuccess, showAppConfirm } from './lib/notificationService';
 import { getApiUrl, getApiBaseUrl, ensureAuthToken, setAuthToken, getAuthHeaders, getAuthToken, isTokenExpired, clearAuthTokens, reauthenticateAdmin } from './lib/apiConfig';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
 import { StepNavigator, scrollToStepById, DEFAULT_STEPS } from './components/StepNavigator';
@@ -237,20 +237,20 @@ export const STUDIO_STEPS = [
   { step: 1, id: 'step-ai', label: 'AI टूल्स', name: 'AI टूल्स', icon: '🤖', title: 'AI टूल्स' },
   { step: 2, id: 'step-frame', label: 'टेम्पलेट्स', name: 'टेम्पलेट्स', icon: '🖼️', title: 'टेम्पलेट्स' },
   { step: 3, id: 'step-headline', label: 'हेडलाइन', name: 'हेडलाइन', icon: '✍️', title: 'हेडलाइन' },
-  { step: 4, id: 'step-photo', label: 'फोटो एवं वॉटरमार्क', name: 'फोटो एवं वॉटरमार्क', icon: '📷', title: 'फोटो एवं वॉटरमार्क' },
-  { step: 5, id: 'step-location', label: 'स्थान एवं दिनांक', name: 'स्थान एवं दिनांक', icon: '📍', title: 'स्थान एवं दिनांक' },
-  { step: 6, id: 'step-header-footer', label: 'हेडर एवं फुटर', name: 'हेडर एवं फुटर', icon: '📜', title: 'हेडर एवं फुटर' },
-  { step: 7, id: 'step-download', label: 'डाउनलोड एवं कैप्शन', name: 'डाउनलोड एवं कैप्शन', icon: '⬇️', title: 'डाउनलोड एवं कैप्शन' },
+  { step: 4, id: 'step-photo', label: 'फोटो & वॉटरमार्क', name: 'फोटो & वॉटरमार्क', icon: '📷', title: 'फोटो & वॉटरमार्क' },
+  { step: 5, id: 'step-location', label: 'स्थान & दिनांक', name: 'स्थान & दिनांक', icon: '📍', title: 'स्थान & दिनांक' },
+  { step: 6, id: 'step-header-footer', label: 'हेडर & फुटर', name: 'हेडर & फुटर', icon: '📜', title: 'हेडर & फुटर' },
+  { step: 7, id: 'step-download', label: 'डाउनलोड & कैप्शन', name: 'डाउनलोड & कैप्शन', icon: '⬇️', title: 'डाउनलोड & कैप्शन' },
 ];
 
 export const MOBILE_STUDIO_STEPS = [
   { mobileStep: 1, internalStep: 1, id: 'step-ai', label: 'AI टूल्स', key: 'step1' },
   { mobileStep: 2, internalStep: 2, id: 'step-frame', label: 'टेम्पलेट्स', key: 'step2' },
   { mobileStep: 3, internalStep: 3, id: 'step-headline', label: 'हेडलाइन', key: 'step3' },
-  { mobileStep: 4, internalStep: 4, id: 'step-photo', label: 'फोटो एवं वॉटरमार्क', key: 'step4' },
-  { mobileStep: 5, internalStep: 5, id: 'step-location', label: 'स्थान एवं दिनांक', key: 'step5' },
-  { mobileStep: 6, internalStep: 6, id: 'step-header-footer', label: 'हेडर एवं फुटर', key: 'step6' },
-  { mobileStep: 7, internalStep: 7, id: 'step-download', label: 'डाउनलोड एवं कैप्शन', key: 'step7' },
+  { mobileStep: 4, internalStep: 4, id: 'step-photo', label: 'फोटो & वॉटरमार्क', key: 'step4' },
+  { mobileStep: 5, internalStep: 5, id: 'step-location', label: 'स्थान & दिनांक', key: 'step5' },
+  { mobileStep: 6, internalStep: 6, id: 'step-header-footer', label: 'हेडर & फुटर', key: 'step6' },
+  { mobileStep: 7, internalStep: 7, id: 'step-download', label: 'डाउनलोड & कैप्शन', key: 'step7' },
 ] as const;
 
 export const DEFAULT_CHANNEL_PROFILE: ChannelProfile = {
@@ -2214,6 +2214,7 @@ export default function App() {
     mode: BrandedLoaderMode;
     title?: string;
     subtitles?: string[];
+    subtitleIntervalMs?: number;
     durationSeconds?: number;
     error?: string | null;
     onRetry?: () => void;
@@ -2474,18 +2475,7 @@ export default function App() {
   };
 
   // Comprehensive Photo News Studio Reset & Refresh Workspace (Issue E Remediation)
-  const resetPhotoNewsStudioWorkspace = (options: { skipConfirm?: boolean } = {}) => {
-    if (!options.skipConfirm) {
-      const hasUnsavedContent = Boolean(
-        (card.headline && card.headline.trim().length > 0 && !card.headline.includes('यहाँ आपकी हेडलाइन आएगी')) ||
-        (card.images?.main && card.images.main.trim().length > 0)
-      );
-      if (hasUnsavedContent) {
-        const confirmReset = window.confirm('क्या आप स्टूडियो को रिफ्रेश करके नया ग्राफिक शुरू करना चाहते हैं? वर्तमान अनसेव्ड बदलाव हट जाएंगे।');
-        if (!confirmReset) return;
-      }
-    }
-
+  const executeStudioWorkspaceReset = () => {
     // Trigger dynamic frame and catalog refresh without altering permanent database
     try {
       window.dispatchEvent(new CustomEvent('template_plans_updated'));
@@ -2532,19 +2522,21 @@ export default function App() {
       customLogoUrl: savedProfile?.channelLogoUrl || getPermanentUserLogo() || '',
       logoScale: 1.25,
       logoX: 5.5,
-      logoY: undefined,
-      brandName: savedProfile?.channelNameHi || '',
-      brandTagline: savedProfile?.channelNameEn || '',
-      channelNameHi: savedProfile?.channelNameHi || '',
-      channelNameEn: savedProfile?.channelNameEn || '',
+      logoY: 2.8,
+      headlineCustomColor: undefined,
+      headlineBoxBgColor: undefined,
+      headlineBoxBorderColor: undefined,
+      activeSocialIcons: activeSocialKeys,
+      channelNameHi: savedProfile?.channelNameHi || 'ब्रेकिंग न्यूज़ वाला',
+      channelNameEn: savedProfile?.channelNameEn || 'BREAKING NEWS WALA',
+      channelLogoType: savedProfile?.channelLogoType || 'png',
+      whatsappNumber: (savedProfile?.whatsappDisplayNumber || savedProfile?.whatsappNumber || savedProfile?.mobileNumber || '9669802408').trim(),
       socialHandle: savedProfile?.username
         ? (savedProfile.username.startsWith('@') ? savedProfile.username : `@${savedProfile.username}`)
-        : '',
-      whatsappNumber: (savedProfile?.whatsappDisplayNumber || savedProfile?.whatsappNumber || savedProfile?.mobileNumber || '').trim(),
-      websiteUrl: (savedProfile?.websiteUrl || '').trim(),
+        : '@breakingnewswala',
+      websiteUrl: (savedProfile?.websiteUrl || 'ainewsmaker.online').trim(),
       showMobileNumber: savedProfile?.showMobileNumber !== false,
       showWebsite: savedProfile?.showWebsite !== false,
-      activeSocialIcons: activeSocialKeys,
       customHeaderPng: (savedProfile as any)?.customHeaderPng !== undefined ? (savedProfile as any).customHeaderPng : undefined,
       customFooterPng: (savedProfile as any)?.customFooterPng !== undefined ? (savedProfile as any).customFooterPng : undefined,
       speakerName: '',
@@ -2603,8 +2595,32 @@ export default function App() {
     window.dispatchEvent(new CustomEvent('ai_news_studio_reset_preview'));
 
     setActiveStep(1);
-    showToast('फोटो न्यूज़ स्टूडियो सफलतापूर्वक रीसेट हो गया है।');
+    setActiveMobileStep(1);
+    showToast('✨ स्टूडियो कार्यक्षेत्र रिफ्रेश हो गया है!');
     showAppSuccess('फोटो न्यूज़ स्टूडियो सफलतापूर्वक रीसेट हो गया है।', 'फोटो न्यूज़ स्टूडियो');
+  };
+
+  const resetPhotoNewsStudioWorkspace = (options: { skipConfirm?: boolean } = {}) => {
+    const savedProfile = getSavedChannelProfile();
+    if (!options.skipConfirm) {
+      const hasUnsavedContent = Boolean(
+        (card.headline && card.headline.trim().length > 0 && !card.headline.includes('यहाँ आपकी हेडलाइन आएगी')) ||
+        (card.images?.main && card.images.main.trim().length > 0)
+      );
+      if (hasUnsavedContent) {
+        showAppConfirm({
+          title: 'स्टूडियो रिफ्रेश करें',
+          message: 'क्या आप स्टूडियो को रिफ्रेश करके नया ग्राफिक शुरू करना चाहते हैं? वर्तमान अनसेव्ड बदलाव हट जाएंगे।',
+          channelLogo: savedProfile?.channelLogoUrl,
+          confirmText: 'हाँ, रिफ्रेश करें',
+          cancelText: 'रद्द करें',
+          isDestructive: true,
+          onConfirm: executeStudioWorkspaceReset,
+        });
+        return;
+      }
+    }
+    executeStudioWorkspaceReset();
   };
 
   const handleResetCard = () => resetPhotoNewsStudioWorkspace();
@@ -3192,6 +3208,28 @@ export default function App() {
   }, []);
 
   const handleOpenStudioWithNews = async (post: NewsFeedPost) => {
+    // Deduplication check: If graphic for this news was already generated, restore cached state without deducting quota or burning AI tokens
+    try {
+      const cachedStoreRaw = typeof localStorage !== 'undefined' ? localStorage.getItem('news_studio_cached_graphics_v1') : null;
+      if (cachedStoreRaw) {
+        const cachedStore = JSON.parse(cachedStoreRaw);
+        if (cachedStore && post?.id && cachedStore[post.id]) {
+          const cachedCard = cachedStore[post.id];
+          setStudioMode('graphic');
+          setCard(cachedCard);
+          navigateToTab('studio');
+          setActiveStep(1);
+          setToastMessage('✅ पूर्व निर्मित ग्राफिक लोड किया गया (शून्य कोटा/टोकन खर्च)');
+          setTimeout(() => {
+            scrollToStepById('step-ai');
+          }, 150);
+          return;
+        }
+      }
+    } catch (cacheErr) {
+      console.warn('Cache lookup error:', cacheErr);
+    }
+
     // Priority 4: Prevent accidental credit/quota consumption upon simple navigation. Quota is consumed on export.
     try {
       fetch(getApiUrl('/api/analytics/track'), {
@@ -3363,15 +3401,47 @@ export default function App() {
       )
     );
 
+    const cacheGeneratedCard = (cardData: any) => {
+      try {
+        if (typeof localStorage === 'undefined' || !post?.id) return;
+        const cachedStoreRaw = localStorage.getItem('news_studio_cached_graphics_v1');
+        const store = cachedStoreRaw ? JSON.parse(cachedStoreRaw) : {};
+        store[post.id] = cardData;
+        localStorage.setItem('news_studio_cached_graphics_v1', JSON.stringify(store));
+      } catch {}
+    };
+
+    const editorialLoadingSubtitles = [
+      'खबर के तथ्यों, संदर्भ और प्रमुख बिंदुओं का विश्लेषण करके ग्राफिक के लिए सामग्री व्यवस्थित की जा रही है...',
+      'पत्रकारिता मानकों के अनुसार निष्पक्ष तथ्यों व संदर्भ की पुष्टि की जा रही है...',
+      'संपादकीय डेस्क द्वारा 5 संतुलित व प्रभावी हेडलाइन विकल्प तैयार किए जा रहे हैं...',
+      'सोशल मीडिया और डिजिटल पाठकों के लिए प्रासंगिक कीवर्ड व हैशटैग जोड़े जा रहे हैं...',
+      'न्यूज़ स्टूडियो फ्रेम, लोगो और फोटो लेआउट को अंतिम रूप दिया जा रहा है...',
+    ];
+
+    const tagRaw = String((post as any).photoWatermarkTag || (post as any).watermarkGlobalMode || '').toUpperCase();
+    let targetDisclaimerType: 'none' | 'ai' | 'representative' = 'none';
+    let targetShowAi = false;
+    let targetPhotoWatermarkTag: string | undefined = undefined;
+
+    if (tagRaw.includes('AI') || (post as any).isAiGenerated === true) {
+      targetDisclaimerType = 'ai';
+      targetShowAi = true;
+      targetPhotoWatermarkTag = 'AI GENERATED IMAGE';
+    } else if (tagRaw.includes('SYMBOLIC') || tagRaw.includes('प्रतीकात्मक') || tagRaw.includes('REPRESENTATIVE')) {
+      targetDisclaimerType = 'representative';
+      targetShowAi = false;
+      targetPhotoWatermarkTag = 'प्रतीकात्मक फोटो';
+    }
+
     if (isApprovedNews) {
       // Pre-published editorial presentation with Part 5.2 waiting popup message
       setBrandedLoader({
         isOpen: true,
         mode: 'graphic_preparation',
         title: 'संपादकीय डेस्क आपकी चुनी हुई खबर के लिए पाँच प्रभावी हेडलाइन विकल्प तैयार कर रहा है।',
-        subtitles: [
-          'खबर के तथ्यों, संदर्भ और प्रमुख बिंदुओं का विश्लेषण करके ग्राफिक के लिए सामग्री व्यवस्थित की जा रही है।',
-        ],
+        subtitles: editorialLoadingSubtitles,
+        subtitleIntervalMs: 2500,
         durationSeconds: 4,
         error: null,
       });
@@ -3448,37 +3518,46 @@ export default function App() {
           }
         }
 
-        setCard((prev) => ({
-          ...prev,
-          sourceNewsId: post.id,
-          sourceUrl: effectiveLink || post.sourceUrl || (post as any).url || (post as any).originalUrl || '',
-          isBonus: Boolean(post.isBonus === true),
-          originalHeadline: post.title,
-          frameDesign: 'graphic_001',
-          layout: (post as any).layoutMode || prev.layout || 'single',
-          showCirclePhoto: (post as any).layoutMode === 'inset-circle' || prev.showCirclePhoto || false,
-          watermarkGlobalMode: (post as any).watermarkGlobalMode || prev.watermarkGlobalMode || 'OFF',
-          photoWatermarkTag: (post as any).photoWatermarkTag || prev.photoWatermarkTag,
-          showDate: false,
-          showWatermark: Boolean((post as any).watermarkGlobalMode === 'AI_GENERATED' || (post as any).watermarkGlobalMode === 'SYMBOLIC_PHOTO' || prev.showWatermark),
-          showLocation: true,
-          headline: initialHeadline,
-          formattedHeadline: initialHeadline,
-          headlineOptions: approvedHeadlines,
-          regenerationUsed: approvedHeadlines.length >= 10,
-          regeneratedHeadlines: undefined,
-          location: effectiveLoc || prev.location || '',
-          category: post.categoryName,
-          summary: formattedCaption,
-          images: {
-            ...prev.images,
-            main: primaryPhoto,
-            second: secondPhoto,
-            third: thirdPhoto,
-            fourth: fourthPhoto,
-          },
-          extractedArticlePhotos: articlePhotos,
-        }));
+        setCard((prev) => {
+          const nextCard: NewsCardData = {
+            ...prev,
+            sourceNewsId: post.id,
+            sourceUrl: effectiveLink || post.sourceUrl || (post as any).url || (post as any).originalUrl || '',
+            isBonus: Boolean(post.isBonus === true),
+            originalHeadline: post.title,
+            frameDesign: 'graphic_001',
+            layout: (post as any).layoutMode || prev.layout || 'single',
+            showCirclePhoto: (post as any).layoutMode === 'inset-circle' || prev.showCirclePhoto || false,
+            watermarkGlobalMode: (post as any).watermarkGlobalMode || prev.watermarkGlobalMode || 'OFF',
+            photoWatermarkTag: targetPhotoWatermarkTag || (post as any).photoWatermarkTag || prev.photoWatermarkTag,
+            photoDisclaimerType: targetDisclaimerType,
+            showAiGenerated: targetShowAi,
+            photoTagShowBox: true,
+            photoTagBoxColor: '#000000',
+            showCallout: false,
+            showDate: false,
+            showWatermark: Boolean(targetShowAi || targetDisclaimerType === 'representative' || (post as any).watermarkGlobalMode === 'AI_GENERATED' || (post as any).watermarkGlobalMode === 'SYMBOLIC_PHOTO' || prev.showWatermark),
+            showLocation: true,
+            headline: initialHeadline,
+            formattedHeadline: initialHeadline,
+            headlineOptions: approvedHeadlines,
+            regenerationUsed: approvedHeadlines.length >= 10,
+            regeneratedHeadlines: undefined,
+            location: effectiveLoc || prev.location || '',
+            category: post.categoryName,
+            summary: formattedCaption,
+            images: {
+              ...prev.images,
+              main: primaryPhoto,
+              second: secondPhoto,
+              third: thirdPhoto,
+              fourth: fourthPhoto,
+            },
+            extractedArticlePhotos: articlePhotos,
+          };
+          cacheGeneratedCard(nextCard);
+          return nextCard;
+        });
 
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(formattedCaption).catch(() => {});
@@ -3531,9 +3610,8 @@ export default function App() {
         isOpen: true,
         mode: 'graphic_preparation',
         title: 'संपादकीय डेस्क आपकी चुनी हुई खबर के लिए पाँच प्रभावी हेडलाइन विकल्प तैयार कर रहा है।',
-        subtitles: [
-          'खबर के तथ्यों, संदर्भ और प्रमुख बिंदुओं का विश्लेषण करके ग्राफिक के लिए सामग्री व्यवस्थित की जा रही है।',
-        ],
+        subtitles: editorialLoadingSubtitles,
+        subtitleIntervalMs: 2500,
         durationSeconds: 2.5,
         error: null,
       });
@@ -3545,37 +3623,46 @@ export default function App() {
 
       const baseTitle = cleanHeadlineText(post.title || 'ताज़ा समाचार');
 
-      setCard((prev) => ({
-        ...prev,
-        sourceNewsId: post.id,
-        sourceUrl: effectiveLink || post.sourceUrl || (post as any).url || (post as any).originalUrl || '',
-        isBonus: Boolean(post.isBonus === true),
-        originalHeadline: post.title,
-        frameDesign: 'graphic_001',
-        layout: (post as any).layoutMode || prev.layout || 'single',
-        showCirclePhoto: (post as any).layoutMode === 'inset-circle' || prev.showCirclePhoto || false,
-        watermarkGlobalMode: (post as any).watermarkGlobalMode || prev.watermarkGlobalMode || 'OFF',
-        photoWatermarkTag: (post as any).photoWatermarkTag || prev.photoWatermarkTag,
-        showDate: false,
-        showWatermark: Boolean((post as any).watermarkGlobalMode === 'AI_GENERATED' || (post as any).watermarkGlobalMode === 'SYMBOLIC_PHOTO' || prev.showWatermark),
-        showLocation: true,
-        headline: baseTitle,
-        formattedHeadline: baseTitle,
-        headlineOptions: [],
-        regenerationUsed: false,
-        regeneratedHeadlines: undefined,
-        location: effectiveLoc || prev.location || '',
-        category: post.categoryName,
-        summary: post.summary || '',
-        images: {
-          ...prev.images,
-          main: primaryPhoto,
-          second: secondPhoto,
-          third: thirdPhoto,
-          fourth: fourthPhoto,
-        },
-        extractedArticlePhotos: articlePhotos,
-      }));
+      setCard((prev) => {
+        const nextCard: NewsCardData = {
+          ...prev,
+          sourceNewsId: post.id,
+          sourceUrl: effectiveLink || post.sourceUrl || (post as any).url || (post as any).originalUrl || '',
+          isBonus: Boolean(post.isBonus === true),
+          originalHeadline: post.title,
+          frameDesign: 'graphic_001',
+          layout: (post as any).layoutMode || prev.layout || 'single',
+          showCirclePhoto: (post as any).layoutMode === 'inset-circle' || prev.showCirclePhoto || false,
+          watermarkGlobalMode: (post as any).watermarkGlobalMode || prev.watermarkGlobalMode || 'OFF',
+          photoWatermarkTag: targetPhotoWatermarkTag || (post as any).photoWatermarkTag || prev.photoWatermarkTag,
+          photoDisclaimerType: targetDisclaimerType,
+          showAiGenerated: targetShowAi,
+          photoTagShowBox: true,
+          photoTagBoxColor: '#000000',
+          showCallout: false,
+          showDate: false,
+          showWatermark: Boolean(targetShowAi || targetDisclaimerType === 'representative' || (post as any).watermarkGlobalMode === 'AI_GENERATED' || (post as any).watermarkGlobalMode === 'SYMBOLIC_PHOTO' || prev.showWatermark),
+          showLocation: true,
+          headline: baseTitle,
+          formattedHeadline: baseTitle,
+          headlineOptions: [],
+          regenerationUsed: false,
+          regeneratedHeadlines: undefined,
+          location: effectiveLoc || prev.location || '',
+          category: post.categoryName,
+          summary: post.summary || '',
+          images: {
+            ...prev.images,
+            main: primaryPhoto,
+            second: secondPhoto,
+            third: thirdPhoto,
+            fourth: fourthPhoto,
+          },
+          extractedArticlePhotos: articlePhotos,
+        };
+        cacheGeneratedCard(nextCard);
+        return nextCard;
+      });
 
       setAutoFillNews({
         newsId: post.id,
@@ -5108,8 +5195,8 @@ export default function App() {
                       );
                     })()}
 
-                    {/* Horizontal Scrollable Tabs: Step 1 to 7 with Multicolor Themes */}
-                    <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-slate-700">
+                    {/* Horizontal Compact Tabs: Step 1 to 7 with Multicolor Themes */}
+                    <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto pb-1 scrollbar-none w-full">
                       {STUDIO_STEPS.map((s) => {
                         const isActive = activeStep === s.step;
                         const theme = STUDIO_STEP_THEMES[s.step] || STUDIO_STEP_THEMES[1];
@@ -5127,21 +5214,21 @@ export default function App() {
                               setMobileViewMode('steps');
                               scrollToStepById(s.id);
                             }}
-                            className={`px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 shrink-0 border ${
+                            className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-black transition-all whitespace-nowrap cursor-pointer flex items-center gap-1 shrink-0 border ${
                               isActive
                                 ? theme.activeBtn
                                 : 'bg-slate-950/80 hover:bg-slate-800 text-slate-300 border-slate-800 hover:text-white'
                             }`}
                           >
-                            <span className={`inline-flex items-center justify-center w-4 h-4 rounded text-[9.5px] font-mono font-black border ${
+                            <span className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded text-[9px] font-mono font-black border ${
                               isActive ? 'bg-black/30 text-white border-white/30' : theme.badge
                             }`}>
                               {s.step}
                             </span>
                             <span>{s.label}</span>
                             {isDone && (
-                              <span className="w-3.5 h-3.5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                                <Check className="w-2.5 h-2.5 stroke-[3]" />
+                              <span className="w-3 h-3 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                                <Check className="w-2 h-2 stroke-[3]" />
                               </span>
                             )}
                           </button>
@@ -5385,10 +5472,13 @@ export default function App() {
           setIsOnboardingCompleted(true);
           setIsOnboardingOpen(false);
           showToast('🎉 चैनल व प्रोफाइल सेटअप सफलतापूर्वक पूर्ण हुआ!');
+          setTimeout(() => {
+            setIsGraphicStudioGuideOpen(true);
+          }, 600);
           if (!isAndroidEnvironment) {
             setTimeout(() => {
               setIsInstallModalOpen(true);
-            }, 1200);
+            }, 2500);
           }
         }}
         onClose={() => {
@@ -5491,6 +5581,7 @@ export default function App() {
         mode={brandedLoader.mode}
         title={brandedLoader.title}
         subtitles={brandedLoader.subtitles}
+        subtitleIntervalMs={brandedLoader.subtitleIntervalMs || 2500}
         durationSeconds={brandedLoader.durationSeconds}
         error={brandedLoader.error}
         onRetry={brandedLoader.onRetry}

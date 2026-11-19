@@ -53,6 +53,7 @@ import { fetchDynamicFramesFromApi, getLocalDynamicFrames } from '../lib/dynamic
 import { processNewsLocally } from '../lib/clientAiProcessor';
 import { generate5BalancedHeadlineOptions } from '../lib/speakerUtils';
 import { newsAudio, BUILTIN_NEWS_TRACKS } from '../lib/newsAudioEngine';
+import { showAppConfirm } from '../lib/notificationService';
 import { generateVideoDownloadFileName } from '../lib/dateUtils';
 import { saveVideoDraft } from '../lib/draftsManager';
 import { addProjectToHistory } from '../lib/projectHistoryManager';
@@ -1902,12 +1903,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   );
 
   // Reset Task Handler (Section 5)
-  const handleResetTask = () => {
-    if (headline.trim() || videoUrl || location.trim() || (clips && clips.length > 0)) {
-      if (!window.confirm('क्या आप वर्तमान संपादन को रीसेट करना चाहते हैं? इससे सभी अनसेव्ड बदलाव हट जाएंगे।')) {
-        return;
-      }
-    }
+  const executeReset = () => {
     // Safely stop playback
     if (videoRef.current) {
       try {
@@ -1974,6 +1970,22 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     // Return to Step 1
     setQuickStep(1);
     showToast('🔄 वर्तमान वीडियो प्रोजेक्ट रीसेट हो गया');
+  };
+
+  const handleResetTask = () => {
+    if (headline.trim() || videoUrl || location.trim() || (clips && clips.length > 0)) {
+      showAppConfirm({
+        title: 'वीडियो स्टूडियो रीसेट',
+        message: 'क्या आप वर्तमान संपादन को रीसेट करना चाहते हैं? इससे सभी अनसेव्ड बदलाव हट जाएंगे।',
+        channelLogo: channelProfile?.channelLogoUrl,
+        confirmText: 'हाँ, रीसेट करें',
+        cancelText: 'रद्द करें',
+        isDestructive: true,
+        onConfirm: executeReset,
+      });
+      return;
+    }
+    executeReset();
   };
 
   // Draft Save Handler (Section 5)
@@ -4537,34 +4549,33 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   </div>
                 </div>
 
-                {/* Horizontal Step Navigation Pills */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px] font-bold">
+                {/* Horizontal Compact Step Navigation Pills */}
+                <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[10.5px] sm:text-xs font-bold w-full">
                   {(isFromVideoReels
                     ? [
-                        { step: 1, label: 'वीडियो व फ़िल्टर्स', icon: Film, ok: Boolean(videoUrl) },
-                        { step: 2, label: 'हेडलाइंस', icon: Type, ok: Boolean(headline.trim()) },
-                        { step: 3, label: 'लोकेशन', icon: MapPin, ok: true },
-                        { step: 4, label: 'लोगो-वॉटरमार्क', icon: Sparkles, ok: true },
-                        { step: 5, label: 'डाउनलोड-एक्सपोर्ट', icon: Download, ok: quickVideoValidation.isValid },
+                        { step: 1, label: 'वीडियो', ok: Boolean(videoUrl) },
+                        { step: 2, label: 'हेडलाइंस', ok: Boolean(headline.trim()) },
+                        { step: 3, label: 'लोकेशन', ok: true },
+                        { step: 4, label: 'लोगो & वॉटरमार्क', ok: true },
+                        { step: 5, label: 'डाउनलोड', ok: quickVideoValidation.isValid },
                       ]
                     : [
-                        { step: 1, label: 'वीडियो', icon: Film, ok: quickVideoValidation.stepsStatus[1] },
-                        { step: 2, label: 'ऑडियो', icon: Music, ok: quickVideoValidation.stepsStatus[2] },
-                        { step: 3, label: 'हेडलाइन', icon: Type, ok: quickVideoValidation.stepsStatus[3] },
-                        { step: 4, label: 'लोकेशन', icon: MapPin, ok: quickVideoValidation.stepsStatus[4] },
-                        { step: 5, label: 'लोगो-वॉटरमार्क', icon: Sparkles, ok: quickVideoValidation.stepsStatus[5] },
-                        { step: 6, label: 'फ़ूटर-ब्रांडिंग', icon: Tag, ok: quickVideoValidation.stepsStatus[6] },
-                        { step: 7, label: 'डाउनलोड-कैप्शन', icon: Download, ok: quickVideoValidation.isValid },
+                        { step: 1, label: 'वीडियो', ok: quickVideoValidation.stepsStatus[1] },
+                        { step: 2, label: 'ऑडियो', ok: quickVideoValidation.stepsStatus[2] },
+                        { step: 3, label: 'हेडलाइन', ok: quickVideoValidation.stepsStatus[3] },
+                        { step: 4, label: 'लोकेशन', ok: quickVideoValidation.stepsStatus[4] },
+                        { step: 5, label: 'लोगो & वॉटरमार्क', ok: quickVideoValidation.stepsStatus[5] },
+                        { step: 6, label: 'फ़ूटर', ok: quickVideoValidation.stepsStatus[6] },
+                        { step: 7, label: 'डाउनलोड', ok: quickVideoValidation.isValid },
                       ]
                   ).map((s) => {
                     const isActive = quickStep === s.step;
-                    const Icon = s.icon;
                     return (
                       <button
                         key={s.step}
                         type="button"
                         onClick={() => setQuickStep(s.step)}
-                        className={`flex-shrink-0 px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer text-xs ${
+                        className={`flex-shrink-0 px-1.5 py-1 sm:px-2.5 sm:py-1 rounded-lg transition-all flex items-center gap-1 cursor-pointer ${
                           isActive
                             ? 'bg-gradient-to-r from-red-600 to-amber-500 text-white font-black shadow-md'
                             : s.ok
@@ -4572,14 +4583,13 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                             : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800'
                         }`}
                       >
-                        <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
+                        <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-black shrink-0 ${
                           isActive ? 'bg-white text-red-600' : 'bg-amber-400 text-neutral-950'
                         }`}>
                           {s.step}
                         </span>
-                        <Icon className="w-3.5 h-3.5" />
                         <span>{s.label}</span>
-                        {s.ok && !isActive && <Check className="w-3 h-3 text-emerald-400" />}
+                        {s.ok && !isActive && <Check className="w-2.5 h-2.5 text-emerald-400" />}
                       </button>
                     );
                   })}

@@ -700,15 +700,16 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         );
       })()}
 
-      {/* 0B2. DYNAMIC FRAME TEXT WATERMARK (Priority 8: Strictly clipped to Photo Slot only, mutual exclusion with Image Watermark) */}
+      {/* 0B2. DYNAMIC FRAME TEXT WATERMARK (Priority 8: Spans entire canvas for universal brand protection, with df.photoSlots?.[0]?.rect?.height fallback) */}
       {df && (card.showTextWatermark === true || card.showSuperBreakingWatermark === true || card.watermarkMode === 'text') && card.watermarkMode !== 'image' && !card.watermarkImage && (
         <div
-          className="absolute pointer-events-none z-11 overflow-hidden flex flex-col justify-around select-none"
+          className="absolute inset-0 pointer-events-none z-30 overflow-hidden flex flex-col justify-around select-none"
           style={{
-            left: `${df.photoSlots?.[0]?.rect?.x ?? 0}%`,
-            top: `${df.photoSlots?.[0]?.rect?.y ?? 0}%`,
-            width: `${df.photoSlots?.[0]?.rect?.width ?? 100}%`,
-            height: `${df.photoSlots?.[0]?.rect?.height ?? 58}%`,
+            left: 0,
+            top: 0,
+            width: '100%',
+            height: '100%',
+            minHeight: df.photoSlots?.[0]?.rect?.height ? '100%' : '100%',
           }}
         >
           <div className="w-[200%] -ml-[50%] flex flex-col gap-8 sm:gap-11 -rotate-20">
@@ -1348,26 +1349,36 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       {/* 2B. PHOTO DISCLAIMER Watermark (AI GENERATED (प्रतीकात्मक फोटो)): Vertical along Left Wall, Rotated 90° - Topmost Visual Layer */}
       {!currentDynamicFrame?.watermarkConfig?.enabled && (card.photoDisclaimerType === 'ai' ||
         card.photoDisclaimerType === 'representative' ||
-        (card.showAiGenerated && card.photoDisclaimerType !== 'none')) && (
-        <div
-          className="absolute left-3 sm:left-4 top-[44%] -translate-y-1/2 pointer-events-none z-50 flex items-center justify-center select-none"
-          style={{ width: '28px', height: '160px' }}
-        >
+        (card.showAiGenerated && card.photoDisclaimerType !== 'none')) && (() => {
+        const showBox = card.photoTagShowBox !== false;
+        const boxBg = card.photoTagBoxColor || 'rgba(0,0,0,0.85)';
+        const text = card.photoDisclaimerType === 'representative'
+          ? (card.representativePhotoText || 'प्रतीकात्मक फोटो')
+          : (card.aiGeneratedText || 'AI GENERATED');
+        return (
           <div
-            className="absolute whitespace-nowrap bg-black/80 backdrop-blur-md border border-white/30 px-3 py-1 rounded-md shadow-xl flex items-center justify-center"
-            style={{
-              transform: `rotate(${card.watermarkRotation ?? (card as any).watermarkRotation ?? 270}deg)`,
-              transformOrigin: 'center center',
-            }}
+            className="absolute left-2.5 sm:left-3.5 top-[44%] -translate-y-1/2 pointer-events-none z-50 flex items-center justify-center select-none"
+            style={{ width: '24px', height: '140px' }}
           >
-            <span className="text-[8.5px] sm:text-[10px] font-black uppercase tracking-[0.16em] text-white px-1 inline-block font-['Baloo_2',sans-serif] drop-shadow">
-              {card.photoDisclaimerType === 'representative'
-                ? card.representativePhotoText || 'प्रतीकात्मक फोटो'
-                : card.aiGeneratedText || 'AI GENERATED (प्रतीकात्मक फोटो)'}
-            </span>
+            <div
+              className={`absolute whitespace-nowrap px-2 py-0.5 rounded shadow-md flex items-center justify-center ${
+                showBox ? 'border border-white/30' : ''
+              }`}
+              style={{
+                transform: `rotate(${card.watermarkRotation ?? (card as any).watermarkRotation ?? 270}deg)`,
+                transformOrigin: 'center center',
+                backgroundColor: showBox ? boxBg : 'transparent',
+              }}
+            >
+              <span className={`text-[8px] sm:text-[9.5px] font-black uppercase tracking-[0.14em] text-white px-0.5 inline-block font-['Baloo_2',sans-serif] ${
+                showBox ? 'drop-shadow' : 'drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)]'
+              }`}>
+                {text}
+              </span>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 2C. DATE STAMP: Vertical along Right Wall, Rotated 90°, Text without background box - Topmost Visual Layer (Standard frames only; Dynamic frames use their own date layer) */}
       {card.showDate !== false && !currentDynamicFrame && !card.customDynamicFrame && !card.frameDesign?.startsWith('df_') && (

@@ -21011,7 +21011,11 @@ ${itemsXml}
 app.get(["/rss.xml", "/feed.xml", "/api/rss"], (_req, res) => {
   try {
     const posts = loadNewsDatabase();
-    const rssXml = generateRssFeedXml(posts);
+    const deletedIds = loadDeletedNewsIds();
+    const now = Date.now();
+    const window72h = 72 * 60 * 60 * 1e3;
+    const activePosts = (posts || []).filter((p) => p && p.id && !deletedIds.has(p.id) && p._deleted !== true && now - (p.timestamp || 0) <= window72h);
+    const rssXml = generateRssFeedXml(activePosts);
     res.header("Content-Type", "application/rss+xml; charset=utf-8");
     res.header("Cache-Control", "public, max-age=180");
     return res.send(rssXml);
@@ -21053,8 +21057,11 @@ function generateSitemapXml(baseUrl = "https://www.ainewsmaker.online") {
         editorialDb = loadApprovedEditorialDatabase();
       } catch {
       }
+      const now = Date.now();
+      const window72h = 72 * 60 * 60 * 1e3;
       const published = posts.filter((p) => {
         if (!p || !p.id || deletedIds.has(p.id) || p._deleted === true) return false;
+        if (p.timestamp && now - p.timestamp > window72h) return false;
         if (p.status === "DRAFT" || p.publicationStatus === "draft" || p.status === "PENDING_APPROVAL") return false;
         return p.publicationStatus === "PUBLISHED" || p.isPublished === true || p.editorialApproved === true || p.approvalStatus === "APPROVED" || p.status === "APPROVED" || p.status === "published" || Boolean(editorialDb && editorialDb[p.id] && editorialDb[p.id].status === "APPROVED");
       });
@@ -21129,7 +21136,7 @@ function generateNewsSitemapXml(baseUrl = "https://www.ainewsmaker.online") {
         }
       );
       const recent = published.filter((p) => p.timestamp && now - p.timestamp <= twoDaysMs);
-      const targetPosts = recent.length > 0 ? recent : published.slice(0, 20);
+      const targetPosts = recent.length > 0 ? recent : published.filter((p) => p.timestamp && now - p.timestamp <= 72 * 60 * 60 * 1e3).slice(0, 20);
       const seenUrls = /* @__PURE__ */ new Set();
       const entryStrings = [];
       for (const p of targetPosts) {
@@ -38540,6 +38547,35 @@ async function startServer() {
           let ogType = "website";
           let extraJsonLd = "";
           let prerenderContent = "";
+          if (!articleId && (req.path === "/" || req.path === "" || req.path === "/index.html")) {
+            try {
+              const posts = loadNewsDatabase();
+              const deletedIds = loadDeletedNewsIds();
+              const now = Date.now();
+              const window72h = 72 * 60 * 60 * 1e3;
+              const activePosts = (posts || []).filter((p) => p && p.id && !deletedIds.has(p.id) && p._deleted !== true && now - (p.timestamp || 0) <= window72h);
+              if (activePosts.length > 0) {
+                const headlines = activePosts.slice(0, 4).map((p) => p.title || p.approvedHeadline).filter(Boolean);
+                if (headlines.length > 0) {
+                  description = `\u0924\u093E\u091C\u093C\u093E \u0938\u0941\u0930\u094D\u0916\u093F\u092F\u093E\u0902: ${headlines.join(" | ").slice(0, 180)}... \u092D\u093E\u0930\u0924 \u0915\u093E \u0938\u094D\u092E\u093E\u0930\u094D\u091F \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B\u0964`;
+                  prerenderContent = `
+                    <div class="bot-home-prerender" style="max-width:900px;margin:20px auto;padding:20px;font-family:sans-serif;color:#f8fafc;">
+                      <h1 style="font-size:24px;color:#f59e0b;margin-bottom:12px;">AI News Maker \u2014 \u0924\u093E\u091C\u093C\u093E \u0932\u093E\u0907\u0935 \u0938\u092E\u093E\u091A\u093E\u0930</h1>
+                      <ul style="list-style:none;padding:0;display:flex;flex-direction:column;gap:12px;">
+                        ${activePosts.slice(0, 10).map((p) => `
+                          <li style="border-bottom:1px solid #334155;padding-bottom:10px;">
+                            <a href="${cleanBase}/newsroom?article=${encodeURIComponent(p.id)}" style="color:#38bdf8;font-weight:600;text-decoration:none;font-size:16px;">${p.title || p.approvedHeadline || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930"}</a>
+                            <p style="color:#94a3b8;font-size:13px;margin:4px 0 0 0;">${(p.summary || "").slice(0, 140)}...</p>
+                          </li>
+                        `).join("")}
+                      </ul>
+                    </div>
+                  `;
+                }
+              }
+            } catch {
+            }
+          }
           if (articleId) {
             try {
               let found = null;
