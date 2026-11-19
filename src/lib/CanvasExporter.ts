@@ -1969,7 +1969,8 @@ async function drawAuthoritativeDynamicFrameCanvas(
           let fontSize = Math.round((typo?.fontSize || df.headerConfig.locationFontSize || 20) * (width / 1080));
           let locColor = card.locationTextColor || df.headerConfig.locationTextColor || typo?.color || '#FFFFFF';
           const cleanLocText = formatCleanLocationText(card.location || '');
-          ctx.font = `${typo?.weight || 800} ${fontSize}px "${typo?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`;
+          const locFontName = card.locationFont || typo?.fontFamily || 'Baloo 2';
+          ctx.font = `${typo?.weight || 800} ${fontSize}px "${locFontName}", "Noto Sans Devanagari", sans-serif`;
           const measuredTextW = ctx.measureText(cleanLocText).width;
 
           // Dynamic horizontal expansion: adapt width to actual text length (compact for Bhopal, wider for Bhopal, MP)
@@ -1977,7 +1978,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
           const minCenterW = 10;
           const neededCenterW = Math.max(minCenterW, measuredTextW + 24);
           const midDestW = Math.max(minCenterW, neededCenterW);
-          const dynamicBw = Math.min(maxBw, Math.max(bw, leftDestW + midDestW + rightDestW));
+          const dynamicBw = Math.min(maxBw, Math.max(80, leftDestW + midDestW + rightDestW));
           const finalCenterW = Math.max(10, dynamicBw - leftDestW - rightDestW);
 
           // Draw custom background color ONLY if explicitly set by user or frame
@@ -2010,7 +2011,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
           let measuredW = ctx.measureText(cleanLocText).width;
           while (measuredW > tw - 4 && fontSize > 10) {
             fontSize -= 1;
-            ctx.font = `${typo?.weight || 800} ${fontSize}px "${typo?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`;
+            ctx.font = `${typo?.weight || 800} ${fontSize}px "${locFontName}", "Noto Sans Devanagari", sans-serif`;
             measuredW = ctx.measureText(cleanLocText).width;
           }
 
@@ -2028,7 +2029,8 @@ async function drawAuthoritativeDynamicFrameCanvas(
       ctx.save();
       const cleanLocText = formatCleanLocationText(card.location || '');
       const fontSize = Math.max(14, Math.min(32, Math.round(bh * 0.58)));
-      ctx.font = `800 ${fontSize}px "Baloo 2", "Noto Sans Devanagari", sans-serif`;
+      const fallbackLocFont = card.locationFont || 'Baloo 2';
+      ctx.font = `800 ${fontSize}px "${fallbackLocFont}", "Noto Sans Devanagari", sans-serif`;
       const measuredTextW = ctx.measureText(cleanLocText).width;
       const dynamicBw = Math.min(width - bx - 20, Math.max(100, Math.round(measuredTextW + 56)));
 
@@ -2073,7 +2075,8 @@ async function drawAuthoritativeDynamicFrameCanvas(
     ctx.rotate((rotDeg * Math.PI) / 180);
 
     const dateFontSize = Math.round((df.headerConfig?.dateFontSize || 14) * (width / 1080) * 1.4);
-    ctx.font = `bold ${dateFontSize}px "Baloo 2", sans-serif`;
+    const dateFontName = card.dateFont || card.locationFont || 'Baloo 2';
+    ctx.font = `bold ${dateFontSize}px "${dateFontName}", sans-serif`;
     ctx.fillStyle = df.headerConfig?.dateTextColor || '#CBD5E1';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -2764,10 +2767,11 @@ async function drawGraphic001Canvas(
     const gap = 10;
     const maxLocTextW = locW - (pinDiameter + gap) - 16;
     let locFontSize = 24;
-    ctx.font = `800 ${locFontSize}px "Noto Sans Devanagari", sans-serif`;
+    const locPillFont = card.locationFont || 'Noto Sans Devanagari';
+    ctx.font = `800 ${locFontSize}px "${locPillFont}", sans-serif`;
     while (ctx.measureText(cleanLoc).width > maxLocTextW && locFontSize > 15) {
       locFontSize -= 1;
-      ctx.font = `800 ${locFontSize}px "Noto Sans Devanagari", sans-serif`;
+      ctx.font = `800 ${locFontSize}px "${locPillFont}", sans-serif`;
     }
     const actualTextW = ctx.measureText(cleanLoc).width;
     const contentW = pinDiameter + gap + actualTextW;
@@ -6619,10 +6623,10 @@ function drawPhotoDisclaimerWatermark(
   height: number,
   card: NewsCardData
 ) {
+  if (card.photoDisclaimerType === 'none') return;
   const isDisclaimerActive =
     card.photoDisclaimerType === 'ai' ||
     card.photoDisclaimerType === 'representative' ||
-    card.showWatermark ||
     (card.showAiGenerated && card.photoDisclaimerType !== 'none');
 
   // Single Watermark Instance: If dynamic frame has its own watermark enabled, suppress legacy photo disclaimer

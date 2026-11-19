@@ -457,8 +457,8 @@ async function main() {
         'server.ts must not reference invalid or decommissioned gemini-3-flash-preview model'
       );
       assert(
-        serverCode.includes('gemini-2.5-flash') || serverCode.includes('gemini-2.0-flash'),
-        'server.ts must configure valid production models (gemini-2.5-flash)'
+        serverCode.includes('gemini-3.1-flash-lite') || serverCode.includes('gemini-3.5-flash-lite') || serverCode.includes('gemini-2.5-flash') || serverCode.includes('gemini-2.0-flash'),
+        'server.ts must configure valid production models (gemini-3.1-flash-lite)'
       );
     });
 

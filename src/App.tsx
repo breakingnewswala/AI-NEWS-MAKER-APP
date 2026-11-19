@@ -2028,6 +2028,8 @@ export default function App() {
   const [isGraphicStudioGuideOpen, setIsGraphicStudioGuideOpen] = useState(false);
   const [isDraftsModalOpen, setIsDraftsModalOpen] = useState(false);
   const [currentDraftId, setCurrentDraftId] = useState<string | undefined>(() => getActiveDraftId() || undefined);
+  const [showWelcomeBackModal, setShowWelcomeBackModal] = useState(false);
+  const [showCelebrationModal, setShowCelebrationModal] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -2512,6 +2514,7 @@ export default function App() {
         second: '',
         third: '',
         fourth: '',
+        insetCircle: '',
       },
       photoUrl: '',
       testSamplePhotoUrl: '',
@@ -2558,6 +2561,9 @@ export default function App() {
       calloutTag: '',
       customCalloutAssetUrl: undefined,
       layout: 'single',
+      showCirclePhoto: false,
+      circlePhotoUrl: '',
+      circlePhotoScale: 28,
       highlightColor: '#FFE600',
       showMasterBranding: true,
       extractedArticlePhotos: [],
@@ -2859,6 +2865,9 @@ export default function App() {
           : prev.images,
         // Always default to single full image for news as explicitly requested by editor
         layout: 'single',
+      showCirclePhoto: false,
+      circlePhotoUrl: '',
+      circlePhotoScale: 28,
         showAiGenerated:
           result.isAiGeneratedPhoto !== undefined
             ? result.isAiGeneratedPhoto
@@ -3101,6 +3110,7 @@ export default function App() {
       }
 
       showToast(`✅ ${fmt === 'jpeg' ? 'JPG' : 'PNG'} 1080x1350 न्यूज़ कार्ड सफलतापूर्वक डाउनलोड हो गया!`);
+      setShowCelebrationModal(true);
     } catch (err: any) {
       console.error('Download error:', err);
       const msg = (err?.message && err.message.includes('अनिवार्य'))
@@ -3208,28 +3218,6 @@ export default function App() {
   }, []);
 
   const handleOpenStudioWithNews = async (post: NewsFeedPost) => {
-    // Deduplication check: If graphic for this news was already generated, restore cached state without deducting quota or burning AI tokens
-    try {
-      const cachedStoreRaw = typeof localStorage !== 'undefined' ? localStorage.getItem('news_studio_cached_graphics_v1') : null;
-      if (cachedStoreRaw) {
-        const cachedStore = JSON.parse(cachedStoreRaw);
-        if (cachedStore && post?.id && cachedStore[post.id]) {
-          const cachedCard = cachedStore[post.id];
-          setStudioMode('graphic');
-          setCard(cachedCard);
-          navigateToTab('studio');
-          setActiveStep(1);
-          setToastMessage('✅ पूर्व निर्मित ग्राफिक लोड किया गया (शून्य कोटा/टोकन खर्च)');
-          setTimeout(() => {
-            scrollToStepById('step-ai');
-          }, 150);
-          return;
-        }
-      }
-    } catch (cacheErr) {
-      console.warn('Cache lookup error:', cacheErr);
-    }
-
     // Priority 4: Prevent accidental credit/quota consumption upon simple navigation. Quota is consumed on export.
     try {
       fetch(getApiUrl('/api/analytics/track'), {
@@ -3259,15 +3247,6 @@ export default function App() {
 
     setStudioMode('graphic');
 
-    // Check if this specific card has the default photo toggled or missing image
-    const getDefaultThumbnailIds = (): Set<string> => {
-      try {
-        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('app_default_thumbnail_news_ids_v1') : null;
-        if (raw) return new Set(JSON.parse(raw));
-      } catch {}
-      return new Set();
-    };
-
     let targetImageForStudio = '';
     // Manual thumbnail is strictly for Home Screen News Card, NOT graphic studio background
     if (post.additionalImages && post.additionalImages.length > 0) {
@@ -3285,25 +3264,12 @@ export default function App() {
       targetImageForStudio = post.imageUrl.trim();
     }
 
-    // Module 4: Do NOT silently inject the instructional fallback graphic into graphic studio
     if (
       targetImageForStudio.includes('internet_photo_search_fallback') ||
       targetImageForStudio.includes('sample_news_bus') ||
       targetImageForStudio.includes('placeholder')
     ) {
       targetImageForStudio = '';
-    }
-
-    if (!targetImageForStudio) {
-      try {
-        addNotification({
-          title: 'फोटो अपलोड आवश्यक (Step 4)',
-          message: 'इस खबर में मूल फोटो उपलब्ध नहीं है। कृपया अपनी गैलरी से या इंटरनेट से संबंधित फोटो अपलोड करें।',
-          type: 'warning',
-          timestamp: Date.now(),
-          unread: true,
-        });
-      } catch {}
     }
 
     const safeProxy = (u: string) => {
@@ -3324,6 +3290,59 @@ export default function App() {
     };
 
     const safeTargetImage = safeProxy(targetImageForStudio);
+    const candidatePrimaryPhoto = safeTargetImage || targetImageForStudio || '';
+
+    // Deduplication check: If graphic for this news was already generated, restore cached state without deducting quota or burning AI tokens
+    try {
+      const cachedStoreRaw = typeof localStorage !== 'undefined' ? localStorage.getItem('news_studio_cached_graphics_v1') : null;
+      if (cachedStoreRaw) {
+        const cachedStore = JSON.parse(cachedStoreRaw);
+        if (cachedStore && post?.id && cachedStore[post.id]) {
+          const cachedCard = cachedStore[post.id];
+          const restoredCard = {
+            ...cachedCard,
+            location: cachedCard.location || effectiveLoc || '',
+            showLocation: cachedCard.showLocation !== undefined ? cachedCard.showLocation : true,
+            images: {
+              ...cachedCard.images,
+              main: cachedCard.images?.main || candidatePrimaryPhoto || safeTargetImage || '',
+            },
+          };
+          setStudioMode('graphic');
+          setCard(restoredCard);
+          navigateToTab('studio');
+          setActiveStep(1);
+          setToastMessage('✅ पूर्व निर्मित ग्राफिक लोड किया गया (शून्य कोटा/टोकन खर्च)');
+          setTimeout(() => {
+            scrollToStepById('step-ai');
+          }, 150);
+          return;
+        }
+      }
+    } catch (cacheErr) {
+      console.warn('Cache lookup error:', cacheErr);
+    }
+
+    // Check if this specific card has the default photo toggled or missing image
+    const getDefaultThumbnailIds = (): Set<string> => {
+      try {
+        const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('app_default_thumbnail_news_ids_v1') : null;
+        if (raw) return new Set(JSON.parse(raw));
+      } catch {}
+      return new Set();
+    };
+
+    if (!targetImageForStudio) {
+      try {
+        addNotification({
+          title: 'फोटो अपलोड आवश्यक (Step 4)',
+          message: 'इस खबर में मूल फोटो उपलब्ध नहीं है। कृपया अपनी गैलरी से या इंटरनेट से संबंधित फोटो अपलोड करें।',
+          type: 'warning',
+          timestamp: Date.now(),
+          unread: true,
+        });
+      } catch {}
+    }
 
     // Collect all available photos for this article: primary + up to 3 additional photos
     const articlePhotos: string[] = [];
@@ -3536,7 +3555,7 @@ export default function App() {
             photoTagBoxColor: '#000000',
             showCallout: false,
             showDate: false,
-            showWatermark: Boolean(targetShowAi || targetDisclaimerType === 'representative' || (post as any).watermarkGlobalMode === 'AI_GENERATED' || (post as any).watermarkGlobalMode === 'SYMBOLIC_PHOTO' || prev.showWatermark),
+            showWatermark: Boolean((post as any).showTextWatermark === true || (post as any).showWatermark === true),
             showLocation: true,
             headline: initialHeadline,
             formattedHeadline: initialHeadline,
@@ -3641,7 +3660,7 @@ export default function App() {
           photoTagBoxColor: '#000000',
           showCallout: false,
           showDate: false,
-          showWatermark: Boolean(targetShowAi || targetDisclaimerType === 'representative' || (post as any).watermarkGlobalMode === 'AI_GENERATED' || (post as any).watermarkGlobalMode === 'SYMBOLIC_PHOTO' || prev.showWatermark),
+          showWatermark: Boolean((post as any).showTextWatermark === true || (post as any).showWatermark === true),
           showLocation: true,
           headline: baseTitle,
           formattedHeadline: baseTitle,
@@ -3986,7 +4005,7 @@ export default function App() {
               localStorage.setItem(`onboarding_completed_${user.email.toLowerCase().trim()}`, 'true');
             }
             navigateToTab('home');
-            showToast(`स्वागत है, ${user.name || 'यूज़र'}!`);
+            setShowWelcomeBackModal(true);
           }}
           onCompleteDetails={(profile, updatedUser) => {
             handleSaveProfile(profile);
@@ -4006,8 +4025,9 @@ export default function App() {
             } else {
               localStorage.setItem('is_onboarding_completed', 'true');
               setIsOnboardingCompleted(true);
-              if (userToSet?.email) {
-                localStorage.setItem(`onboarding_completed_${userToSet.email.toLowerCase().trim()}`, 'true');
+              const cleanUserEmail = (userToSet?.email || '').toLowerCase().trim();
+              if (cleanUserEmail) {
+                localStorage.setItem(`onboarding_completed_${cleanUserEmail}`, 'true');
               }
               if (profile.district) {
                 setCard((prev) => ({
@@ -4016,7 +4036,13 @@ export default function App() {
                 }));
               }
               navigateToTab('home');
-              showToast('✅ लॉगिन व प्रोफ़ाइल सेटअप सफल! दैनिक लाइव न्यूज़ फ़ीड में आपका स्वागत है');
+              const seenGuide = cleanUserEmail && localStorage.getItem(`user_has_seen_guide_${cleanUserEmail}`);
+              if (!seenGuide && cleanUserEmail) {
+                localStorage.setItem(`user_has_seen_guide_${cleanUserEmail}`, 'true');
+                setIsGraphicStudioGuideOpen(true);
+              } else {
+                setShowWelcomeBackModal(true);
+              }
             }
           }}
           onClose={() => {
@@ -4803,7 +4829,7 @@ export default function App() {
                               <Download className="w-3.5 h-3.5 text-slate-950" />
                             )}
                             <span className="truncate">
-                              {downloading ? (downloadProgressText || 'डाउनलोड...') : 'JPG डाउनलोड'}
+                              {downloading ? (downloadProgressText || 'डाउनलोड...') : 'खबर डाउनलोड करें'}
                             </span>
                           </button>
                         );
@@ -5060,7 +5086,7 @@ export default function App() {
                               ) : (
                                 <Download className="w-3.5 h-3.5 shrink-0 text-slate-950" />
                               )}
-                              <span className="whitespace-nowrap font-bold text-xs">{downloading ? (downloadProgressText || 'डाउनलोड...') : 'JPG डाउनलोड'}</span>
+                              <span className="whitespace-nowrap font-bold text-xs">{downloading ? (downloadProgressText || 'डाउनलोड...') : 'खबर डाउनलोड करें'}</span>
                             </button>
 
                             {/* 2. कैप्शन - Locked until 100% completion */}
@@ -5605,6 +5631,111 @@ export default function App() {
 
       {/* 15. Viewport-Centered Dark-Themed Application Notification Modal */}
       <AppNotificationModal />
+
+      {/* 16. Existing User Welcome Back Centered Modal */}
+      {showWelcomeBackModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-500/40 rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-6 text-center shadow-2xl shadow-amber-950/30">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center text-3xl shadow-inner">
+              🌟
+            </div>
+
+            <div className="space-y-3">
+              <h2 className="text-xl sm:text-2xl font-black text-white">
+                वेलकम बैक, <span className="text-amber-400">{currentUser?.name || userChannelProfile?.channelNameHi || 'साथी'}</span>!
+              </h2>
+              {userChannelProfile?.channelNameHi && (
+                <div className="inline-block px-3 py-1 bg-amber-950/60 border border-amber-500/40 rounded-full text-xs font-bold text-amber-300">
+                  📺 {userChannelProfile.channelNameHi}
+                </div>
+              )}
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
+                यहाँ आप लेटेस्ट ख़बरों व वीडियोज़ को अपने सोशल मीडिया प्लेटफ़ॉर्म या अपने चैनल पर आसानी से शेयर कर सकते हैं।
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-left space-y-2">
+              <div className="flex items-start gap-2.5 text-xs text-amber-200 font-semibold">
+                <span className="text-sm">⚡</span>
+                <span>एआई न्यूज़ मेकर: ख़बर देखने से ख़बर बनाने तक सिर्फ़ दो मिनट</span>
+              </div>
+              <div className="flex items-start gap-2.5 text-xs text-blue-200 font-semibold">
+                <span className="text-sm">🎯</span>
+                <span>एआई के साथ हर ख़बर को दीजिए नया अंदाज़, आपकी ख़बर, आपकी पहचान</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowWelcomeBackModal(false)}
+              className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-sm rounded-xl shadow-lg shadow-amber-500/20 transition cursor-pointer flex items-center justify-center gap-2"
+            >
+              <span>शुरुआत करें</span>
+              <span>→</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 17. Celebration Confetti & Marketing Modal on Download */}
+      {showCelebrationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 border border-emerald-500/40 rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-6 text-center shadow-2xl shadow-emerald-950/40 overflow-hidden">
+            {/* Animated Celebration Glow */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-30">
+              <div className="absolute -top-4 left-1/4 w-12 h-12 bg-emerald-500 rounded-full blur-xl animate-pulse"></div>
+              <div className="absolute top-1/2 -right-4 w-16 h-16 bg-blue-500 rounded-full blur-xl animate-pulse delay-300"></div>
+              <div className="absolute -bottom-4 left-1/3 w-14 h-14 bg-amber-500 rounded-full blur-xl animate-pulse delay-700"></div>
+            </div>
+
+            <div className="relative w-20 h-20 rounded-3xl bg-emerald-500/10 border-2 border-emerald-500/40 text-emerald-400 mx-auto flex items-center justify-center text-4xl shadow-xl shadow-emerald-500/20 animate-bounce">
+              🎉
+            </div>
+
+            <div className="relative space-y-2">
+              <h2 className="text-xl sm:text-2xl font-black text-white">
+                बधाई हो! आपकी न्यूज़ ग्राफ़िक सफलतापूर्वक तैयार है!
+              </h2>
+              <p className="text-xs sm:text-sm text-emerald-400 font-bold">
+                ✨ 1080x1350 HD न्यूज़ कार्ड आपके डिवाइस में सेव हो गया है।
+              </p>
+            </div>
+
+            <div className="relative p-4 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-left space-y-2.5">
+              <div className="text-xs text-slate-300 leading-relaxed">
+                📱 <strong>सोशल मीडिया पर शेयर करें:</strong> अपने दर्शकों तक सबसे पहले निष्पक्ष व प्रामाणिक समाचार पहुँचाएँ।
+              </div>
+              <div className="text-xs text-amber-300 font-medium">
+                🚀 <em>"एआई न्यूज़ मेकर: ख़बर देखने से ख़बर बनाने तक सिर्फ दो मिनट — आपकी ख़बर, आपकी पहचान!"</em>
+              </div>
+            </div>
+
+            <div className="relative flex flex-col sm:flex-row gap-3">
+              {card.caption && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(card.caption);
+                    showToast('✅ कैप्शन कॉपी हो गया!');
+                  }}
+                  className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Copy className="w-4 h-4 text-emerald-400" />
+                  <span>कैप्शन कॉपी करें</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowCelebrationModal(false)}
+                className="flex-1 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>शानदार, ठीक है (OK)</span>
+                <span>✓</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

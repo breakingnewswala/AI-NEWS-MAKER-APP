@@ -324,34 +324,6 @@
     }
   },
   {
-    "id": "asset_1794132101671_u0g9s",
-    "name": "Red Map Pin Badge with Divider",
-    "type": "location_badge",
-    "category": "general",
-    "url": "/assets/location_white_icon.png",
-    "enabled": true,
-    "createdAt": 1794132101671,
-    "updatedAt": 1794132144005,
-    "textRegion": {
-      "x": 32,
-      "y": 24,
-      "width": 58,
-      "height": 55
-    },
-    "typographyConfig": {
-      "fontFamily": "Mukta",
-      "fontSize": 50,
-      "fontWeight": "bold",
-      "textColor": "#000000",
-      "textAlign": "center"
-    },
-    "sliceConfig": {
-      "leftWidthPct": 0.28,
-      "rightWidthPct": 0.15,
-      "centerMinPct": 0.57
-    }
-  },
-  {
     "id": "callout_bully_forward_story",
     "name": "पूरी खबर विवरण कॉलआउट (Full Story Callout)",
     "category": "general",
@@ -637,5 +609,53 @@
     ],
     "createdAt": 1794350000000,
     "updatedAt": 1794350000000
+  },
+  {
+    "id": "suvichar_bg_sunrise_gold",
+    "name": "Sunrise Spiritual Gold (सूर्योदय स्वर्णिम)",
+    "type": "suvichar_background",
+    "category": "spiritual",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1080' height='1350' viewBox='0 0 1080 1350'><defs><linearGradient id='sg1' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='%23FFFBEB'/><stop offset='50%' stop-color='%23FEF3C7'/><stop offset='100%' stop-color='%23FDE68A'/></linearGradient><radialGradient id='sgSun' cx='50%' cy='20%' r='60%'><stop offset='0%' stop-color='%23F59E0B' stop-opacity='0.25'/><stop offset='100%' stop-color='%23F59E0B' stop-opacity='0'/></radialGradient></defs><rect width='1080' height='1350' fill='url(%23sg1)'/><rect width='1080' height='1350' fill='url(%23sgSun)'/><rect x='40' y='40' width='1000' height='1270' rx='28' fill='none' stroke='%23D97706' stroke-width='4' stroke-opacity='0.4'/><rect x='56' y='56' width='968' height='1238' rx='20' fill='none' stroke='%23B45309' stroke-width='1.5' stroke-dasharray='12,8' stroke-opacity='0.5'/><circle cx='540' cy='220' r='120' fill='none' stroke='%23F59E0B' stroke-width='2' stroke-opacity='0.3'/><circle cx='540' cy='220' r='140' fill='none' stroke='%23D97706' stroke-width='1' stroke-opacity='0.2'/></svg>",
+    "enabled": true
+  },
+  {
+    "id": "suvichar_bg_royal_mandala",
+    "name": "Royal Blue Mandala (रॉयल ब्लू मंडला)",
+    "type": "suvichar_background",
+    "category": "mandala",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1080' height='1350' viewBox='0 0 1080 1350'><defs><linearGradient id='rb1' x1='0%' y1='0%' x2='0%' y2='100%'><stop offset='0%' stop-color='%230B1329'/><stop offset='50%' stop-color='%231E293B'/><stop offset='100%' stop-color='%230F172A'/></linearGradient><radialGradient id='rbGlow' cx='50%' cy='50%' r='50%'><stop offset='0%' stop-color='%2338BDF8' stop-opacity='0.15'/><stop offset='100%' stop-color='%230F172A' stop-opacity='0'/></radialGradient></defs><rect width='1080' height='1350' fill='url(%23rb1)'/><rect width='1080' height='1350' fill='url(%23rbGlow)'/><rect x='40' y='40' width='1000' height='1270' rx='32' fill='none' stroke='%2338BDF8' stroke-width='3' stroke-opacity='0.35'/><rect x='58' y='58' width='964' height='1234' rx='24' fill='none' stroke='%23E2E8F0' stroke-width='1' stroke-opacity='0.2'/><circle cx='540' cy='300' r='180' fill='none' stroke='%2338BDF8' stroke-width='1.5' stroke-dasharray='8,6' stroke-opacity='0.25'/><circle cx='540' cy='300' r='90' fill='none' stroke='%23F8FAFC' stroke-width='1' stroke-opacity='0.15'/></svg>",
+    "enabled": true
+  },
+  {
+    "id": "suvichar_bg_sacred_saffron",
+    "name": "Sacred Saffron Temple (पवित्र केसरिया)",
+    "type": "suvichar_background",
+    "category": "spiritual",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1080' height='1350' viewBox='0 0 1080 1350'><defs><linearGradient id='ss1' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='%23FFF7ED'/><stop offset='60%' stop-color='%23FFEDD5'/><stop offset='100%' stop-color='%23FED7AA'/></linearGradient><radialGradient id='ssGlow' cx='50%' cy='25%' r='55%'><stop offset='0%' stop-color='%23EA580C' stop-opacity='0.2'/><stop offset='100%' stop-color='%23EA580C' stop-opacity='0'/></radialGradient></defs><rect width='1080' height='1350' fill='url(%23ss1)'/><rect width='1080' height='1350' fill='url(%23ssGlow)'/><rect x='44' y='44' width='992' height='1262' rx='24' fill='none' stroke='%23EA580C' stroke-width='3.5' stroke-opacity='0.45'/><rect x='60' y='60' width='960' height='1230' rx='16' fill='none' stroke='%23C2410C' stroke-width='1.2' stroke-dasharray='10,6' stroke-opacity='0.4'/></svg>",
+    "enabled": true
+  },
+  {
+    "id": "suvichar_bg_forest_peace",
+    "name": "Forest Peace Green (शांति वन हरियाली)",
+    "type": "suvichar_background",
+    "category": "nature",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1080' height='1350' viewBox='0 0 1080 1350'><defs><linearGradient id='fp1' x1='0%' y1='0%' x2='0%' y2='100%'><stop offset='0%' stop-color='%23F0FDF4'/><stop offset='50%' stop-color='%23DCFCE7'/><stop offset='100%' stop-color='%23BBF7D0'/></linearGradient><radialGradient id='fpGlow' cx='50%' cy='30%' r='50%'><stop offset='0%' stop-color='%2316A34A' stop-opacity='0.18'/><stop offset='100%' stop-color='%2316A34A' stop-opacity='0'/></radialGradient></defs><rect width='1080' height='1350' fill='url(%23fp1)'/><rect width='1080' height='1350' fill='url(%23fpGlow)'/><rect x='42' y='42' width='996' height='1266' rx='28' fill='none' stroke='%2316A34A' stroke-width='3' stroke-opacity='0.35'/><rect x='58' y='58' width='964' height='1234' rx='20' fill='none' stroke='%2315803D' stroke-width='1.2' stroke-dasharray='8,8' stroke-opacity='0.35'/></svg>",
+    "enabled": true
+  },
+  {
+    "id": "suvichar_bg_deep_cosmos",
+    "name": "Deep Cosmos Violet (गहन ब्रह्मांडीय जामुनी)",
+    "type": "suvichar_background",
+    "category": "modern",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1080' height='1350' viewBox='0 0 1080 1350'><defs><linearGradient id='dc1' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' stop-color='%231E1B4B'/><stop offset='50%' stop-color='%232E1065'/><stop offset='100%' stop-color='%230F0728'/></linearGradient><radialGradient id='dcGlow' cx='50%' cy='40%' r='55%'><stop offset='0%' stop-color='%23C084FC' stop-opacity='0.22'/><stop offset='100%' stop-color='%230F0728' stop-opacity='0'/></radialGradient></defs><rect width='1080' height='1350' fill='url(%23dc1)'/><rect width='1080' height='1350' fill='url(%23dcGlow)'/><rect x='40' y='40' width='1000' height='1270' rx='30' fill='none' stroke='%23C084FC' stroke-width='3' stroke-opacity='0.4'/><rect x='56' y='56' width='968' height='1238' rx='22' fill='none' stroke='%23DDD6FE' stroke-width='1' stroke-opacity='0.25'/></svg>",
+    "enabled": true
+  },
+  {
+    "id": "suvichar_bg_warm_sunset",
+    "name": "Warm Sunset Crimson (उषाकाल सिंदूरी)",
+    "type": "suvichar_background",
+    "category": "vibrant",
+    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1080' height='1350' viewBox='0 0 1080 1350'><defs><linearGradient id='ws1' x1='0%' y1='0%' x2='0%' y2='100%'><stop offset='0%' stop-color='%23450A0A'/><stop offset='50%' stop-color='%237F1D1D'/><stop offset='100%' stop-color='%231C0404'/></linearGradient><radialGradient id='wsGlow' cx='50%' cy='35%' r='50%'><stop offset='0%' stop-color='%23F87171' stop-opacity='0.25'/><stop offset='100%' stop-color='%231C0404' stop-opacity='0'/></radialGradient></defs><rect width='1080' height='1350' fill='url(%23ws1)'/><rect width='1080' height='1350' fill='url(%23wsGlow)'/><rect x='40' y='40' width='1000' height='1270' rx='28' fill='none' stroke='%23F87171' stroke-width='3' stroke-opacity='0.4'/><rect x='58' y='58' width='964' height='1234' rx='20' fill='none' stroke='%23FCA5A5' stroke-width='1.2' stroke-dasharray='12,6' stroke-opacity='0.3'/></svg>",
+    "enabled": true
   }
 ]

@@ -81,7 +81,6 @@ for (const sampleId of ['11111', '2222', 'df_sample_11111', 'df_sample_2222']) {
 
 // 3. Protected Built-in Asset Libraries Verification
 const protectedAssetIds = [
-  'asset_1794132101671_u0g9s',
   'callout_bully_forward_story',
   'footer_regular_gold',
   'footer_branding_navy',

@@ -26114,14 +26114,11 @@ Return ONLY a valid JSON object matching this schema without any markdown format
       const parsed = await executeGeminiWithKeyPool(async (ai) => {
         const aiResponse = await generateWithFallbackAndRetry(
           ai,
-          DEFAULT_FALLBACK_MODELS,
+          ["gemini-3.8-flash", ...DEFAULT_FALLBACK_MODELS],
           {
-            contents: [
-              {
-                role: "user",
-                parts: promptParts
-              }
-            ]
+            contents: {
+              parts: promptParts
+            }
           }
         );
         const responseText = aiResponse.text || "";
@@ -29832,12 +29829,13 @@ AI News Maker \u2022 \u0938\u094D\u0935\u091A\u093E\u0932\u093F\u0924 API \u0938
   } catch (err) {
     console.warn("[Alert Email] Error dispatching email:", err.message);
   }
-  try {
-    const waToken = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN || process.env.WHATSAPP_BUSINESS_TOKEN || "";
-    const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
-    if (waToken && waPhoneId && verifiedWhatsappNumber) {
-      try {
-        const waMsg = `\u{1F6A8} *${emailSubject}*
+  if (type !== "RECOVERY" && !details.skipWhatsApp) {
+    try {
+      const waToken = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN || process.env.WHATSAPP_BUSINESS_TOKEN || "";
+      const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
+      if (waToken && waPhoneId && verifiedWhatsappNumber) {
+        try {
+          const waMsg = `\u{1F6A8} *${emailSubject}*
 
 \u2022 *API:* ${details.apiName} (${details.provider})
 \u2022 *Status:* ${details.status}
@@ -29845,33 +29843,34 @@ AI News Maker \u2022 \u0938\u094D\u0935\u091A\u093E\u0932\u093F\u0924 API \u0938
 \u2022 *Error:* ${details.errorMessage || "N/A"}
 \u2022 *Time:* ${new Date(timestamp).toLocaleTimeString("hi-IN")}
 
-_AI News Maker \xEC\u017E\x90\xEB\x8F\u2122 \xEC\u2022\u0152\xEB\xA6\xBC_`;
-        const waResp = await fetch(`https://graph.facebook.com/v19.0/${waPhoneId}/messages`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${waToken}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            messaging_product: "whatsapp",
-            to: verifiedWhatsappNumber.replace(/[^0-9]/g, ""),
-            type: "text",
-            text: { body: waMsg }
-          })
-        });
-        if (waResp.ok) {
-          whatsappSent = true;
-        } else {
-          console.warn(`[Alert WhatsApp Dispatch] API responded with ${waResp.status}`);
+_AI News Maker \u0938\u094D\u0935\u091A\u093E\u0932\u093F\u0924 \u0905\u0932\u0930\u094D\u091F_`;
+          const waResp = await fetch(`https://graph.facebook.com/v19.0/${waPhoneId}/messages`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${waToken}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              messaging_product: "whatsapp",
+              to: verifiedWhatsappNumber.replace(/[^0-9]/g, ""),
+              type: "text",
+              text: { body: waMsg }
+            })
+          });
+          if (waResp.ok) {
+            whatsappSent = true;
+          } else {
+            console.warn(`[Alert WhatsApp Dispatch] API responded with ${waResp.status}`);
+          }
+        } catch (waErr) {
+          console.warn("[Alert WhatsApp Dispatch] Network error:", waErr.message);
         }
-      } catch (waErr) {
-        console.warn("[Alert WhatsApp Dispatch] Network error:", waErr.message);
+      } else {
+        whatsappSent = Boolean(verifiedWhatsappNumber);
       }
-    } else {
-      whatsappSent = Boolean(verifiedWhatsappNumber);
+    } catch (err) {
+      console.warn("[Alert WhatsApp] Error dispatching WhatsApp alert:", err.message);
     }
-  } catch (err) {
-    console.warn("[Alert WhatsApp] Error dispatching WhatsApp alert:", err.message);
   }
   try {
     const logs = loadApiAlertsLog();
@@ -29889,6 +29888,58 @@ _AI News Maker \xEC\u017E\x90\xEB\x8F\u2122 \xEC\u2022\u0152\xEB\xA6\xBC_`;
   } catch {
   }
   return { emailSent, whatsappSent, logRecorded: true };
+}
+async function sendAggregatedApiAlertWhatsAppNotification(unhealthyItems) {
+  if (!unhealthyItems || unhealthyItems.length === 0) return false;
+  const timestamp = Date.now();
+  const adminPhone = getMasterAdminVerifiedPhone();
+  const dedupeKey = `aggregated_wa_${unhealthyItems.map((u) => u.apiName).sort().join("_")}`;
+  const lastAlertTime = alertDedupeCache.get(dedupeKey);
+  if (lastAlertTime && timestamp - lastAlertTime < 30 * 60 * 1e3) {
+    return false;
+  }
+  alertDedupeCache.set(dedupeKey, timestamp);
+  let waBody = `\u{1F6A8} *AI NEWS MAKER \u2014 API \u0924\u0915\u0928\u0940\u0915\u0940 \u0924\u094D\u0930\u0941\u091F\u093F \u0905\u0932\u0930\u094D\u091F*
+`;
+  waBody += `\u{1F4C5} \u0938\u092E\u092F: ${new Date(timestamp).toLocaleString("hi-IN", { timeZone: "Asia/Kolkata" })}
+`;
+  waBody += `\u26A0\uFE0F \u092A\u094D\u0930\u092D\u093E\u0935\u093F\u0924 API \u0938\u0947\u0935\u093E\u090F\u0901 (${unhealthyItems.length}):
+
+`;
+  const sections = unhealthyItems.map((item, idx) => {
+    return `[${idx + 1}] *${item.apiName}* (${item.provider})
+\u2022 \u0938\u094D\u0925\u093F\u0924\u093F: ${item.status}
+\u2022 \u0932\u0947\u091F\u0947\u0902\u0938\u0940: ${item.latencyMs || 0}ms (HTTP ${item.httpCode || 200})
+\u2022 \u0924\u094D\u0930\u0941\u091F\u093F: ${item.errorMessage || "\u0924\u0915\u0928\u0940\u0915\u0940 \u0935\u093F\u092B\u0932\u0924\u093E \u0926\u0930\u094D\u091C \u0915\u0940 \u0917\u0908"}`;
+  });
+  waBody += sections.join("\n\n------------------------\n\n");
+  waBody += `
+
+------------------------
+_AI News Maker \u2022 \u0938\u094D\u0935\u091A\u093E\u0932\u093F\u0924 API \u0938\u094D\u0935\u093E\u0938\u094D\u0925\u094D\u092F \u0928\u093F\u0917\u0930\u093E\u0928\u0940 \u0924\u0902\u0924\u094D\u0930_`;
+  try {
+    const waToken = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN || process.env.WHATSAPP_BUSINESS_TOKEN || "";
+    const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
+    if (waToken && waPhoneId && adminPhone) {
+      const waResp = await fetch(`https://graph.facebook.com/v19.0/${waPhoneId}/messages`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${waToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: adminPhone.replace(/[^0-9]/g, ""),
+          type: "text",
+          text: { body: waBody }
+        })
+      });
+      return waResp.ok;
+    }
+  } catch (err) {
+    console.warn("[Aggregated Alert WhatsApp Dispatch] Error:", err?.message || err);
+  }
+  return false;
 }
 async function runAllApiHealthChecks() {
   const results = [];
@@ -30168,7 +30219,8 @@ async function runAllApiHealthChecks() {
         latencyMs: item.latencyMs,
         errorMessage: item.errorMessage,
         firstFailureTime: apiFirstFailureTime[item.id],
-        lastSuccessTime: apiLastSuccessfulCheck[item.id]
+        lastSuccessTime: apiLastSuccessfulCheck[item.id],
+        skipWhatsApp: true
       }).catch(() => {
       });
       apiLastAlertSentAt[item.id] = now;
@@ -30179,7 +30231,8 @@ async function runAllApiHealthChecks() {
         status: item.status,
         httpCode: item.httpCode,
         latencyMs: item.latencyMs,
-        lastSuccessTime: now
+        lastSuccessTime: now,
+        skipWhatsApp: true
       }).catch(() => {
       });
       apiLastAlertSentAt[item.id] = now;
@@ -30194,12 +30247,29 @@ async function runAllApiHealthChecks() {
           latencyMs: item.latencyMs,
           errorMessage: item.errorMessage,
           firstFailureTime: apiFirstFailureTime[item.id],
-          lastSuccessTime: apiLastSuccessfulCheck[item.id]
+          lastSuccessTime: apiLastSuccessfulCheck[item.id],
+          skipWhatsApp: true
         }).catch(() => {
         });
         apiLastAlertSentAt[item.id] = now;
       }
     }
+  }
+  const unhealthyItemsForWhatsApp = results.filter(
+    (item) => item.status === "Unhealthy" || item.status === "Authentication Error" || item.status === "Rate Limited"
+  );
+  if (unhealthyItemsForWhatsApp.length > 0) {
+    sendAggregatedApiAlertWhatsAppNotification(
+      unhealthyItemsForWhatsApp.map((u) => ({
+        apiName: u.name,
+        provider: u.provider,
+        status: u.status,
+        httpCode: u.httpCode,
+        latencyMs: u.latencyMs,
+        errorMessage: u.errorMessage
+      }))
+    ).catch(() => {
+    });
   }
   latestApiHealthResults = results;
   apiMonitoringHistory.lastHealthTest = now;

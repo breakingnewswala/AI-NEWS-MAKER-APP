@@ -4645,6 +4645,41 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           </span>
         </div>
 
+        {/* Unified Font Selector for Location & Date */}
+        <div className="bg-neutral-950/80 border border-neutral-800 rounded-xl p-3.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs text-neutral-200 font-bold flex items-center gap-1.5">
+              <span>🔤</span>
+              <span>स्थान व दिनांक फॉन्ट (Unified Font):</span>
+            </label>
+            <span className="text-[10px] text-amber-400 font-mono font-bold">
+              {card.locationFont || card.fontFamily || 'Baloo 2'}
+            </span>
+          </div>
+          <p className="text-[10px] text-neutral-400">
+            चुना गया फॉन्ट स्थान (Location) और दिनांक (Date) दोनों पर एक समान लागू होगा।
+          </p>
+          <select
+            value={card.locationFont || card.fontFamily || 'Baloo 2'}
+            onChange={(e) => {
+              const selectedF = e.target.value;
+              onChange({
+                locationFont: selectedF,
+                dateFont: selectedF,
+              });
+            }}
+            className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-400 cursor-pointer font-bold"
+          >
+            <option value="Baloo 2">Baloo 2 (आधुनिक बोल्ड - डिफ़ॉल्ट)</option>
+            <option value="Noto Sans Devanagari">Noto Sans Devanagari (स्पष्ट पठनीय)</option>
+            <option value="Rozha One">Rozha One (पारंपरिक हेडलाइन)</option>
+            <option value="Tiro Devanagari Hindi">Tiro Devanagari Hindi (संपादकीय क्लासिक)</option>
+            <option value="Mukta">Mukta (कॉम्पैक्ट आधुनिक)</option>
+            <option value="Yatra One">Yatra One (स्टाइलिश देवनागरी)</option>
+            <option value="Arial Unicode MS">Arial Unicode MS (यूनिवर्सल एरियल)</option>
+          </select>
+        </div>
+
         {/* Location with On/Off Toggle */}
         <div className="bg-neutral-950/80 border border-neutral-800 rounded-xl p-3.5 space-y-3">
           <div className="flex items-center justify-between">

@@ -1507,7 +1507,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   className="w-2.5 h-2.5 sm:w-3 sm:h-3 object-contain"
                 />
               </div>
-              <span className="font-bold text-[11px] sm:text-xs md:text-sm text-neutral-950 font-['Noto_Sans_Devanagari'] tracking-wide truncate inline-block translate-y-[2px] leading-tight">
+              <span
+                className="font-bold text-[11px] sm:text-xs md:text-sm text-neutral-950 tracking-wide truncate inline-block translate-y-[2px] leading-tight"
+                style={{ fontFamily: card.locationFont ? `"${card.locationFont}", "Noto Sans Devanagari", sans-serif` : undefined }}
+              >
                 {formatCleanLocationText(card.location) || 'लोकेशन'}
               </span>
             </div>
@@ -3629,7 +3632,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       left: `${df.headerConfig.locationRect?.x ?? 5}%`,
                       top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
                       width: locWidth,
-                      maxWidth: `${df.headerConfig.locationRect?.width ?? 38}%`,
+                      maxWidth: '85%',
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
                       backgroundColor: locBgColor,
                       borderRadius: locBorderRadius,
@@ -3639,6 +3642,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       backgroundPosition: 'center',
                       backgroundRepeat: 'no-repeat',
                       color: locColor,
+                      fontFamily: card.locationFont || df.headerConfig.typographyConfig?.fontFamily || 'Baloo 2',
                       fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 22) * previewScale * 1.1))}px`,
                     }}
                   >
@@ -3726,6 +3730,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       transform: rot !== 0 ? `rotate(${rot}deg)` : undefined,
                       transformOrigin: 'center center',
                       color: df.headerConfig.dateTextColor || '#CBD5E1',
+                      fontFamily: card.dateFont || card.locationFont || 'Baloo 2',
                       fontSize: `${Math.max(9, Math.round((df.headerConfig.dateFontSize || 14) * previewScale))}px`,
                     }}
                   >
@@ -3942,8 +3947,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 className="absolute bottom-0 inset-x-0 pointer-events-auto"
                 style={{
                   height: `${(df.footerConfig?.footerHeightRatio || 0.08) * 100}%`,
-                  width: `${card.footerWidthPct || df.footerConfig?.footerWidthPct || 92}%`,
-                  left: `${(100 - (card.footerWidthPct || df.footerConfig?.footerWidthPct || 92)) / 2}%`,
+                  width: `${card.footerWidthPct || df.footerConfig?.footerWidthPct || 100}%`,
+                  left: `${(100 - (card.footerWidthPct || df.footerConfig?.footerWidthPct || 100)) / 2}%`,
                 }}
               >
                 <FooterGraphic

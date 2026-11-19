@@ -15878,14 +15878,11 @@ Return ONLY a valid JSON object matching this schema without any markdown format
       const parsed = await executeGeminiWithKeyPool(async (ai) => {
         const aiResponse = await generateWithFallbackAndRetry(
           ai,
-          DEFAULT_FALLBACK_MODELS,
+          ["gemini-3.8-flash", ...DEFAULT_FALLBACK_MODELS],
           {
-            contents: [
-              {
-                role: "user",
-                parts: promptParts,
-              },
-            ],
+            contents: {
+              parts: promptParts,
+            },
           }
         );
 
@@ -20472,6 +20469,7 @@ async function sendApiAlertNotification(
     firstFailureTime?: number;
     lastSuccessTime?: number;
     isTest?: boolean;
+    skipWhatsApp?: boolean;
   }
 ): Promise<{ emailSent: boolean; whatsappSent: boolean; logRecorded: boolean }> {
   const timestamp = Date.now();
@@ -20548,6 +20546,10 @@ AI News Maker • स्वचालित API स्वास्थ्य न�
   }
 
   // 2. Attempt WhatsApp Delivery via configured WhatsApp API / Command Center
+  // Strict User Rules:
+  // - Recovery notifications strictly muted for WhatsApp
+  // - If skipWhatsApp is true (routine checks handled by aggregated WhatsApp alert), skip single message
+  if (type !== "RECOVERY" && !details.skipWhatsApp) {
   try {
     const waToken = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN || process.env.WHATSAPP_BUSINESS_TOKEN || "";
     const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
@@ -20559,7 +20561,7 @@ AI News Maker • स्वचालित API स्वास्थ्य न�
           `• *Latency:* ${details.latencyMs || 0}ms (HTTP ${details.httpCode || 200})\n` +
           `• *Error:* ${details.errorMessage || "N/A"}\n` +
           `• *Time:* ${new Date(timestamp).toLocaleTimeString("hi-IN")}\n\n` +
-          `_AI News Maker ìžë™ ì•Œë¦¼_`;
+          `_AI News Maker स्वचालित अलर्ट_`;
 
         const waResp = await fetch(`https://graph.facebook.com/v19.0/${waPhoneId}/messages`, {
           method: "POST",
@@ -20589,6 +20591,7 @@ AI News Maker • स्वचालित API स्वास्थ्य न�
   } catch (err: any) {
     console.warn("[Alert WhatsApp] Error dispatching WhatsApp alert:", err.message);
   }
+  }
 
   // 3. Central Alert Log Persistence
   try {
@@ -20608,6 +20611,70 @@ AI News Maker • स्वचालित API स्वास्थ्य न�
 
   return { emailSent, whatsappSent, logRecorded: true };
 }
+/**
+ * Single aggregated WhatsApp alert for all failing API keys.
+ * Partitions multiple keys with ------------------------ lines.
+ * Strictly sends only on technical/connectivity/quota failures; muted on recovery.
+ */
+async function sendAggregatedApiAlertWhatsAppNotification(
+  unhealthyItems: Array<{
+    apiName: string;
+    provider: string;
+    status: string;
+    httpCode?: number;
+    latencyMs?: number;
+    errorMessage?: string;
+  }>
+): Promise<boolean> {
+  if (!unhealthyItems || unhealthyItems.length === 0) return false;
+  const timestamp = Date.now();
+  const adminPhone = getMasterAdminVerifiedPhone();
+  const dedupeKey = `aggregated_wa_${unhealthyItems.map((u) => u.apiName).sort().join("_")}`;
+  const lastAlertTime = alertDedupeCache.get(dedupeKey);
+  if (lastAlertTime && timestamp - lastAlertTime < 30 * 60 * 1000) {
+    return false;
+  }
+  alertDedupeCache.set(dedupeKey, timestamp);
+
+  let waBody = `🚨 *AI NEWS MAKER — API तकनीकी त्रुटि अलर्ट*\n`;
+  waBody += `📅 समय: ${new Date(timestamp).toLocaleString("hi-IN", { timeZone: "Asia/Kolkata" })}\n`;
+  waBody += `⚠️ प्रभावित API सेवाएँ (${unhealthyItems.length}):\n\n`;
+
+  const sections = unhealthyItems.map((item, idx) => {
+    return `[${idx + 1}] *${item.apiName}* (${item.provider})\n` +
+      `• स्थिति: ${item.status}\n` +
+      `• लेटेंसी: ${item.latencyMs || 0}ms (HTTP ${item.httpCode || 200})\n` +
+      `• त्रुटि: ${item.errorMessage || "तकनीकी विफलता दर्ज की गई"}`;
+  });
+
+  waBody += sections.join("\n\n------------------------\n\n");
+  waBody += `\n\n------------------------\n_AI News Maker • स्वचालित API स्वास्थ्य निगरानी तंत्र_`;
+
+  try {
+    const waToken = process.env.WHATSAPP_ACCESS_TOKEN || process.env.WHATSAPP_TOKEN || process.env.WHATSAPP_BUSINESS_TOKEN || "";
+    const waPhoneId = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
+    if (waToken && waPhoneId && adminPhone) {
+      const waResp = await fetch(`https://graph.facebook.com/v19.0/${waPhoneId}/messages`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${waToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: adminPhone.replace(/[^0-9]/g, ""),
+          type: "text",
+          text: { body: waBody },
+        }),
+      });
+      return waResp.ok;
+    }
+  } catch (err: any) {
+    console.warn("[Aggregated Alert WhatsApp Dispatch] Error:", err?.message || err);
+  }
+  return false;
+}
+
 
 /**
  * Executes lightweight, read-only, non-destructive health checks across all configured APIs.
@@ -20907,10 +20974,11 @@ async function runAllApiHealthChecks(): Promise<ApiHealthCheckItem[]> {
         errorMessage: item.errorMessage,
         firstFailureTime: apiFirstFailureTime[item.id],
         lastSuccessTime: apiLastSuccessfulCheck[item.id],
+        skipWhatsApp: true,
       }).catch(() => {});
       apiLastAlertSentAt[item.id] = now;
     }
-    // Transition from Unhealthy -> Healthy (Recovery)
+    // Transition from Unhealthy -> Healthy (Recovery - strictly muted on WhatsApp)
     else if (prevStatus !== "Healthy" && prevStatus !== "Not Configured" && currentStatus === "Healthy") {
       sendApiAlertNotification("RECOVERY", {
         apiName: item.name,
@@ -20919,6 +20987,7 @@ async function runAllApiHealthChecks(): Promise<ApiHealthCheckItem[]> {
         httpCode: item.httpCode,
         latencyMs: item.latencyMs,
         lastSuccessTime: now,
+        skipWhatsApp: true,
       }).catch(() => {});
       apiLastAlertSentAt[item.id] = now;
     }
@@ -20935,10 +21004,28 @@ async function runAllApiHealthChecks(): Promise<ApiHealthCheckItem[]> {
           errorMessage: item.errorMessage,
           firstFailureTime: apiFirstFailureTime[item.id],
           lastSuccessTime: apiLastSuccessfulCheck[item.id],
+          skipWhatsApp: true,
         }).catch(() => {});
         apiLastAlertSentAt[item.id] = now;
       }
     }
+  }
+
+  // Single Aggregated WhatsApp Message for all failing APIs with '------------------------' dividers
+  const unhealthyItemsForWhatsApp = results.filter(
+    (item) => item.status === "Unhealthy" || item.status === "Authentication Error" || item.status === "Rate Limited"
+  );
+  if (unhealthyItemsForWhatsApp.length > 0) {
+    sendAggregatedApiAlertWhatsAppNotification(
+      unhealthyItemsForWhatsApp.map((u) => ({
+        apiName: u.name,
+        provider: u.provider,
+        status: u.status,
+        httpCode: u.httpCode,
+        latencyMs: u.latencyMs,
+        errorMessage: u.errorMessage,
+      }))
+    ).catch(() => {});
   }
 
   // Update latest snapshot and monitoring history

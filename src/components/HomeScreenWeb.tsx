@@ -4285,6 +4285,81 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 </div>
               </div>
 
+              {/* Photo Tag / Disclaimer Selector in Edit News Modal */}
+              <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-300">🏷️ प्रतीकात्मक फोटो टैग (Photo Tag)</span>
+                  <span className="text-[10px] font-bold text-amber-400">
+                    {editingPost.photoWatermarkTag || (editingPost.isAiGenerated ? 'AI GENERATED' : 'कोई नहीं (OFF)')}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  इस खबर के पब्लिश व ग्राफिक निर्माण के समय उपयोग होने वाला फोटो टैग चुनें:
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingPost({
+                        ...editingPost,
+                        photoWatermarkTag: undefined,
+                        photoDisclaimerType: 'none',
+                        watermarkGlobalMode: 'OFF',
+                        isAiGenerated: false,
+                      });
+                    }}
+                    className={`py-2 px-2 rounded-xl border text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                      !editingPost.photoWatermarkTag || editingPost.photoWatermarkTag === 'NONE' || editingPost.photoDisclaimerType === 'none'
+                        ? 'bg-neutral-800 text-white border-neutral-600 shadow-sm'
+                        : 'bg-slate-900/90 text-slate-400 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <span>🚫 कोई नहीं (OFF)</span>
+                    <span className="text-[9px] opacity-75 font-normal">टैग बंद</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingPost({
+                        ...editingPost,
+                        photoWatermarkTag: 'AI GENERATED',
+                        photoDisclaimerType: 'ai',
+                        watermarkGlobalMode: 'AI_GENERATED',
+                        isAiGenerated: true,
+                      });
+                    }}
+                    className={`py-2 px-2 rounded-xl border text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                      editingPost.photoWatermarkTag === 'AI GENERATED' || editingPost.isAiGenerated || editingPost.photoDisclaimerType === 'ai'
+                        ? 'bg-blue-600 text-white border-blue-400 shadow-md ring-1 ring-blue-400/50'
+                        : 'bg-slate-900/90 text-slate-400 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <span>✨ AI GENERATED</span>
+                    <span className="text-[9px] opacity-75 font-normal">AI जनरेटेड इमेज</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingPost({
+                        ...editingPost,
+                        photoWatermarkTag: 'प्रतीकात्मक फोटो',
+                        photoDisclaimerType: 'representative',
+                        watermarkGlobalMode: 'SYMBOLIC_PHOTO',
+                        isAiGenerated: false,
+                      });
+                    }}
+                    className={`py-2 px-2 rounded-xl border text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                      editingPost.photoWatermarkTag === 'प्रतीकात्मक फोटो' || editingPost.photoDisclaimerType === 'representative'
+                        ? 'bg-amber-500 text-neutral-950 border-amber-400 shadow-md ring-1 ring-amber-400/50'
+                        : 'bg-slate-900/90 text-slate-400 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <span>📷 प्रतीकात्मक फोटो</span>
+                    <span className="text-[9px] opacity-75 font-normal">सांकेतिक तस्वीर</span>
+                  </button>
+                </div>
+              </div>
+
               <div className="flex items-center gap-4 pt-1">
                 <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-300">
                   <input

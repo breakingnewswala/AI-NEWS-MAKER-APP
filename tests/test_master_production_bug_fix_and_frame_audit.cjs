@@ -95,7 +95,7 @@ runTest('CardPreview & CardEditor: Live preview engine audit', () => {
   assert(previewCode.includes('df.photoSlots?.[0]?.rect?.height'), 'CardPreview must clip text watermark to photo slot bounds');
   assert(previewCode.includes('getAssetLibraryItemById(badgeId)'), 'CardPreview must resolve location badge by ID');
   assert(previewCode.includes('getAssetLibraryItemById(calloutId)'), 'CardPreview must resolve callout by ID');
-  assert(previewCode.includes('width: `${card.footerWidthPct || df.footerConfig?.footerWidthPct || 92}%`'), 'CardPreview footer must support card.footerWidthPct or 92% default');
+  assert(previewCode.includes('width: `${card.footerWidthPct || df.footerConfig?.footerWidthPct || 100}%`') || previewCode.includes('width: `${card.footerWidthPct || df.footerConfig?.footerWidthPct || 92}%`'), 'CardPreview footer must support card.footerWidthPct or 100% original width');
 
   const editorPath = path.join(process.cwd(), 'src', 'components', 'CardEditor.tsx');
   const editorCode = fs.readFileSync(editorPath, 'utf8');

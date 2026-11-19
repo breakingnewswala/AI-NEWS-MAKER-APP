@@ -98,7 +98,7 @@ import { computeCanonicalHeadlineLayout, normalizeHeadlineText } from '../lib/ca
 import { drawThemeFooterBar } from '../lib/CanvasExporter';
 import { BUILTIN_RIBBONS } from '../lib/ribbonPresets';
 import { STATEMENT_BACKGROUND_PRESETS } from '../lib/statementBackgroundPresets';
-import { getAuthToken, ensureAuthToken, reauthenticateAdmin } from '../lib/apiConfig';
+import { getAuthToken, ensureAuthToken, isTokenExpired, reauthenticateAdmin } from '../lib/apiConfig';
 
 /**
  * Robust image loader that avoids setting crossOrigin on data: and blob: URLs

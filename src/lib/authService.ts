@@ -451,6 +451,7 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
 
       // 4. Auto-recover for master admin session if session profile indicates admin
       let isSessionAdmin = false;
+      let hasRegularUser = false;
       try {
         const sessStr = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
         if (sessStr) {
@@ -462,36 +463,53 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
             s?.role === 'admin' ||
             s?.role === 'superadmin' ||
             s?.isAdmin === true;
+          if (em && !isSessionAdmin) {
+            hasRegularUser = true;
+          }
         }
       } catch {}
 
-      const activeTab = (typeof window !== 'undefined' && ((window as any).__AI_NEWS_ACTIVE_TAB || (window as any).__ai_news_active_tab || localStorage.getItem('last_active_tab'))) || '';
-      const isAdminContext = isSessionAdmin || activeTab === 'admin' || activeTab === 'profile';
+      // CRITICAL FIX: If a regular non-admin user is currently logged in, NEVER overwrite their session or auto-login as master admin!
+      if (!hasRegularUser) {
+        const activeTab = (typeof window !== 'undefined' && ((window as any).__AI_NEWS_ACTIVE_TAB || (window as any).__ai_news_active_tab || localStorage.getItem('last_active_tab'))) || '';
+        const isAdminContext = isSessionAdmin || (activeTab === 'admin' && !localStorage.getItem('reporter_auth_session'));
 
-      if (isAdminContext) {
-        try {
-          const targetId = (email && (email === 'breakingnewswala.com@gmail.com' || email === 'breakingnewsvala.com@gmail.com' || email === 'admin.ainewsmaker@gmail.com'))
-            ? email
-            : 'breakingnewswala.com@gmail.com';
-          const autoRes = await fetch(getApiUrl('/api/auth/login'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ identifier: targetId, password: 'admin' }),
-          });
-          if (autoRes.ok) {
-            const autoData = await autoRes.json();
-            if (autoData.success && autoData.token && !isTokenExpired(autoData.token)) {
-              setAuthToken(autoData.token);
-              localStorage.setItem('reporter_auth_token', autoData.token);
-              localStorage.setItem('auth_token', autoData.token);
-              if (autoData.user) {
-                localStorage.setItem('reporter_auth_session', JSON.stringify(autoData.user));
+        if (isAdminContext) {
+          try {
+            let resolvedAdminEmail = 'breakingnewswala.com@gmail.com';
+            try {
+              const sessStr = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
+              if (sessStr) {
+                const parsed = JSON.parse(sessStr);
+                const em = (parsed?.email || '').toLowerCase().trim();
+                if (em === 'admin.ainewsmaker@gmail.com' || em === 'breakingnewsvala.com@gmail.com' || em === 'breakingnewswala.com@gmail.com') {
+                  resolvedAdminEmail = em;
+                }
               }
-              return autoData.token;
+            } catch {}
+            const targetId = (email && (email === 'breakingnewswala.com@gmail.com' || email === 'breakingnewsvala.com@gmail.com' || email === 'admin.ainewsmaker@gmail.com'))
+              ? email
+              : resolvedAdminEmail;
+            const autoRes = await fetch(getApiUrl('/api/auth/login'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ identifier: targetId, password: 'admin' }),
+            });
+            if (autoRes.ok) {
+              const autoData = await autoRes.json();
+              if (autoData.success && autoData.token && !isTokenExpired(autoData.token)) {
+                setAuthToken(autoData.token);
+                localStorage.setItem('reporter_auth_token', autoData.token);
+                localStorage.setItem('auth_token', autoData.token);
+                if (autoData.user) {
+                  localStorage.setItem('reporter_auth_session', JSON.stringify(autoData.user));
+                }
+                return autoData.token;
+              }
             }
+          } catch (autoErr) {
+            console.warn('[AUTH-SERVICE] Master admin auto-session recovery notice:', autoErr);
           }
-        } catch (autoErr) {
-          console.warn('[AUTH-SERVICE] Master admin auto-session recovery notice:', autoErr);
         }
       }
     } catch (err) {
@@ -549,10 +567,23 @@ export async function getAdminAuthHeadersAsync(): Promise<Record<string, string>
         if (directData.success && directData.token) {
           token = directData.token;
           setAuthToken(token);
-          localStorage.setItem('reporter_auth_token', token);
-          localStorage.setItem('auth_token', token);
-          if (directData.user) {
-            localStorage.setItem('reporter_auth_session', JSON.stringify(directData.user));
+          let isReg = false;
+          try {
+            const sessStr = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
+            if (sessStr) {
+              const sess = JSON.parse(sessStr);
+              const em = (sess?.email || '').toLowerCase().trim();
+              if (em && em !== 'breakingnewswala.com@gmail.com' && em !== 'admin.ainewsmaker@gmail.com' && sess.role !== 'admin' && sess.role !== 'superadmin') {
+                isReg = true;
+              }
+            }
+          } catch {}
+          if (!isReg) {
+            localStorage.setItem('reporter_auth_token', token);
+            localStorage.setItem('auth_token', token);
+            if (directData.user) {
+              localStorage.setItem('reporter_auth_session', JSON.stringify(directData.user));
+            }
           }
         }
       }

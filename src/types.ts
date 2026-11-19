@@ -352,6 +352,8 @@ export interface NewsCardData {
   customDynamicFrame?: DynamicFrameTemplate; // Live custom or edited dynamic frame template
   customTextOverlays?: CustomTextOverlay[]; // Floating text badges / custom font texts
   imageFilters?: ImageFilterSettings; // Photo filters & color grading
+  locationFont?: string; // Unified or specific font for location text
+  dateFont?: string; // Unified or specific font for date text
 }
 
 export interface CustomTextOverlay {
