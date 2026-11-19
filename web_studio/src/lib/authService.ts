@@ -327,9 +327,6 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
         try {
           const firebaseIdToken = await auth.currentUser.getIdToken(forceRefresh).catch(() => '');
           if (firebaseIdToken && !isTokenExpired(firebaseIdToken)) {
-            // Immediately register candidate token so caller has a usable bearer credential
-            setAuthToken(firebaseIdToken);
-
             // Attempt exchange with server /api/auth/login to obtain durable 14-day session token
             try {
               const exRes = await fetch(getApiUrl('/api/auth/login'), {

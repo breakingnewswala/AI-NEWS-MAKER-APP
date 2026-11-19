@@ -2715,14 +2715,17 @@ function resolveAllDatabaseLocations(filename: string): string[] {
     path.join(cwd, "web_studio", filename),
   ];
   try {
-    const parent = path.resolve(cwd, "..");
-    candidates.push(path.join(parent, filename));
-    candidates.push(path.join(parent, "web_studio", filename));
+    if (path.basename(cwd) === 'web_studio') {
+      const parent = path.resolve(cwd, "..");
+      candidates.push(path.join(parent, filename));
+    }
   } catch {}
   try {
     if (typeof __dirname !== 'undefined' && __dirname) {
       candidates.push(path.join(__dirname, filename));
-      candidates.push(path.join(__dirname, "..", filename));
+      if (path.basename(__dirname) === 'web_studio') {
+        candidates.push(path.join(__dirname, "..", filename));
+      }
       candidates.push(path.join(__dirname, "web_studio", filename));
     }
   } catch {}
@@ -7694,43 +7697,7 @@ function reconcileAllUsers() {
       lastLoginAt: existingAdmin?.lastLoginAt || Date.now(),
     });
 
-    // 4. Guaranteed Active Regular Users (Only if not tombstoned / deleted)
-    // (Target test users khabridasnews and riturajtomarorchha removed for clean registration/setup)
-    const seedUser3 = 'digital.anmolsandesh@gmail.com';
-    if (!isUserTombstoned(seedUser3) && !userMap.has(seedUser3)) {
-      const p3 = profiles[seedUser3];
-      userMap.set(seedUser3, {
-        userId: p3?.userId || 'usr_anmolsandesh_103',
-        email: seedUser3,
-        name: p3?.fullName || 'Anmol Sandesh',
-        fullName: p3?.fullName || 'Anmol Sandesh',
-        username: p3?.username || 'anmolsandesh',
-        role: 'reporter',
-        tier: 'basic',
-        planName: 'BASIC',
-        channelName: p3?.channelNameHi || 'अनमोल संदेश',
-        channelNameHi: p3?.channelNameHi || 'अनमोल संदेश',
-        channelNameEn: p3?.channelNameEn || 'Anmol Sandesh',
-        channelLogoUrl: p3?.channelLogoUrl || '',
-        channelLogoPngUrl: p3?.channelLogoPngUrl || '',
-        channelLogoGifUrl: '',
-        channelLogoType: 'png',
-        mobile: p3?.mobileNumber || '9425000998',
-        mobileNumber: p3?.mobileNumber || '9425000998',
-        state: p3?.state || '',
-        district: p3?.district || 'सेंट्रल डेस्क',
-        websiteUrl: p3?.websiteUrl || 'anmolsandesh.com',
-        isBlocked: false,
-        isProfileLocked: false,
-        createdAt: 1791892712618,
-        trialStartedAt: 1791892712618,
-        trialEndsAt: 1792497512618,
-        activatedAt: 1791892712618,
-        expiresAt: 1792497512618,
-        activatedVia: 'Free 7-Day VIP Trial',
-        lastLoginAt: 1791892712618,
-      });
-    }
+    // 4. Privileged Master Admin accounts preserved (test users khabridasnews, riturajtomarorchha, and anmolsandesh removed for canonical DB invariants)
 
     // Dynamic Authoritative Payment Reconciliation: ensure all users with verified paid orders are active
     try {
