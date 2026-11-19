@@ -21,7 +21,7 @@ import {
   TypographyConfig,
 } from '../types/dynamicFrame';
 import { normalizeVideoConfig } from './videoFrameLayoutModel';
-import { getApiBaseUrl, ensureAuthToken, getAuthToken, getAdminAuthHeaders, isTokenExpired } from './apiConfig';
+import { getApiBaseUrl, ensureAuthToken, getAuthToken, getAdminAuthHeaders, isTokenExpired, reauthenticateAdmin } from './apiConfig';
 
 const STORAGE_KEY_FRAMES = 'ai_news_dynamic_frames_v1';
 const STORAGE_KEY_STORY_PREF = 'ai_news_user_story_pref_v1';

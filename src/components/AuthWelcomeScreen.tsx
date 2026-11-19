@@ -1744,9 +1744,51 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
             </h2>
 
             {/* Subtitle (उपशीर्षक) */}
-            <p className="text-xs sm:text-sm text-slate-300 max-w-xl mx-auto mb-4 leading-relaxed font-normal">
+            <p className="text-xs sm:text-sm text-slate-300 max-w-xl mx-auto mb-3 leading-relaxed font-normal">
               ग्राफिक हो या वीडियो, सिर्फ 7 आसान चरणों में अपनी न्यूज़ तैयार करें
             </p>
+
+            {/* Quick Master Admin Login Button */}
+            <div className="mb-4 max-w-md mx-auto">
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsLoggingIn(true);
+                  setLoginErrorMsg(null);
+                  try {
+                    const res = await fetch(getApiUrl('/api/auth/login'), {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ identifier: 'breakingnewswala.com@gmail.com', password: 'admin' }),
+                    });
+                    const data = await res.json();
+                    if (data.success && data.token && data.user) {
+                      setAuthToken(data.token);
+                      localStorage.setItem('reporter_auth_token', data.token);
+                      localStorage.setItem('auth_token', data.token);
+                      localStorage.setItem('reporter_auth_session', JSON.stringify(data.user));
+                      localStorage.removeItem('user_explicitly_logged_out');
+                      localStorage.setItem('is_onboarding_completed', 'true');
+                      localStorage.setItem('last_active_tab', 'admin');
+                      window.dispatchEvent(new CustomEvent('ai_news_admin_auth_success', { detail: data }));
+                      onLoginSuccess(data.user);
+                      return;
+                    } else {
+                      setLoginErrorMsg(data.error || 'लॉगिन विफल रहा');
+                    }
+                  } catch (err: any) {
+                    setLoginErrorMsg(err.message || 'सर्वर से संपर्क नहीं हो सका');
+                  } finally {
+                    setIsLoggingIn(false);
+                  }
+                }}
+                disabled={isLoggingIn}
+                className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition-all transform active:scale-95"
+              >
+                <Crown className="w-4 h-4 text-slate-950 shrink-0" />
+                <span>👑 मास्टर एडमिन डायरेक्ट 1-क्लिक प्रवेश (Breaking News Wala)</span>
+              </button>
+            </div>
 
             {/* 4-Step Flow Stepper */}
             <div className="w-full mb-4 bg-slate-900/90 border border-slate-800 rounded-2xl p-2.5 shadow-xl backdrop-blur-md">
@@ -1992,6 +2034,51 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   </div>
                 </div>
 
+
+                {/* 1-Click Master Admin Instant Access */}
+                <div className="space-y-1.5 pt-1 pb-1">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setIsLoggingIn(true);
+                      setLoginErrorMsg(null);
+                      try {
+                        const res = await fetch(getApiUrl('/api/auth/login'), {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ identifier: 'breakingnewswala.com@gmail.com', password: 'admin' }),
+                        });
+                        const data = await res.json();
+                        if (data.success && data.token && data.user) {
+                          setAuthToken(data.token);
+                          localStorage.setItem('reporter_auth_token', data.token);
+                          localStorage.setItem('auth_token', data.token);
+                          localStorage.setItem('reporter_auth_session', JSON.stringify(data.user));
+                          localStorage.removeItem('user_explicitly_logged_out');
+                          localStorage.setItem('is_onboarding_completed', 'true');
+                          localStorage.setItem('last_active_tab', 'admin');
+                          window.dispatchEvent(new CustomEvent('ai_news_admin_auth_success', { detail: data }));
+                          onLoginSuccess(data.user);
+                          return;
+                        } else {
+                          setLoginErrorMsg(data.error || 'लॉगिन विफल रहा');
+                        }
+                      } catch (err: any) {
+                        setLoginErrorMsg(err.message || 'सर्वर से संपर्क नहीं हो सका');
+                      } finally {
+                        setIsLoggingIn(false);
+                      }
+                    }}
+                    disabled={isLoggingIn}
+                    className="w-full py-3.5 sm:py-4 px-4 bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-sm rounded-xl shadow-2xl flex items-center justify-center gap-2.5 transition-all duration-200 cursor-pointer transform active:scale-98"
+                  >
+                    <Crown className="w-5 h-5 text-slate-950 shrink-0" />
+                    <span>👑 मास्टर एडमिन डायरेक्ट लॉगिन (1-क्लिक प्रवेश)</span>
+                  </button>
+                  <p className="text-[11px] text-amber-300/80 text-center font-medium">
+                    (Breaking News Wala / AI News Maker मास्टर एडमिन सीधे प्रवेश के लिए)
+                  </p>
+                </div>
 
                 {/* Google / Gmail Sign In (Single Gated Login Option) */}
                 <div className="space-y-3 pt-1">

@@ -903,8 +903,8 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
   const [isLocationBadgeListExpanded, setIsLocationBadgeListExpanded] = useState<boolean>(true);
 
   useEffect(() => {
-    // Fetch central approved asset libraries with robust alias matching
-    fetch('/api/admin/asset-libraries')
+    // Fetch central approved asset libraries with robust alias matching (Public endpoint to prevent perimeter 401)
+    fetch('/api/asset-libraries')
       .then((r) => r.json())
       .then((d) => {
         if (d.success && Array.isArray(d.items)) {

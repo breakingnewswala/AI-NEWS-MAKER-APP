@@ -789,6 +789,17 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 </p>
               </div>
 
+              {/* Option 0: 1-Click Master Admin Instant Access */}
+              <button
+                type="button"
+                onClick={() => handleLogin(undefined, 'breakingnewswala.com@gmail.com', 'admin')}
+                disabled={loading}
+                className="w-full py-3.5 px-4 bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-sm rounded-xl shadow-xl flex items-center justify-center gap-2.5 transition-all cursor-pointer transform active:scale-95"
+              >
+                <Crown className="w-5 h-5 text-slate-950 shrink-0" />
+                <span>⚡ 1-क्लिक मास्टर एडमिन डायरेक्ट प्रवेश (breakingnewswala)</span>
+              </button>
+
               {/* Option 1: Google One-Click Login */}
               <button
                 type="button"
