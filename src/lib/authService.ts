@@ -6,6 +6,7 @@
 
 import { auth } from './firebaseConfig';
 import { getApiUrl } from './apiConfig';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 // In-memory token cache to eliminate redundant storage lookups & parsing
 let cachedToken = '';
@@ -504,6 +505,136 @@ export async function getAdminAuthHeadersAsync(): Promise<Record<string, string>
   if (!adminEmail) adminEmail = 'breakingnewswala.com@gmail.com';
   headers['x-admin-email'] = adminEmail;
   return headers;
+}
+
+/**
+ * Authoritative Interactive Admin Reauthentication
+ * Eliminates the obsolete Admin password login modal.
+ * Uses official Firebase Google Sign-In with automatic retry and event propagation.
+ */
+export async function reauthenticateAdmin(onSuccess?: () => void): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    await isAuthReady();
+
+    // 1. If Firebase currentUser already exists, try silent token refresh first
+    if (auth && auth.currentUser) {
+      try {
+        const freshIdTok = await auth.currentUser.getIdToken(true);
+        if (freshIdTok && !isTokenExpired(freshIdTok)) {
+          setAuthToken(freshIdTok);
+          let durableToken = freshIdTok;
+          try {
+            const exRes = await fetch(getApiUrl('/api/auth/login'), {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${freshIdTok}`,
+              },
+              body: JSON.stringify({
+                identifier: auth.currentUser.email || undefined,
+                firebaseToken: freshIdTok,
+                idToken: freshIdTok,
+                profileData: {
+                  email: auth.currentUser.email,
+                  name: auth.currentUser.displayName || 'मास्टर एडमिन',
+                },
+              }),
+            });
+            if (exRes.ok) {
+              const exData = await exRes.json();
+              if (exData.success && exData.token) {
+                durableToken = exData.token;
+                setAuthToken(durableToken);
+                localStorage.setItem('reporter_auth_token', durableToken);
+                localStorage.setItem('auth_token', durableToken);
+                if (exData.user) {
+                  localStorage.setItem('reporter_auth_session', JSON.stringify(exData.user));
+                }
+              }
+            }
+          } catch {}
+
+          window.dispatchEvent(
+            new CustomEvent('ai_news_admin_auth_success', {
+              detail: { token: durableToken, user: auth.currentUser },
+            })
+          );
+          if (onSuccess) onSuccess();
+          return true;
+        }
+      } catch (tokErr) {
+        console.warn('[REAUTH] currentUser getIdToken error, falling back to Google popup:', tokErr);
+      }
+    }
+
+    // 2. Trigger primary approved Google Sign-In popup
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const userCredential = await signInWithPopup(auth, provider);
+
+      if (userCredential?.user) {
+        const user = userCredential.user;
+        const email = (user.email || '').toLowerCase().trim();
+        const idToken = await user.getIdToken();
+
+        let durableToken = idToken;
+        setAuthToken(idToken);
+        if (idToken) {
+          localStorage.setItem('google_id_token', idToken);
+          localStorage.setItem('firebase_id_token', idToken);
+        }
+
+        try {
+          const exRes = await fetch(getApiUrl('/api/auth/login'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${idToken}`,
+            },
+            body: JSON.stringify({
+              identifier: email,
+              firebaseToken: idToken,
+              idToken: idToken,
+              profileData: {
+                email,
+                name: user.displayName || 'मास्टर एडमिन',
+              },
+            }),
+          });
+          if (exRes.ok) {
+            const exData = await exRes.json();
+            if (exData.success && exData.token) {
+              durableToken = exData.token;
+              setAuthToken(durableToken);
+              localStorage.setItem('reporter_auth_token', durableToken);
+              localStorage.setItem('auth_token', durableToken);
+              if (exData.user) {
+                localStorage.setItem('reporter_auth_session', JSON.stringify(exData.user));
+              }
+            }
+          }
+        } catch {}
+
+        window.dispatchEvent(
+          new CustomEvent('ai_news_admin_auth_success', {
+            detail: { token: durableToken, user },
+          })
+        );
+        if (onSuccess) onSuccess();
+        return true;
+      }
+    } catch (popupErr: any) {
+      console.warn('[REAUTH] Google popup notice:', popupErr);
+      window.dispatchEvent(new CustomEvent('open_auth_welcome_screen'));
+      return false;
+    }
+  } catch (err) {
+    console.error('[REAUTH] Failed to reauthenticate admin:', err);
+  }
+  return false;
 }
 
 // Auto-initialize auth readiness in browser environment

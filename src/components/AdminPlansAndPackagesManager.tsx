@@ -1,5 +1,5 @@
 import { sanitizeObjectStrings, sanitizeUtf8Hindi } from '../lib/utf8Sanitizer';
-import { getAuthToken } from '../lib/apiConfig';
+import { getAuthToken, reauthenticateAdmin } from '../lib/apiConfig';
 import React, { useState, useEffect } from 'react';
 import {
   Package,
@@ -5516,7 +5516,13 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   {rssMsg.type === 'error' && (rssMsg.text.includes('401') || rssMsg.text.includes('प्रमाणीकरण') || rssMsg.text.includes('Unauthorized')) && (
                     <button
                       type="button"
-                      onClick={() => window.dispatchEvent(new CustomEvent('open_admin_login'))}
+                      onClick={async () => {
+                        const ok = await reauthenticateAdmin();
+                        if (ok) {
+                          setRssMsg(null);
+                          loadRssFeeds();
+                        }
+                      }}
                       className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] rounded-lg transition cursor-pointer shadow whitespace-nowrap"
                     >
                       ⚡ एडमिन पुनः लॉगिन करें

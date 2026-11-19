@@ -804,59 +804,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 <span>Google से जारी रखें (Continue with Google)</span>
               </button>
 
-              {/* Master Admin Fast Access */}
-              <div className="pt-2 border-t border-neutral-800">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setUsername('breakingnewswala.com@gmail.com');
-                    setErrorMessage('कृपया मास्टर एडमिन का अधिकृत पासवर्ड दर्ज करें।');
-                  }}
-                  disabled={loading}
-                  className="w-full py-3 px-4 bg-gradient-to-r from-amber-600 via-yellow-600 to-amber-700 hover:from-amber-500 hover:to-yellow-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all transform active:scale-95 cursor-pointer border border-yellow-400/60"
-                >
-                  <Crown className="w-4 h-4 text-yellow-300" />
-                  <span>👑 मास्टर एडमिन लॉगिन (breakingnewswala.com@gmail.com)</span>
-                </button>
-                <p className="text-[10px] text-amber-400/70 text-center mt-1">
-                  मास्टर एडमिन आईडी लोड करें और अपना सुरक्षित पासवर्ड दर्ज करें
-                </p>
-              </div>
-
-              {/* Direct Username / Password Form Fallback */}
-              <div className="pt-2 border-t border-neutral-800">
-                <form onSubmit={handleLogin} className="space-y-2.5 text-left">
-                  <span className="text-[11px] font-bold text-neutral-400 block text-center">
-                    या यूज़रनेम / ईमेल और पासवर्ड से सीधा लॉगिन करें:
-                  </span>
-                  <div>
-                    <input
-                      type="text"
-                      placeholder="यूज़रनेम या ईमेल"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-yellow-400"
-                    />
-                  </div>
-                  <div>
-                    <input
-                      type="password"
-                      placeholder="पासवर्ड"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-neutral-950 border border-neutral-700 rounded-lg px-3 py-2 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-yellow-400"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full py-2 bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer"
-                  >
-                    लॉगिन करें
-                  </button>
-                </form>
-              </div>
-
               <p className="text-[11px] text-neutral-400 text-center">
                 🔒 आपका डेटा पूरी तरह सुरक्षित है।
               </p>

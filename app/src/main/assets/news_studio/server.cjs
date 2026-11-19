@@ -13510,6 +13510,12 @@ try {
   console.warn(`[AUTH] Firebase Admin SDK initialization note: ${err?.message || err}`);
 }
 var GOOGLE_OAUTH_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com";
+var ALLOWED_GOOGLE_CLIENT_IDS = [
+  GOOGLE_OAUTH_CLIENT_ID,
+  "401033199805-04o13ssp6vnvm498r1fr392qbco6tcva.apps.googleusercontent.com",
+  "401033199805-hsj85q4q553492ojg0jtke9hvn4jq1je.apps.googleusercontent.com",
+  "401033199805-5hl33kn2tltd8n69sjmrlv21roe2880j.apps.googleusercontent.com"
+].filter((id, idx, arr) => Boolean(id) && arr.indexOf(id) === idx);
 var googleOAuthClient = null;
 try {
   googleOAuthClient = new import_google_auth_library.OAuth2Client(GOOGLE_OAUTH_CLIENT_ID);
@@ -13669,7 +13675,7 @@ async function resolveAuthenticatedUser(req, res) {
     try {
       const ticket = await googleOAuthClient.verifyIdToken({
         idToken: token,
-        audience: GOOGLE_OAUTH_CLIENT_ID
+        audience: ALLOWED_GOOGLE_CLIENT_IDS
       });
       const gPayload = ticket.getPayload();
       if (gPayload && gPayload.email) {
@@ -14383,7 +14389,7 @@ app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) =>
         try {
           const ticket = await googleOAuthClient.verifyIdToken({
             idToken: tok,
-            audience: GOOGLE_OAUTH_CLIENT_ID
+            audience: ALLOWED_GOOGLE_CLIENT_IDS
           });
           const gPayload = ticket.getPayload();
           if (gPayload && gPayload.email) {
@@ -26161,7 +26167,7 @@ app.post("/api/auth/login", authRateLimiter, async (req, res) => {
         try {
           const ticket = await googleOAuthClient.verifyIdToken({
             idToken: candidateToken,
-            audience: GOOGLE_OAUTH_CLIENT_ID
+            audience: ALLOWED_GOOGLE_CLIENT_IDS
           });
           const payload = ticket.getPayload();
           if (payload && payload.email) {

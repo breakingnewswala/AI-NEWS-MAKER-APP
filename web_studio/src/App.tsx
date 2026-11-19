@@ -27,7 +27,7 @@ import { BrandedNewsLoadingModal, BrandedLoaderMode } from './components/Branded
 import { NewsDetailModal } from './components/NewsDetailModal';
 import { AppNotificationModal } from './components/AppNotificationModal';
 import { showAppSuccess } from './lib/notificationService';
-import { getApiUrl, getApiBaseUrl, ensureAuthToken, setAuthToken, getAuthHeaders, getAuthToken, isTokenExpired, clearAuthTokens } from './lib/apiConfig';
+import { getApiUrl, getApiBaseUrl, ensureAuthToken, setAuthToken, getAuthHeaders, getAuthToken, isTokenExpired, clearAuthTokens, reauthenticateAdmin } from './lib/apiConfig';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
 import { StepNavigator, scrollToStepById, DEFAULT_STEPS } from './components/StepNavigator';
 import { renderCardToCanvas, generateCardCanvas, downloadCanvas } from './lib/CanvasExporter';
@@ -1396,6 +1396,7 @@ export default function App() {
 
   useEffect(() => {
     fetchLiveNews();
+    ensureAuthToken().catch(() => {});
     ensureAuthToken().then((t) => {
       if (t && currentUser && isUserAdmin(currentUser)) {
         try {

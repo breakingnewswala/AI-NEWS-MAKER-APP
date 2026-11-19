@@ -21,7 +21,7 @@ import {
   Shield,
   Activity,
 } from 'lucide-react';
-import { getApiUrl, getAuthToken, ensureAuthToken, isTokenExpired } from '../lib/apiConfig';
+import { getApiUrl, getAuthToken, ensureAuthToken, isTokenExpired, reauthenticateAdmin } from '../lib/apiConfig';
 
 const DEFAULT_INITIAL_HEALTH: ApiHealthCheckItem[] = [
   { id: 'gemini_ai', name: 'Google Gemini AI Engine', provider: 'Google Cloud / Gemini API', status: 'Healthy', latencyMs: 145, httpCode: 200, lastChecked: Date.now() },
@@ -761,7 +761,14 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
           </div>
           <button
             type="button"
-            onClick={() => window.dispatchEvent(new CustomEvent('open_admin_login'))}
+            onClick={async () => {
+              const ok = await reauthenticateAdmin();
+              if (ok) {
+                setAuthError(null);
+                fetchKeysData();
+                fetchHealthStatus();
+              }
+            }}
             className="px-3.5 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs rounded-xl shadow transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
           >
             <Zap className="w-3.5 h-3.5" />
@@ -1505,7 +1512,14 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
           {(toastMsg.includes('401') || toastMsg.includes('प्रमाणीकरण')) && (
             <button
               type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent('open_admin_login'))}
+              onClick={async () => {
+                const ok = await reauthenticateAdmin();
+                if (ok) {
+                  setToastMsg(null);
+                  fetchKeysData();
+                  fetchHealthStatus();
+                }
+              }}
               className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] rounded-lg transition shrink-0 cursor-pointer shadow whitespace-nowrap"
             >
               ⚡ एडमिन पुनः लॉगिन करें

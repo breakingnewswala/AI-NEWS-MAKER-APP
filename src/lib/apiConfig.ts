@@ -112,6 +112,7 @@ export {
   getAuthHeaders,
   getAdminAuthHeaders,
   getAdminAuthHeadersAsync,
+  reauthenticateAdmin,
 } from './authService';
 
 import {
@@ -129,6 +130,7 @@ import {
   getAuthHeaders,
   getAdminAuthHeaders,
   getAdminAuthHeadersAsync,
+  reauthenticateAdmin,
 } from './authService';
 
 /**

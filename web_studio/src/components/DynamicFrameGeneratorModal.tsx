@@ -98,7 +98,7 @@ import { computeCanonicalHeadlineLayout, normalizeHeadlineText } from '../lib/ca
 import { drawThemeFooterBar } from '../lib/CanvasExporter';
 import { BUILTIN_RIBBONS } from '../lib/ribbonPresets';
 import { STATEMENT_BACKGROUND_PRESETS } from '../lib/statementBackgroundPresets';
-import { getAuthToken, ensureAuthToken } from '../lib/apiConfig';
+import { getAuthToken, ensureAuthToken, reauthenticateAdmin } from '../lib/apiConfig';
 
 /**
  * Robust image loader that avoids setting crossOrigin on data: and blob: URLs
@@ -3780,7 +3780,12 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       {(analysisStatusText.includes('401') || analysisStatusText.includes('प्रमाणीकरण') || analysisStatusText.includes('Unauthorized')) && (
                         <button
                           type="button"
-                          onClick={() => window.dispatchEvent(new CustomEvent('open_admin_login'))}
+                          onClick={async () => {
+                            const ok = await reauthenticateAdmin();
+                            if (ok) {
+                              handleRunAiAnalysis();
+                            }
+                          }}
                           className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shadow-lg transition cursor-pointer"
                         >
                           ⚡ एडमिन लॉगिन करें

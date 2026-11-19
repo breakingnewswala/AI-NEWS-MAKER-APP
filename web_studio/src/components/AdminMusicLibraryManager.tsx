@@ -13,7 +13,7 @@ import {
   Loader2,
   Tag,
 } from 'lucide-react';
-import { getApiUrl, getAdminAuthHeadersAsync, ensureAuthToken, isAuthReady } from '../lib/apiConfig';
+import { getApiUrl, getAdminAuthHeadersAsync, ensureAuthToken, isAuthReady, reauthenticateAdmin } from '../lib/apiConfig';
 
 export interface MusicTrackItem {
   id: string;
@@ -338,7 +338,13 @@ export const AdminMusicLibraryManager: React.FC<AdminMusicLibraryManagerProps> =
             {(error.includes('401') || error.includes('प्रमाणीकरण') || error.includes('Unauthorized')) && (
               <button
                 type="button"
-                onClick={() => window.dispatchEvent(new CustomEvent('open_admin_login'))}
+                onClick={async () => {
+                  const ok = await reauthenticateAdmin();
+                  if (ok) {
+                    setError(null);
+                    fetchTracks();
+                  }
+                }}
                 className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] rounded-lg transition shrink-0 cursor-pointer shadow"
               >
                 ⚡ एडमिन पुनः लॉगिन करें
