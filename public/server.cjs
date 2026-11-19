@@ -23858,8 +23858,9 @@ app.get(["/api/user-profile", "/api/user/profile"], (req, res) => {
     const isOwner = Boolean(
       callerEmail && profileEmail && callerEmail === profileEmail || callerUid && profileUid && callerUid === profileUid
     );
-    const isMaster = isAuthorizedMasterAdmin(req) || isMasterAdminEmail(callerEmail);
-    if (!isOwner && !isMaster) {
+    const isMaster = isAuthorizedMasterAdmin(req) || callerEmail === MASTER_ADMIN_EMAIL || callerEmail === "admin.ainewsmaker@gmail.com" || (caller?.role === "superadmin" || caller?.role === "admin");
+    const isTargetAdmin = profileEmail === MASTER_ADMIN_EMAIL || profileEmail === "admin.ainewsmaker@gmail.com";
+    if (!isOwner && !isMaster && !isTargetAdmin) {
       delete safeProfile.city;
     }
     return res.json({ success: true, profile: sanitizeObjectStrings(safeProfile) });
@@ -23876,7 +23877,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     const cleanId = (profile.userId || profile.uid || profile.email || profile.username).toString().trim().toLowerCase();
     const allProfiles = loadProfilesDatabase();
     const authUser = await resolveAuthenticatedUser(req, res);
-    const isMasterAdminEmail2 = profile.email && profile.email.toLowerCase() === "breakingnewswala.com@gmail.com" || cleanId === "breakingnewswala.com@gmail.com" || cleanId === "usr_627265616b69";
+    const isMasterAdminEmail = profile.email && profile.email.toLowerCase() === "breakingnewswala.com@gmail.com" || cleanId === "breakingnewswala.com@gmail.com" || cleanId === "usr_627265616b69";
     const isSubAdminEmail = profile.email && profile.email.toLowerCase() === "admin.ainewsmaker@gmail.com" || cleanId === "admin.ainewsmaker@gmail.com" || cleanId === "user-1791697518060";
     const isAdmin = isAuthorizedAdmin(req) || authUser && (authUser.role === "superadmin" || authUser.role === "admin") || isAuthorizedMasterAdmin(req);
     if (!isAdmin && !authUser) {
@@ -23901,10 +23902,10 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       delete profile.logoApprovedAt;
       delete profile.logoApprovedBy;
     }
-    if ((cleanId === "admin" || isMasterAdminEmail2 || isSubAdminEmail) && !isAdmin) {
+    if ((cleanId === "admin" || isMasterAdminEmail || isSubAdminEmail) && !isAdmin) {
       return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u090F\u0921\u092E\u093F\u0928 \u092A\u094D\u0930\u094B\u092B\u093E\u0907\u0932 \u0915\u0947\u0935\u0932 \u0905\u0927\u093F\u0915\u0943\u0924 \u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0939\u0940 \u0938\u0902\u0936\u094B\u0927\u093F\u0924 \u0915\u0940 \u091C\u093E \u0938\u0915\u0924\u0940 \u0939\u0948" });
     }
-    const existing = allProfiles[cleanId] || (isMasterAdminEmail2 ? allProfiles["breakingnewswala.com@gmail.com"] || allProfiles["usr_627265616b69"] : isSubAdminEmail ? allProfiles["admin.ainewsmaker@gmail.com"] || allProfiles["user-1791697518060"] : null) || {};
+    const existing = allProfiles[cleanId] || (isMasterAdminEmail ? allProfiles["breakingnewswala.com@gmail.com"] || allProfiles["usr_627265616b69"] : isSubAdminEmail ? allProfiles["admin.ainewsmaker@gmail.com"] || allProfiles["user-1791697518060"] : null) || {};
     if (isSubAdminEmail) {
       existing.role = "admin";
     }
@@ -23927,7 +23928,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
         const thisEmail = (profile.email || cleanId).toLowerCase().trim();
         const thisUserId = (profile.userId || profile.uid || cleanId).toLowerCase().trim();
         const otherUserId = (p.userId || p.uid || k).toLowerCase().trim();
-        const isSameUser = k === cleanId || otherEmail && thisEmail && otherEmail === thisEmail || otherUserId && thisUserId && otherUserId === thisUserId || isMasterAdminEmail2 && (otherEmail === "breakingnewswala.com@gmail.com" || otherEmail === "admin.ainewsmaker@gmail.com" || otherUserId === "usr_627265616b69" || otherUserId === "user-1791697518060" || k === "admin") || isSubAdminEmail && (otherEmail === "admin.ainewsmaker@gmail.com" || otherEmail === "breakingnewswala.com@gmail.com" || otherUserId === "user-1791697518060" || otherUserId === "usr_627265616b69" || k === "admin") || isProtectedAdminAccount(thisEmail) && isProtectedAdminAccount(otherEmail);
+        const isSameUser = k === cleanId || otherEmail && thisEmail && otherEmail === thisEmail || otherUserId && thisUserId && otherUserId === thisUserId || isMasterAdminEmail && (otherEmail === "breakingnewswala.com@gmail.com" || otherEmail === "admin.ainewsmaker@gmail.com" || otherUserId === "usr_627265616b69" || otherUserId === "user-1791697518060" || k === "admin") || isSubAdminEmail && (otherEmail === "admin.ainewsmaker@gmail.com" || otherEmail === "breakingnewswala.com@gmail.com" || otherUserId === "user-1791697518060" || otherUserId === "usr_627265616b69" || k === "admin") || isProtectedAdminAccount(thisEmail) && isProtectedAdminAccount(otherEmail);
         if (!isSameUser) {
           const otherUname = (p.username || "").toLowerCase().trim().replace(/^@/, "");
           if (otherUname && otherUname === normUsername) {
@@ -23937,7 +23938,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       }
     }
     const normMobile = (finalMobile || "").toString().replace(/\D/g, "").slice(-10);
-    if (normMobile.length === 10 && !isMasterAdminEmail2 && !isSubAdminEmail) {
+    if (normMobile.length === 10 && !isMasterAdminEmail && !isSubAdminEmail) {
       for (const [k, p] of Object.entries(allProfiles)) {
         const otherEmail = (p.email || k).toLowerCase().trim();
         const thisEmail = (profile.email || cleanId).toLowerCase().trim();
@@ -23958,8 +23959,8 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     const matchedMasterUser = masterUsers.find(
       (u) => u.email && u.email.toLowerCase().trim() === cleanUserEmail || u.userId && u.userId.toLowerCase().trim() === cleanId
     );
-    const safeRole = isMasterCaller && profile.role ? profile.role : existing.role || (isMasterAdminEmail2 ? "superadmin" : isSubAdminEmail ? "admin" : "reporter");
-    const safeTier = isMasterCaller && profile.tier ? profile.tier : existing.tier || (isMasterAdminEmail2 ? "ultra" : isSubAdminEmail ? "ultra" : matchedMasterUser?.tier || "basic");
+    const safeRole = isMasterCaller && profile.role ? profile.role : existing.role || (isMasterAdminEmail ? "superadmin" : isSubAdminEmail ? "admin" : "reporter");
+    const safeTier = isMasterCaller && profile.tier ? profile.tier : existing.tier || (isMasterAdminEmail ? "ultra" : isSubAdminEmail ? "ultra" : matchedMasterUser?.tier || "basic");
     const safeIsBlocked = isMasterCaller ? profile.isBlocked !== void 0 ? Boolean(profile.isBlocked) : Boolean(existing.isBlocked) : Boolean(existing.isBlocked);
     const finalAccountType = profile.accountType || existing.accountType || "channel";
     const isReporter = finalAccountType === "reporter";
@@ -24000,7 +24001,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     }
     const safeIsLocked = isAdmin ? profile.isLocked !== void 0 ? Boolean(profile.isLocked) : Boolean(existing.isLocked) : isProfileComplete ? true : false;
     const effectiveTier = (safeTier || existing.tier || "basic").toLowerCase();
-    const isProOrVipUser = effectiveTier === "pro" || effectiveTier === "professional" || effectiveTier === "vip" || effectiveTier === "ultra" || isMasterAdminEmail2 || isSubAdminEmail;
+    const isProOrVipUser = effectiveTier === "pro" || effectiveTier === "professional" || effectiveTier === "vip" || effectiveTier === "ultra" || isMasterAdminEmail || isSubAdminEmail;
     if (profile.customFooterPng && !isProOrVipUser) {
       return res.status(403).json({ error: "\u0915\u0938\u094D\u091F\u092E \u092B\u0942\u091F\u0930 \u0938\u0941\u0935\u093F\u0927\u093E \u0915\u0947\u0935\u0932 Pro \u0914\u0930 VIP Desk \u092A\u094D\u0932\u093E\u0928 \u092F\u0942\u091C\u093C\u0930\u094D\u0938 \u0915\u0947 \u0932\u093F\u090F \u0909\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u092A\u0928\u093E \u092A\u094D\u0932\u093E\u0928 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964" });
     }
@@ -24016,10 +24017,10 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       role: safeRole,
       tier: safeTier,
       isBlocked: safeIsBlocked,
-      isLocked: isMasterAdminEmail2 || isSubAdminEmail ? false : safeIsLocked,
-      isProfileLocked: isMasterAdminEmail2 || isSubAdminEmail ? false : safeIsLocked,
-      isProfileComplete: isMasterAdminEmail2 || isSubAdminEmail ? true : isProfileComplete,
-      profileStatus: isMasterAdminEmail2 || isSubAdminEmail ? "active" : isProfileComplete ? "active" : "incomplete",
+      isLocked: isMasterAdminEmail || isSubAdminEmail ? false : safeIsLocked,
+      isProfileLocked: isMasterAdminEmail || isSubAdminEmail ? false : safeIsLocked,
+      isProfileComplete: isMasterAdminEmail || isSubAdminEmail ? true : isProfileComplete,
+      profileStatus: isMasterAdminEmail || isSubAdminEmail ? "active" : isProfileComplete ? "active" : "incomplete",
       email: profile.email || existing.email || "",
       state: profile.state !== void 0 && profile.state !== null && String(profile.state).trim() !== "" ? String(profile.state).trim() : existing.state || "",
       district: profile.district !== void 0 && profile.district !== null && String(profile.district).trim() !== "" ? String(profile.district).trim() : existing.district || "",
@@ -24033,8 +24034,8 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
         return raw;
       })(),
       channelNameEn: profile.channelNameEn || existing.channelNameEn || "",
-      channelLogoUrl: profile.channelLogoUrl || existing.channelLogoUrl || (isMasterAdminEmail2 ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : ""),
-      channelLogoPngUrl: profile.channelLogoPngUrl || profile.channelLogoUrl || existing.channelLogoPngUrl || existing.channelLogoUrl || (isMasterAdminEmail2 ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : ""),
+      channelLogoUrl: profile.channelLogoUrl || existing.channelLogoUrl || (isMasterAdminEmail ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : ""),
+      channelLogoPngUrl: profile.channelLogoPngUrl || profile.channelLogoUrl || existing.channelLogoPngUrl || existing.channelLogoUrl || (isMasterAdminEmail ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : ""),
       channelLogoGifUrl: profile.channelLogoGifUrl || existing.channelLogoGifUrl,
       channelLogoType: profile.channelLogoType || existing.channelLogoType || "png",
       mobileNumber: finalMobile || existing.mobileNumber || "",
@@ -24046,7 +24047,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       whatsappMarketingConsentSource: profile.whatsappMarketingConsentSource || existing.whatsappMarketingConsentSource || null,
       whatsappMarketingConsentVersion: profile.whatsappMarketingConsentVersion || existing.whatsappMarketingConsentVersion || null,
       whatsappMarketingConsentUpdatedAt: profile.whatsappMarketingConsentUpdatedAt || existing.whatsappMarketingConsentUpdatedAt || null,
-      activeLogoUrl: isMasterAdminEmail2 ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : existing.activeLogoUrl || (existing.logoApprovalStatus === "approved" ? existing.channelLogoUrl : void 0),
+      activeLogoUrl: isMasterAdminEmail ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : existing.activeLogoUrl || (existing.logoApprovalStatus === "approved" ? existing.channelLogoUrl : void 0),
       logoApprovalStatus: existing.logoApprovalStatus || "none",
       approvedLogoRequestId: existing.approvedLogoRequestId,
       logoApprovedAt: existing.logoApprovedAt,
@@ -24079,7 +24080,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     }
     const canonicalKey = updated.email ? updated.email.toLowerCase().trim() : cleanId;
     allProfiles[canonicalKey] = updated;
-    if (isMasterAdminEmail2) {
+    if (isMasterAdminEmail) {
       allProfiles["breakingnewswala.com@gmail.com"] = updated;
       allProfiles["usr_627265616b69"] = { ...updated, userId: "usr_627265616b69", uid: "usr_627265616b69" };
       try {

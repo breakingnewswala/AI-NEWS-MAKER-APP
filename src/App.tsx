@@ -1802,6 +1802,10 @@ export default function App() {
   useEffect(() => {
     if (!currentUser?.email) return;
     const activeEmail = currentUser.email.toLowerCase().trim();
+    const isAinewsAdmin = activeEmail === 'admin.ainewsmaker@gmail.com';
+    const isBnwAdmin = activeEmail === 'breakingnewswala.com@gmail.com';
+    const defaultLogo = isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : (isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : '');
+
     let savedProfile: any = null;
     try {
       const perUserRaw = localStorage.getItem(`user_profile_${activeEmail}`);
@@ -1813,16 +1817,14 @@ export default function App() {
         if (raw) savedProfile = JSON.parse(raw);
       } catch {}
     }
-    if (savedProfile) {
-      const primaryLogo = savedProfile.channelLogoPngUrl || (savedProfile.channelLogoUrl?.endsWith('.gif') ? '' : savedProfile.channelLogoUrl);
-      if (primaryLogo) {
-        setCard((prev) => ({
-          ...prev,
-          customLogoUrl: primaryLogo,
-          brandName: savedProfile.channelNameHi || prev.brandName,
-          channelNameHi: savedProfile.channelNameHi || prev.channelNameHi,
-        }));
-      }
+    const primaryLogo = savedProfile?.channelLogoPngUrl || (savedProfile?.channelLogoUrl?.endsWith('.gif') ? '' : savedProfile?.channelLogoUrl) || defaultLogo;
+    if (primaryLogo) {
+      setCard((prev) => ({
+        ...prev,
+        customLogoUrl: primaryLogo,
+        brandName: savedProfile?.channelNameHi || (isAinewsAdmin ? 'एआई न्यूज़ मेकर' : (isBnwAdmin ? 'ब्रेकिंग न्यूज़ वाला' : prev.brandName)),
+        channelNameHi: savedProfile?.channelNameHi || (isAinewsAdmin ? 'एआई न्यूज़ मेकर' : (isBnwAdmin ? 'ब्रेकिंग न्यूज़ वाला' : prev.channelNameHi)),
+      }));
     }
   }, [currentUser?.email]);
 

@@ -1407,14 +1407,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     src={getProxiedImageUrl(card.customLogoUrl)}
                     alt="Channel Logo"
                     className="w-full h-full object-contain filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)] pointer-events-none"
-                    crossOrigin="anonymous"
+                    crossOrigin={(card.customLogoUrl.startsWith('http://') || card.customLogoUrl.startsWith('https://')) && typeof window !== 'undefined' && !card.customLogoUrl.startsWith(window.location.origin) ? 'anonymous' : undefined}
                     onError={(e) => {
                       const target = e.currentTarget;
+                      target.removeAttribute('crossorigin');
                       const fallback = (card.channelNameEn?.includes('AI News Maker') || card.brandName?.includes('एआई न्यूज़'))
                         ? '/assets/ai_news_maker_logo.png'
                         : '/assets/breaking_news_wala_logo.png';
-                      if (!target.src.includes(fallback)) {
-                        target.crossOrigin = null as any;
+                      if (!target.src.endsWith(fallback)) {
                         target.src = fallback;
                       }
                     }}

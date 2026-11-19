@@ -13217,9 +13217,13 @@ app.get(["/api/user-profile", "/api/user/profile"], (req, res) => {
       (callerEmail && profileEmail && callerEmail === profileEmail) ||
       (callerUid && profileUid && callerUid === profileUid)
     );
-    const isMaster = isAuthorizedMasterAdmin(req) || isMasterAdminEmail(callerEmail);
+    const isMaster = isAuthorizedMasterAdmin(req) ||
+      callerEmail === MASTER_ADMIN_EMAIL ||
+      callerEmail === 'admin.ainewsmaker@gmail.com' ||
+      (caller?.role === 'superadmin' || caller?.role === 'admin');
+    const isTargetAdmin = profileEmail === MASTER_ADMIN_EMAIL || profileEmail === 'admin.ainewsmaker@gmail.com';
 
-    if (!isOwner && !isMaster) {
+    if (!isOwner && !isMaster && !isTargetAdmin) {
       delete (safeProfile as any).city;
     }
 

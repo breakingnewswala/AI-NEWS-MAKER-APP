@@ -143,6 +143,7 @@ export const DEFAULT_PROFILE: ChannelProfile = {
   showMobileNumber: true,
   websiteUrl: '',
   defaultLocation: '',
+  city: '',
 };
 
 interface ProfileScreenWebProps {
@@ -281,7 +282,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     const isBnwAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
     const defaultAdminLogo = isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : (isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : '');
 
-    fetch(getApiUrl(`/api/user-profile?email=${encodeURIComponent(cleanEmail)}`))
+    fetch(getApiUrl(`/api/user-profile?email=${encodeURIComponent(cleanEmail)}`), {
+      headers: getAuthHeaders(),
+    })
       .then((res) => res.json())
       .then((data) => {
         if (data && data.success && data.profile) {
@@ -324,6 +327,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 return (rawLoc === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawLoc === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : rawLoc;
               })(),
               state: cloudP.state || prev.state || '',
+              city: (cloudP.city || prev.city || '').trim(),
               address: cloudP.address || prev.address || '',
               pincode: cloudP.pincode || prev.pincode || '',
               socialIcons: (cloudP.socialIcons && Object.keys(cloudP.socialIcons).length > 0)
