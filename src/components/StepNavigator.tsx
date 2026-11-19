@@ -10,8 +10,8 @@ export interface StepItem {
 }
 
 export const DEFAULT_STEPS: StepItem[] = [
-  { step: 1, id: 'step-frame', label: '1. फ्रेम्स', shortLabel: 'फ्रेम्स', icon: '🎨' },
-  { step: 2, id: 'step-ai', label: '2. एआई टूल्स', shortLabel: 'एआई टूल्स', icon: '✨' },
+  { step: 1, id: 'step-ai', label: '1. एआई टूल्स', shortLabel: 'एआई टूल्स', icon: '✨' },
+  { step: 2, id: 'step-frame', label: '2. टेम्पलेट्स', shortLabel: 'टेम्पलेट्स', icon: '🎨' },
   { step: 3, id: 'step-headline', label: '3. हेडलाइन', shortLabel: 'हेडलाइन', icon: '📝' },
   { step: 4, id: 'step-photo', label: '4. फोटो व वॉटरमार्क', shortLabel: 'फोटो-वॉटरमार्क', icon: '📷' },
   { step: 5, id: 'step-location', label: '5. स्थान व दिनांक', shortLabel: 'स्थान-दिनांक', icon: '📍' },

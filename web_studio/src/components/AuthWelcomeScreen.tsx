@@ -1257,7 +1257,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       }
       if (firebaseErr?.code === 'auth/popup-blocked' || String(firebaseErr?.message || '').toLowerCase().includes('popup')) {
         setIsPopupBlocked(true);
-        setLoginErrorMsg('ब्राउज़र पॉप-अप अवरोधक सक्रिय है। आप नीचे दिए गए "मास्टर एडमिन डायरेक्ट लॉगिन" या ईमेल विकल्प से बिना पॉप-अप के तुरंत लॉगिन कर सकते हैं।');
+        setLoginErrorMsg('ब्राउज़र पॉप-अप अवरोधक सक्रिय है। कृपया ब्राउज़र सेटिंग्स में पॉप-अप की अनुमति दें या पुनः प्रयास करें।');
       }
       // If popup blocked or failed, fall through to GIS fallback
     }
@@ -1290,7 +1290,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
             console.warn('Google auth popup error or closed:', error);
             setIsLoggingIn(false);
             setIsPopupBlocked(true);
-            setLoginErrorMsg('Google लॉगिन में Error 400 (origin_mismatch) या पॉपअप ब्लॉक हुआ। डोमेन (ainewsmaker.online) Google Cloud Console में जोड़ने तक आप नीचे "मास्टर एडमिन डायरेक्ट लॉगिन" बटन से तुरंत 1-क्लिक में प्रवेश कर सकते हैं।');
+            setLoginErrorMsg('Google लॉगिन में Error 400 (origin_mismatch) या पॉपअप अवरोध हुआ। कृपया इंटरनेट कनेक्शन जांचें और पुनः प्रयास करें।');
           },
         });
         tokenClient.requestAccessToken({ prompt: 'select_account' });
@@ -1748,47 +1748,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
               ग्राफिक हो या वीडियो, सिर्फ 7 आसान चरणों में अपनी न्यूज़ तैयार करें
             </p>
 
-            {/* Quick Master Admin Login Button */}
-            <div className="mb-4 max-w-md mx-auto">
-              <button
-                type="button"
-                onClick={async () => {
-                  setIsLoggingIn(true);
-                  setLoginErrorMsg(null);
-                  try {
-                    const res = await fetch(getApiUrl('/api/auth/login'), {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ identifier: 'breakingnewswala.com@gmail.com', password: 'admin' }),
-                    });
-                    const data = await res.json();
-                    if (data.success && data.token && data.user) {
-                      setAuthToken(data.token);
-                      localStorage.setItem('reporter_auth_token', data.token);
-                      localStorage.setItem('auth_token', data.token);
-                      localStorage.setItem('reporter_auth_session', JSON.stringify(data.user));
-                      localStorage.removeItem('user_explicitly_logged_out');
-                      localStorage.setItem('is_onboarding_completed', 'true');
-                      localStorage.setItem('last_active_tab', 'admin');
-                      window.dispatchEvent(new CustomEvent('ai_news_admin_auth_success', { detail: data }));
-                      onLoginSuccess(data.user);
-                      return;
-                    } else {
-                      setLoginErrorMsg(data.error || 'लॉगिन विफल रहा');
-                    }
-                  } catch (err: any) {
-                    setLoginErrorMsg(err.message || 'सर्वर से संपर्क नहीं हो सका');
-                  } finally {
-                    setIsLoggingIn(false);
-                  }
-                }}
-                disabled={isLoggingIn}
-                className="w-full py-2.5 px-4 bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition-all transform active:scale-95"
-              >
-                <Crown className="w-4 h-4 text-slate-950 shrink-0" />
-                <span>👑 मास्टर एडमिन डायरेक्ट 1-क्लिक प्रवेश (Breaking News Wala)</span>
-              </button>
-            </div>
 
             {/* 4-Step Flow Stepper */}
             <div className="w-full mb-4 bg-slate-900/90 border border-slate-800 rounded-2xl p-2.5 shadow-xl backdrop-blur-md">
@@ -2035,50 +1994,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 </div>
 
 
-                {/* 1-Click Master Admin Instant Access */}
-                <div className="space-y-1.5 pt-1 pb-1">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setIsLoggingIn(true);
-                      setLoginErrorMsg(null);
-                      try {
-                        const res = await fetch(getApiUrl('/api/auth/login'), {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ identifier: 'breakingnewswala.com@gmail.com', password: 'admin' }),
-                        });
-                        const data = await res.json();
-                        if (data.success && data.token && data.user) {
-                          setAuthToken(data.token);
-                          localStorage.setItem('reporter_auth_token', data.token);
-                          localStorage.setItem('auth_token', data.token);
-                          localStorage.setItem('reporter_auth_session', JSON.stringify(data.user));
-                          localStorage.removeItem('user_explicitly_logged_out');
-                          localStorage.setItem('is_onboarding_completed', 'true');
-                          localStorage.setItem('last_active_tab', 'admin');
-                          window.dispatchEvent(new CustomEvent('ai_news_admin_auth_success', { detail: data }));
-                          onLoginSuccess(data.user);
-                          return;
-                        } else {
-                          setLoginErrorMsg(data.error || 'लॉगिन विफल रहा');
-                        }
-                      } catch (err: any) {
-                        setLoginErrorMsg(err.message || 'सर्वर से संपर्क नहीं हो सका');
-                      } finally {
-                        setIsLoggingIn(false);
-                      }
-                    }}
-                    disabled={isLoggingIn}
-                    className="w-full py-3.5 sm:py-4 px-4 bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-sm rounded-xl shadow-2xl flex items-center justify-center gap-2.5 transition-all duration-200 cursor-pointer transform active:scale-98"
-                  >
-                    <Crown className="w-5 h-5 text-slate-950 shrink-0" />
-                    <span>👑 मास्टर एडमिन डायरेक्ट लॉगिन (1-क्लिक प्रवेश)</span>
-                  </button>
-                  <p className="text-[11px] text-amber-300/80 text-center font-medium">
-                    (Breaking News Wala / AI News Maker मास्टर एडमिन सीधे प्रवेश के लिए)
-                  </p>
-                </div>
 
                 {/* Google / Gmail Sign In (Single Gated Login Option) */}
                 <div className="space-y-3 pt-1">
@@ -2148,7 +2063,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                         <span>Google लॉगिन पॉप-अप अवरुद्ध या Origin Mismatch</span>
                       </div>
                       <p className="text-[11px] text-slate-300 leading-relaxed">
-                        यदि Google पॉपअप में <strong>Error 400: origin_mismatch</strong> आ रहा है, तो ऊपर दिए गए <strong>"👑 मास्टर एडमिन डायरेक्ट लॉगिन"</strong> बटन पर क्लिक करें। Google Cloud Console में <code>https://ainewsmaker.online</code> को Authorized JavaScript origins में रजिस्टर करने पर Google पॉपअप भी सक्रिय हो जाएगा।
+                        कृपया सुनिश्चित करें कि ब्राउज़र में पॉप-अप विंडो की अनुमति है। यदि समस्या बनी रहे तो पेज रीलोड करें।
                       </p>
                     </div>
                   )}

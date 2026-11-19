@@ -763,14 +763,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   const handleGoToStep = (newStep: number, targetId?: string) => {
     setActiveStep(newStep);
     const stepMap: Record<number, string> = {
-      1: 'step-frame',
-      2: 'step-ai',
+      1: 'step-ai',
+      2: 'step-frame',
       3: 'step-headline',
       4: 'step-photo',
       5: 'step-location',
       6: 'step-header-footer',
       7: 'step-download',
-
     };
     const id = targetId || stepMap[newStep];
     if (id) {
@@ -1033,8 +1032,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   }, [card.frameDesign, card.layout, onChange]);
 
   const STEPS = [
-    { step: 1, id: 'step-frame', label: '1. टेम्पलेट्स', shortLabel: 'टेम्पलेट्स', icon: '🖼️' },
-    { step: 2, id: 'step-ai', label: '2. AI टूल्स', shortLabel: 'AI टूल्स', icon: '🤖' },
+    { step: 1, id: 'step-ai', label: '1. AI टूल्स', shortLabel: 'AI टूल्स', icon: '🤖' },
+    { step: 2, id: 'step-frame', label: '2. टेम्पलेट्स', shortLabel: 'टेम्पलेट्स', icon: '🖼️' },
     { step: 3, id: 'step-headline', label: '3. हेडलाइन', shortLabel: 'हेडलाइन', icon: '✍️' },
     { step: 4, id: 'step-photo', label: '4. फोटो एवं लेआउट', shortLabel: 'फोटो-लेआउट', icon: '📷' },
     { step: 5, id: 'step-location', label: '5. स्थान', shortLabel: 'स्थान', icon: '📍' },
@@ -1737,20 +1736,70 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* 1. फ्रेम टेम्पलेट्स (हेडर स्टाइल चुनें) - STEP 1 */}
+      {/* 1. AI टूल्स - STEP 1 */}
+      {card.frameDesign === 'jacket-morning' ? (
+        /* Morning Jacket Step 2: AI विचार व बैकग्राउंड */
+        <div
+          id="step-ai"
+          style={{ scrollMarginTop: '380px' }}
+          className={`bg-gradient-to-r from-neutral-900 to-neutral-950 border border-yellow-500/20 rounded-xl p-3.5 space-y-3 scroll-mt-[380px] ${
+            mobileViewMode === 'steps' && activeStep !== 1 ? 'hidden' : 'block'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[10px] font-mono font-black">1</span>
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              स्टेप 1: AI टूल्स (सुविचार व बैकग्राउंड)
+            </span>
+          </div>
+          <MorningJacketEditor card={card} onChange={onChange} />
+          {renderMobileStepNavigation(1)}
+        </div>
+      ) : (
+        /* Standard Templates Step 2: AI ऑटोमेशन टूल्स */
+        <div
+          id="step-ai"
+          style={{ scrollMarginTop: '380px' }}
+          className={`bg-gradient-to-r from-neutral-900 to-neutral-950 border border-cyan-500/20 rounded-xl p-4 space-y-3.5 scroll-mt-[380px] ${
+            mobileViewMode === 'steps' && activeStep !== 1 ? 'hidden' : 'block'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[10px] font-mono font-black">1</span>
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              स्टेप 1: AI टूल्स
+            </span>
+          </div>
+          <InlineAiNewsTools
+            card={card}
+            onChange={onChange}
+            onNextStep={() => handleGoToStep(2)}
+            onPrevStep={() => {}}
+            mobileViewMode={mobileViewMode}
+            onOpenCloudSettings={onOpenCloudSettings}
+            autoFillNews={autoFillNews}
+            currentUser={currentUser}
+          />
+          {renderMobileStepNavigation(1)}
+        </div>
+      )}
+
+      {/* 2. फ्रेम टेम्पलेट्स (हेडर स्टाइल चुनें) - STEP 2 */}
       <div
         id="step-frame"
         style={{ scrollMarginTop: '380px' }}
         className={`bg-neutral-900/90 border border-neutral-800 rounded-xl p-4 space-y-4 scroll-mt-[380px] ${
-          mobileViewMode === 'steps' && activeStep !== 1 ? 'hidden' : 'block'
+          mobileViewMode === 'steps' && activeStep !== 2 ? 'hidden' : 'block'
         }`}
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[10px] font-mono font-black">1</span>
+              <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[10px] font-mono font-black">2</span>
               <Layers className="w-4 h-4 text-purple-400" />
-              स्टेप 1: टेम्पलेट्स
+              स्टेप 2: टेम्पलेट्स
             </span>
             <p className="text-[11px] text-neutral-400 mt-0.5">अपनी पसंद का ग्राफिक टेम्पलेट चुनें</p>
           </div>
@@ -2305,58 +2354,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         })()}
 
         {/* Step 1 Mobile Nav Button */}
-        {renderMobileStepNavigation(1)}
+        {renderMobileStepNavigation(2)}
       </div>
-
-      {/* 2. AI टूल्स - STEP 2 */}
-      {card.frameDesign === 'jacket-morning' ? (
-        /* Morning Jacket Step 2: AI विचार व बैकग्राउंड */
-        <div
-          id="step-ai"
-          style={{ scrollMarginTop: '380px' }}
-          className={`bg-gradient-to-r from-neutral-900 to-neutral-950 border border-yellow-500/20 rounded-xl p-3.5 space-y-3 scroll-mt-[380px] ${
-            mobileViewMode === 'steps' && activeStep !== 2 ? 'hidden' : 'block'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[10px] font-mono font-black">2</span>
-              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-              स्टेप 2: AI टूल्स (सुविचार व बैकग्राउंड)
-            </span>
-          </div>
-          <MorningJacketEditor card={card} onChange={onChange} />
-          {renderMobileStepNavigation(2)}
-        </div>
-      ) : (
-        /* Standard Templates Step 2: AI ऑटोमेशन टूल्स */
-        <div
-          id="step-ai"
-          style={{ scrollMarginTop: '380px' }}
-          className={`bg-gradient-to-r from-neutral-900 to-neutral-950 border border-cyan-500/20 rounded-xl p-4 space-y-3.5 scroll-mt-[380px] ${
-            mobileViewMode === 'steps' && activeStep !== 2 ? 'hidden' : 'block'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
-              <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[10px] font-mono font-black">2</span>
-              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-              स्टेप 2: AI टूल्स
-            </span>
-          </div>
-          <InlineAiNewsTools
-            card={card}
-            onChange={onChange}
-            onNextStep={() => handleGoToStep(3)}
-            onPrevStep={() => handleGoToStep(1)}
-            mobileViewMode={mobileViewMode}
-            onOpenCloudSettings={onOpenCloudSettings}
-            autoFillNews={autoFillNews}
-            currentUser={currentUser}
-          />
-          {renderMobileStepNavigation(2)}
-        </div>
-      )}
 
       {card.frameDesign !== 'jacket-morning' && (
         <>

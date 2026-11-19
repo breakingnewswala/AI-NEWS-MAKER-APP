@@ -14555,8 +14555,9 @@ var quotaExceededInfo = {
   message: "Google Gemini AI \u092E\u0949\u0921\u0932 \u0938\u0947\u0935\u093E \u0938\u0915\u094D\u0930\u093F\u092F \u0914\u0930 \u0924\u0948\u092F\u093E\u0930 \u0939\u0948\u0964"
 };
 var GEMINI_MODELS_POOL = [
-  "gemini-2.0-flash",
-  "gemini-1.5-flash"
+  "gemini-3.1-flash-lite",
+  "gemini-flash-lite-latest",
+  "gemini-3.5-flash-lite"
 ];
 var CP1252_REVERSE_MAP = {
   8364: 128,
@@ -21759,17 +21760,18 @@ app.post("/api/newsroom/script-maker", async (req, res) => {
       const t = (txt || "").trim().toLowerCase().replace(/^[-–—*:•·\s()\[\]{}]+/, "");
       return /^(?:प्रेस\s*[-–—]?\s*(?:नोट|विज्ञप्ति|बयान)|स[-–—]?नोट|कार्यालय|कार्यालयीन|सूचना|दिनांक|तारीख|क्रमांक|प्रेषक|प्रति|विषय[:\s]|press\s*release|press\s*note)/i.test(t);
     };
+    const isDividerLine = (txt) => /^[\s\-_=\*#~•·]{3,}$/.test((txt || "").trim());
     const extractSubject = () => {
       const lines = cleanInput.split(/\r?\n+/).map((l) => l.trim()).filter(Boolean);
-      const contentLines = lines.filter((l) => !isPreambleWord(l));
-      let title = contentLines[0] || lines[0] || "\u0924\u093E\u091C\u093E \u0921\u093F\u091C\u093F\u091F\u0932 \u0938\u092E\u093E\u091A\u093E\u0930";
+      const contentLines = lines.filter((l) => !isPreambleWord(l) && !isDividerLine(l));
+      let title = contentLines[0] || lines.find((l) => !isDividerLine(l)) || "\u0924\u093E\u091C\u093E \u0921\u093F\u091C\u093F\u091F\u0932 \u0938\u092E\u093E\u091A\u093E\u0930";
       if (/^कार्यालय\s+/i.test(title) && contentLines.length > 1) {
         title = contentLines[1];
       }
       title = title.replace(/^[-–—*:•·\s()\[\]{}]+/, "").trim();
       if (title.length > 90) title = title.slice(0, 87) + "...";
       const secondary = contentLines[1] || "";
-      const storyLines = contentLines.length > 1 ? contentLines.slice(1) : lines;
+      const storyLines = contentLines.length > 1 ? contentLines.slice(1) : lines.filter((l) => !isDividerLine(l));
       return { title, secondary, storyLines };
     };
     const parsedSubject = extractSubject();
@@ -21913,10 +21915,10 @@ ${cleanInput}
         inputType
       });
     } else {
-      if (!generatedWebsite || !generatedWebsite.headline || isPreambleWord(generatedWebsite.headline)) {
-        const title = parsedSubject.title;
-        const sec = parsedSubject.secondary;
-        const bodyLines = parsedSubject.storyLines.join("\n\n");
+      if (!generatedWebsite || !generatedWebsite.headline || isPreambleWord(generatedWebsite.headline) || isDividerLine(generatedWebsite.headline)) {
+        const title = isDividerLine(parsedSubject.title) ? "\u0924\u093E\u091C\u093E \u0921\u093F\u091C\u093F\u091F\u0932 \u0938\u092E\u093E\u091A\u093E\u0930" : parsedSubject.title;
+        const sec = isDividerLine(parsedSubject.secondary) ? "" : parsedSubject.secondary;
+        const bodyLines = parsedSubject.storyLines.filter((l) => !isDividerLine(l)).join("\n\n");
         generatedWebsite = {
           headline: title,
           subHeadline: sec ? sec.length > 120 ? sec.slice(0, 120) + "..." : sec : `${title} \u2014 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0921\u093F\u091C\u093F\u091F\u0932 \u0928\u094D\u092F\u0942\u091C\u093C \u092C\u0941\u0932\u0947\u091F\u093F\u0928`,
@@ -28341,8 +28343,9 @@ function resolveUserTierAndRole(req) {
   return { tier: explicitTier || "basic", role: explicitRole || "reporter" };
 }
 var DEFAULT_FALLBACK_MODELS = [
-  "gemini-2.0-flash",
-  "gemini-1.5-flash"
+  "gemini-3.1-flash-lite",
+  "gemini-flash-lite-latest",
+  "gemini-3.5-flash-lite"
 ];
 async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPerModel = 2) {
   let lastError = null;
@@ -28638,7 +28641,7 @@ function loadApiKeysVault(skipCache = false) {
           successCount: 0,
           errorCount: 0,
           provider: "Google Gemini",
-          model: "gemini-2.0-flash",
+          model: "gemini-3.5-flash-lite",
           lastHealthStatus: "healthy"
         }
       ],
@@ -28944,7 +28947,7 @@ async function checkDefaultGeminiHealth(forceRefresh = false) {
     return {
       isConfigured: false,
       healthStatus: "not_configured",
-      model: DEFAULT_FALLBACK_MODELS[0] || "gemini-2.0-flash",
+      model: DEFAULT_FALLBACK_MODELS[0] || "gemini-3.5-flash-lite",
       errorMessage: "\u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F GEMINI_API_KEY \u092A\u0930\u094D\u092F\u093E\u0935\u0930\u0923 \u092E\u0947\u0902 \u0938\u0947\u091F \u0928\u0939\u0940\u0902 \u0939\u0948"
     };
   }
@@ -28954,7 +28957,7 @@ async function checkDefaultGeminiHealth(forceRefresh = false) {
   }
   const cleanKey = process.env.GEMINI_API_KEY.trim();
   const start = Date.now();
-  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.0-flash";
+  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3.5-flash-lite";
   let lastErr = null;
   let testSuccess = false;
   for (const candidateModel of DEFAULT_FALLBACK_MODELS) {
@@ -29025,7 +29028,7 @@ app.get("/api/admin/api-keys", requireAdminMiddleware, async (req, res) => {
     lastHealthStatus: k.lastHealthStatus || (k.status === "active" ? "healthy" : "error"),
     lastError: k.lastError || null,
     provider: k.provider || "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
-    model: k.model || "gemini-2.0-flash"
+    model: k.model || "gemini-3.5-flash-lite"
   }));
   const paidConfigured = Boolean(vault.paidKey?.key && vault.paidKey.key.trim().length > 5);
   const maskedPaidKey = paidConfigured ? maskApiKey(vault.paidKey.key) : null;
@@ -29059,7 +29062,7 @@ app.get("/api/admin/api-keys", requireAdminMiddleware, async (req, res) => {
       lastHealthStatus: vault.paidKey?.lastHealthStatus || (paidConfigured ? "healthy" : "inactive"),
       lastError: vault.paidKey?.lastError || null,
       provider: vault.paidKey?.provider || "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
-      model: vault.paidKey?.model || "gemini-2.0-flash"
+      model: vault.paidKey?.model || "gemini-3.5-flash-lite"
     },
     vipRoutingEnabled: vault.vipRoutingEnabled,
     stats: {
@@ -29103,7 +29106,7 @@ app.post("/api/admin/api-keys/free", requireAdminMiddleware, async (req, res) =>
   let initialHealth = "healthy";
   let initialLatency;
   let initialError;
-  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.0-flash";
+  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3.5-flash-lite";
   const testStart = Date.now();
   let testSuccess = false;
   let lastTestErr = null;
@@ -29212,7 +29215,7 @@ app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, r
       updatedAt: Date.now(),
       status: "active",
       provider: "Google Gemini",
-      model: "gemini-2.0-flash",
+      model: "gemini-3.5-flash-lite",
       lastHealthStatus: "healthy"
     };
   }
@@ -29263,17 +29266,20 @@ app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, r
     let result;
     try {
       result = await testAi.models.generateContent({
-        model: "gemini-2.0-flash",
+        model: "gemini-3.1-flash-lite",
         contents: "Respond in 2 words: Connected successfully"
       });
     } catch (tryErr) {
-      if (String(tryErr?.message || "").includes("404") || String(tryErr?.message || "").includes("not found")) {
+      try {
         result = await testAi.models.generateContent({
-          model: "gemini-1.5-flash",
+          model: "gemini-flash-lite-latest",
           contents: "Respond in 2 words: Connected successfully"
         });
-      } else {
-        throw tryErr;
+      } catch {
+        result = await testAi.models.generateContent({
+          model: "gemini-3.5-flash-lite",
+          contents: "Respond in 2 words: Connected successfully"
+        });
       }
     }
     const latency = Date.now() - start;
@@ -29316,22 +29322,27 @@ async function probeGeminiKeyZeroQuota(apiKey) {
           (_, reject) => setTimeout(() => reject(new Error("Probe token timeout after 5s")), 5e3)
         );
         let probeCall = testAiProbe.models.generateContent({
-          model: "gemini-2.0-flash",
+          model: "gemini-3.1-flash-lite",
           contents: "1",
           config: { maxOutputTokens: 1 }
         });
         try {
           await Promise.race([probeCall, timeoutCall]);
         } catch (firstProbeErr) {
-          if (String(firstProbeErr?.message || "").includes("404") || String(firstProbeErr?.message || "").includes("not found")) {
+          try {
             probeCall = testAiProbe.models.generateContent({
-              model: "gemini-1.5-flash",
+              model: "gemini-flash-lite-latest",
               contents: "1",
               config: { maxOutputTokens: 1 }
             });
             await Promise.race([probeCall, timeoutCall]);
-          } else {
-            throw firstProbeErr;
+          } catch {
+            probeCall = testAiProbe.models.generateContent({
+              model: "gemini-3.5-flash-lite",
+              contents: "1",
+              config: { maxOutputTokens: 1 }
+            });
+            await Promise.race([probeCall, timeoutCall]);
           }
         }
         return { success: true, state: "READY", latencyMs: Date.now() - start, statusCode: 200 };
@@ -29466,7 +29477,7 @@ app.post("/api/admin/api-keys/test-id", requireAdminMiddleware, async (req, res)
       state: probe.state,
       message: `\u2705 API Key \u0938\u0915\u094D\u0930\u093F\u092F \u0935 \u0938\u094D\u0935\u0938\u094D\u0925 \u0939\u0948! (Zero-Quota Probe \u0938\u092B\u0932: ${probe.latencyMs}ms)`,
       provider: "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
-      model: "gemini-1.5-flash / gemini-2.0-flash",
+      model: "gemini-3.1-flash-lite / gemini-flash-lite-latest",
       latencyMs: probe.latencyMs,
       healthStatus: "healthy",
       status: targetRef.status,

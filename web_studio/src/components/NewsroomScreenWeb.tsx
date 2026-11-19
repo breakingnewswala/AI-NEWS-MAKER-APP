@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import { InstallPwaModal } from './InstallPwaModal';
 import { WhatsAppLiveInbox } from './WhatsAppLiveInbox';
+import { VoiceInputButton } from './VoiceInputButton';
 import { NewsDraft } from '../types';
 import { getSavedDrafts, deleteDraft, saveDraft } from '../lib/draftsManager';
 import { ReporterUser } from './LoginModal';
@@ -843,7 +844,16 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                     ? 'प्रेस नोट या सोशल मीडिया पोस्ट हेतु कच्ची खबर दर्ज करें:'
                     : 'प्रेस नोट / रॉ टेक्स्ट / बयान दर्ज करें:'}
                 </span>
-                <span className="text-[11px] text-slate-500">{rawScriptText.length} वर्ण</span>
+                <div className="flex items-center gap-2">
+                  <VoiceInputButton
+                    onTranscript={(spoken) => {
+                      setRawScriptText((prev) => (prev ? `${prev.trim()} ${spoken}` : spoken));
+                    }}
+                    buttonText="माइक से बोलें"
+                    size="sm"
+                  />
+                  <span className="text-[11px] text-slate-500">{rawScriptText.length} वर्ण</span>
+                </div>
               </label>
               <textarea
                 value={rawScriptText}

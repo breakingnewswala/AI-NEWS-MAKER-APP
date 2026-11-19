@@ -234,8 +234,8 @@ export const STUDIO_STEP_THEMES: Record<number, {
 };
 
 export const STUDIO_STEPS = [
-  { step: 1, id: 'step-frame', label: 'टेम्पलेट्स', name: 'टेम्पलेट्स', icon: '🖼️', title: 'टेम्पलेट्स' },
-  { step: 2, id: 'step-ai', label: 'AI टूल्स', name: 'AI टूल्स', icon: '🤖', title: 'AI टूल्स' },
+  { step: 1, id: 'step-ai', label: 'AI टूल्स', name: 'AI टूल्स', icon: '🤖', title: 'AI टूल्स' },
+  { step: 2, id: 'step-frame', label: 'टेम्पलेट्स', name: 'टेम्पलेट्स', icon: '🖼️', title: 'टेम्पलेट्स' },
   { step: 3, id: 'step-headline', label: 'हेडलाइन', name: 'हेडलाइन', icon: '✍️', title: 'हेडलाइन' },
   { step: 4, id: 'step-photo', label: 'फोटो एवं वॉटरमार्क', name: 'फोटो एवं वॉटरमार्क', icon: '📷', title: 'फोटो एवं वॉटरमार्क' },
   { step: 5, id: 'step-location', label: 'स्थान एवं दिनांक', name: 'स्थान एवं दिनांक', icon: '📍', title: 'स्थान एवं दिनांक' },
@@ -244,8 +244,8 @@ export const STUDIO_STEPS = [
 ];
 
 export const MOBILE_STUDIO_STEPS = [
-  { mobileStep: 1, internalStep: 1, id: 'step-frame', label: 'टेम्पलेट्स', key: 'step1' },
-  { mobileStep: 2, internalStep: 2, id: 'step-ai', label: 'AI टूल्स', key: 'step2' },
+  { mobileStep: 1, internalStep: 1, id: 'step-ai', label: 'AI टूल्स', key: 'step1' },
+  { mobileStep: 2, internalStep: 2, id: 'step-frame', label: 'टेम्पलेट्स', key: 'step2' },
   { mobileStep: 3, internalStep: 3, id: 'step-headline', label: 'हेडलाइन', key: 'step3' },
   { mobileStep: 4, internalStep: 4, id: 'step-photo', label: 'फोटो एवं वॉटरमार्क', key: 'step4' },
   { mobileStep: 5, internalStep: 5, id: 'step-location', label: 'स्थान एवं दिनांक', key: 'step5' },
@@ -3376,7 +3376,7 @@ export default function App() {
 
       // Prepare UI state
       navigateToTab('studio');
-      setActiveStep(2);
+      setActiveStep(1);
 
       const startTime = Date.now();
       let approvedData: any = null;
@@ -3584,7 +3584,7 @@ export default function App() {
       });
 
       navigateToTab('studio');
-      setActiveStep(2);
+      setActiveStep(1);
       setTimeout(() => {
         scrollToStepById('step-ai');
       }, 150);
