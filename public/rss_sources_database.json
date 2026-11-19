@@ -36,7 +36,7 @@
     "lastError": "HTTP 503"
   },
   {
-    "id": "src_1795048579923_ot4y",
+    "id": "src_1795049510579_m520",
     "name": "Unreachable Feed",
     "url": "https://non-existent-domain-for-e2e-failure-test-xyz.org/rss.xml",
     "type": "rss",
@@ -1202,5 +1202,29 @@
     "itemsFetchedCount": 0,
     "lastSyncStatus": "error",
     "lastError": "HTTP 500"
+  },
+  {
+    "id": "src_1795049510510_qba8",
+    "name": "E2E Wire 1795049510504",
+    "url": "https://news.google.com/rss?e2e=1795049510504",
+    "type": "rss",
+    "category": "देश",
+    "isActive": true,
+    "createdAt": 1795049510510,
+    "addedAt": 1795049510510,
+    "addedDateFormatted": "19 नवंबर 2026",
+    "itemsFetchedCount": 0
+  },
+  {
+    "id": "src_1795049518466_suqo",
+    "name": "S3 Wire 1795049518460",
+    "url": "https://news.google.com/rss?s3=1795049518460",
+    "type": "rss",
+    "category": "देश",
+    "isActive": true,
+    "createdAt": 1795049518466,
+    "addedAt": 1795049518466,
+    "addedDateFormatted": "19 नवंबर 2026",
+    "itemsFetchedCount": 0
   }
 ]

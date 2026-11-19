@@ -383,7 +383,21 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     };
     checkWidth();
     window.addEventListener('resize', checkWidth);
-    return () => window.removeEventListener('resize', checkWidth);
+
+    const handleAuthSuccess = () => {
+      setAnalysisStatusText((prev) => {
+        if (prev && prev.startsWith('❌') && (prev.includes('401') || prev.includes('प्रमाणीकरण'))) {
+          return null;
+        }
+        return prev;
+      });
+    };
+    window.addEventListener('ai_news_admin_auth_success', handleAuthSuccess);
+
+    return () => {
+      window.removeEventListener('resize', checkWidth);
+      window.removeEventListener('ai_news_admin_auth_success', handleAuthSuccess);
+    };
   }, []);
 
   // Wizard Stage: Open directly at canvas_marking if editing existing frame
@@ -1804,14 +1818,29 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     setAnalysisStatusText('Gemini विज़न AI से सैंपल लेआउट का विश्लेषण हो रहा है...');
     try {
       let token = await ensureAuthToken().catch(() => '');
+      if (!token || isTokenExpired(token)) {
+        token = await ensureAuthToken(true).catch(() => '');
+      }
       if (!token) token = getAuthToken();
-      const res = await requestAiFrameAnalysis(
+      let res = await requestAiFrameAnalysis(
         sampleImage,
         selectedRatio,
         token,
         primaryBackgroundAsset || undefined,
         generatorMode === 'video'
       );
+      if (!res.success && res.error && (res.error.includes('401') || res.error.includes('प्रमाणीकरण'))) {
+        const freshToken = await ensureAuthToken(true).catch(() => '');
+        if (freshToken) {
+          res = await requestAiFrameAnalysis(
+            sampleImage,
+            selectedRatio,
+            freshToken,
+            primaryBackgroundAsset || undefined,
+            generatorMode === 'video'
+          );
+        }
+      }
       if (res.success && res.result) {
         setAnalysisResult(res.result);
         applyAiAnalysisLayout(res.result);
@@ -3739,14 +3768,25 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                     {isAnalyzing ? 'एनालिसिस चल रहा है...' : '🚀 विज़न एनालिसिस प्रारंभ करें'}
                   </button>
                   {analysisStatusText && analysisStatusText.startsWith('❌') && (
-                    <button
-                      type="button"
-                      disabled={isAnalyzing || !sampleImage}
-                      onClick={handleRunAiAnalysis}
-                      className="px-4 py-2 bg-rose-600/30 hover:bg-rose-600/50 text-rose-300 border border-rose-500/40 rounded-xl text-xs font-bold transition cursor-pointer"
-                    >
-                      🔄 पुनः प्रयास करें
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        disabled={isAnalyzing || !sampleImage}
+                        onClick={handleRunAiAnalysis}
+                        className="px-4 py-2 bg-rose-600/30 hover:bg-rose-600/50 text-rose-300 border border-rose-500/40 rounded-xl text-xs font-bold transition cursor-pointer"
+                      >
+                        🔄 पुनः प्रयास करें
+                      </button>
+                      {(analysisStatusText.includes('401') || analysisStatusText.includes('प्रमाणीकरण') || analysisStatusText.includes('Unauthorized')) && (
+                        <button
+                          type="button"
+                          onClick={() => window.dispatchEvent(new CustomEvent('open_admin_login'))}
+                          className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shadow-lg transition cursor-pointer"
+                        >
+                          ⚡ एडमिन लॉगिन करें
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
 

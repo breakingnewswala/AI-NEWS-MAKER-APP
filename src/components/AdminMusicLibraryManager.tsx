@@ -101,6 +101,14 @@ export const AdminMusicLibraryManager: React.FC<AdminMusicLibraryManagerProps> =
 
   useEffect(() => {
     fetchTracks();
+
+    const handleAuthSuccess = () => {
+      fetchTracks();
+    };
+    window.addEventListener('ai_news_admin_auth_success', handleAuthSuccess);
+    return () => {
+      window.removeEventListener('ai_news_admin_auth_success', handleAuthSuccess);
+    };
   }, [currentUser?.email]);
 
   const handlePlayToggle = (track: MusicTrackItem) => {
@@ -314,9 +322,29 @@ export const AdminMusicLibraryManager: React.FC<AdminMusicLibraryManagerProps> =
       )}
 
       {error && (
-        <div className="p-3 bg-red-950/80 border border-red-500 text-red-300 text-xs rounded-xl flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-          <span>{error}</span>
+        <div className="p-3 bg-red-950/80 border border-red-500 text-red-300 text-xs rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            <span className="font-bold">{error}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={fetchTracks}
+              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px] rounded-lg transition cursor-pointer"
+            >
+              🔄 पुनः प्रयास करें
+            </button>
+            {(error.includes('401') || error.includes('प्रमाणीकरण') || error.includes('Unauthorized')) && (
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('open_admin_login'))}
+                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] rounded-lg transition shrink-0 cursor-pointer shadow"
+              >
+                ⚡ एडमिन पुनः लॉगिन करें
+              </button>
+            )}
+          </div>
         </div>
       )}
 

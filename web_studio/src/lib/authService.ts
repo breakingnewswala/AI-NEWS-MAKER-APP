@@ -69,6 +69,49 @@ export function getStoredGoogleIdToken(): string {
   }
 }
 
+/**
+ * Retrieves raw candidate token from storage regardless of expiration.
+ * Used for cryptographic token renewal via /api/auth/refresh-session.
+ */
+export function getStoredRawToken(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const directCandidates = [
+      localStorage.getItem('reporter_auth_token'),
+      localStorage.getItem('auth_token'),
+      localStorage.getItem('token'),
+      sessionStorage.getItem('reporter_auth_token'),
+      sessionStorage.getItem('auth_token'),
+      sessionStorage.getItem('token'),
+    ];
+    for (const cand of directCandidates) {
+      if (cand && typeof cand === 'string') {
+        const trimmed = cand.trim();
+        if (trimmed.split('.').length === 3) {
+          return trimmed;
+        }
+      }
+    }
+    const sessionKeys = ['reporter_auth_session', 'ai_news_user', 'user', 'currentUser'];
+    for (const key of sessionKeys) {
+      const sessionStr = localStorage.getItem(key) || sessionStorage.getItem(key);
+      if (sessionStr) {
+        const u = JSON.parse(sessionStr);
+        if (u) {
+          const t = u.token || u.authToken;
+          if (t && typeof t === 'string') {
+            const trimmed = t.trim();
+            if (trimmed.split('.').length === 3) {
+              return trimmed;
+            }
+          }
+        }
+      }
+    }
+  } catch {}
+  return '';
+}
+
 export function getAuthToken(): string {
   if (typeof window === 'undefined') return '';
 
@@ -320,7 +363,10 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
       }
 
       // 2. Secondary Preference: Stored session token (near-expiry or expired check with /api/auth/refresh-session)
-      const existingToken = getAuthToken();
+      let existingToken = getAuthToken();
+      if (!existingToken) {
+        existingToken = getStoredRawToken();
+      }
       if (existingToken) {
         const payload = parseJwtPayload(existingToken);
         const exp = payload?.exp ? payload.exp * 1000 : 0;
@@ -348,6 +394,13 @@ export async function ensureAuthToken(forceRefresh = false): Promise<string> {
               const refData = await refRes.json();
               if (refData.success && refData.token && !isTokenExpired(refData.token)) {
                 setAuthToken(refData.token);
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(
+                    new CustomEvent('ai_news_admin_auth_success', {
+                      detail: { token: refData.token, user: refData.user },
+                    })
+                  );
+                }
                 return refData.token;
               }
             }

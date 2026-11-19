@@ -490,6 +490,76 @@ function verifyAuthTokenAllowingExpired(_tokenStr: string, _gracePeriodSec = 0):
   return null;
 }
 
+/**
+ * Authoritative cryptographic session renewal verification:
+ * Only used by /api/auth/refresh-session when caller explicitly submits a candidate token in body.
+ * Validates HMAC signature against AUTH_SECRET and LEGACY_AUTH_SECRETS within 30-day renewal grace period.
+ */
+function verifyAuthTokenWithRenewalGrace(
+  tokenStr: string,
+  gracePeriodSec: number = 30 * 24 * 60 * 60
+): (AuthTokenPayload & { isLegacySignature?: boolean; isExpired?: boolean }) | null {
+  if (!tokenStr || typeof tokenStr !== "string") return null;
+  const parts = tokenStr.trim().split(".");
+  if (parts.length !== 3) return null;
+
+  const [encodedHeader, encodedPayload, signature] = parts;
+  if (!encodedHeader || !encodedPayload || !signature) return null;
+
+  let isValid = false;
+  let isLegacySignature = false;
+
+  const expectedSig = crypto
+    .createHmac("sha256", AUTH_SECRET)
+    .update(`${encodedHeader}.${encodedPayload}`)
+    .digest("base64url");
+
+  if (signature.length === expectedSig.length) {
+    try {
+      if (crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) {
+        isValid = true;
+      }
+    } catch {}
+  }
+
+  if (!isValid) {
+    for (const legacySecret of LEGACY_AUTH_SECRETS) {
+      if (!legacySecret) continue;
+      const legacyExpectedSig = crypto
+        .createHmac("sha256", legacySecret)
+        .update(`${encodedHeader}.${encodedPayload}`)
+        .digest("base64url");
+      if (signature.length === legacyExpectedSig.length) {
+        try {
+          if (crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(legacyExpectedSig))) {
+            isValid = true;
+            isLegacySignature = true;
+            break;
+          }
+        } catch {}
+      }
+    }
+  }
+
+  if (!isValid) return null;
+
+  try {
+    const payloadJson = Buffer.from(encodedPayload, "base64url").toString("utf8");
+    const payload = JSON.parse(payloadJson) as AuthTokenPayload & { isLegacySignature?: boolean; isExpired?: boolean };
+    const nowSec = Math.floor(Date.now() / 1000);
+    const isExpired = Boolean(payload.exp && payload.exp < nowSec);
+    // If expired beyond the renewal grace window (30 days past exp), reject permanently
+    if (payload.exp && (nowSec - payload.exp) > gracePeriodSec) {
+      return null;
+    }
+    payload.isLegacySignature = isLegacySignature;
+    payload.isExpired = isExpired;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 // ============================================================================
 // FIREBASE ADMIN SDK & CRYPTOGRAPHIC TOKEN VERIFICATION
 // ============================================================================
@@ -1625,6 +1695,21 @@ app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) =>
         verifiedEmail = activePayload.email.toLowerCase().trim();
         verifiedUserId = activePayload.userId || verifiedEmail;
         authType = "session";
+      }
+    }
+
+    // 1b. If caller provides explicit renewal candidate in request body with valid HMAC signature within 30-day grace:
+    const candidateBodyToken = (req.body && (req.body.token || req.body.authToken)) || "";
+    const hasExplicitRenewalBody = Boolean(candidateBodyToken || idToken || firebaseToken || googleIdToken || (req.body && req.body.email));
+    if (!verifiedEmail && hasExplicitRenewalBody) {
+      const candidateTok = candidateBodyToken || rawToken;
+      if (candidateTok && typeof candidateTok === "string" && candidateTok.split(".").length === 3) {
+        const renewalPayload = verifyAuthTokenWithRenewalGrace(candidateTok, 30 * 24 * 60 * 60);
+        if (renewalPayload && renewalPayload.email) {
+          verifiedEmail = renewalPayload.email.toLowerCase().trim();
+          verifiedUserId = renewalPayload.userId || verifiedEmail;
+          authType = "session";
+        }
       }
     }
 

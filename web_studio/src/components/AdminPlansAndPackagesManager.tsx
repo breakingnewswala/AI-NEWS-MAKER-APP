@@ -1288,9 +1288,19 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     const handlePlansUpdated = () => setPlans(getPlansCatalog());
     const handlePromoUpdated = () => setPromoCodes(getPromoCodes());
     const handleUsersUpdated = () => setPlanUsers(getPlanUsers());
+    const handleAuthSuccess = () => {
+      setRssMsg((prev) => {
+        if (prev?.type === 'error' && (prev.text.includes('401') || prev.text.includes('प्रमाणीकरण'))) {
+          return null;
+        }
+        return prev;
+      });
+      handleSyncUsers();
+    };
     window.addEventListener('ai_news_plans_updated', handlePlansUpdated);
     window.addEventListener('ai_news_promo_codes_changed', handlePromoUpdated);
     window.addEventListener('ai_news_plan_users_changed', handleUsersUpdated);
+    window.addEventListener('ai_news_admin_auth_success', handleAuthSuccess);
 
     // Initial background sync
     handleSyncUsers();
@@ -1312,6 +1322,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       window.removeEventListener('ai_news_plans_updated', handlePlansUpdated);
       window.removeEventListener('ai_news_promo_codes_changed', handlePromoUpdated);
       window.removeEventListener('ai_news_plan_users_changed', handleUsersUpdated);
+      window.removeEventListener('ai_news_admin_auth_success', handleAuthSuccess);
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
@@ -5501,13 +5512,24 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   )}
                   <span>{rssMsg.text}</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setRssMsg(null)}
-                  className="text-xs text-slate-400 hover:text-white cursor-pointer"
-                >
-                  ✕
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  {rssMsg.type === 'error' && (rssMsg.text.includes('401') || rssMsg.text.includes('प्रमाणीकरण') || rssMsg.text.includes('Unauthorized')) && (
+                    <button
+                      type="button"
+                      onClick={() => window.dispatchEvent(new CustomEvent('open_admin_login'))}
+                      className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] rounded-lg transition cursor-pointer shadow whitespace-nowrap"
+                    >
+                      ⚡ एडमिन पुनः लॉगिन करें
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setRssMsg(null)}
+                    className="text-xs text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
             )}
 

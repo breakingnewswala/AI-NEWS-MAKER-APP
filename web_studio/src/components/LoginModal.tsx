@@ -556,7 +556,13 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           }
           if (data.token) {
             localStorage.setItem('reporter_auth_token', data.token);
+            localStorage.setItem('auth_token', data.token);
             setAuthToken(data.token);
+            if (authUser.role === 'admin' || authUser.email === 'breakingnewswala.com@gmail.com' || authUser.email === 'admin.ainewsmaker@gmail.com') {
+              try {
+                window.dispatchEvent(new CustomEvent('ai_news_admin_auth_success', { detail: { token: data.token, user: authUser } }));
+              } catch {}
+            }
           }
           localStorage.removeItem('user_explicitly_logged_out');
           localStorage.setItem('reporter_auth_session', JSON.stringify(authUser));

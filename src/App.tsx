@@ -27,7 +27,7 @@ import { BrandedNewsLoadingModal, BrandedLoaderMode } from './components/Branded
 import { NewsDetailModal } from './components/NewsDetailModal';
 import { AppNotificationModal } from './components/AppNotificationModal';
 import { showAppSuccess } from './lib/notificationService';
-import { getApiUrl, getApiBaseUrl, ensureAuthToken, getAuthHeaders, getAuthToken, isTokenExpired, clearAuthTokens } from './lib/apiConfig';
+import { getApiUrl, getApiBaseUrl, ensureAuthToken, setAuthToken, getAuthHeaders, getAuthToken, isTokenExpired, clearAuthTokens } from './lib/apiConfig';
 import { UpdateNotificationBanner } from './components/UpdateNotificationBanner';
 import { StepNavigator, scrollToStepById, DEFAULT_STEPS } from './components/StepNavigator';
 import { renderCardToCanvas, generateCardCanvas, downloadCanvas } from './lib/CanvasExporter';
@@ -1353,7 +1353,9 @@ export default function App() {
                   setCurrentUser(verifiedUser);
                   localStorage.setItem('reporter_auth_session', JSON.stringify(verifiedUser));
                   if (data.token) {
+                    localStorage.setItem('reporter_auth_token', data.token);
                     localStorage.setItem('auth_token', data.token);
+                    setAuthToken(data.token);
                   }
                   if (data.isProfileComplete) {
                     setIsOnboardingCompleted(true);
@@ -1394,7 +1396,13 @@ export default function App() {
 
   useEffect(() => {
     fetchLiveNews();
-    ensureAuthToken().catch(() => {});
+    ensureAuthToken().then((t) => {
+      if (t && currentUser && isUserAdmin(currentUser)) {
+        try {
+          window.dispatchEvent(new CustomEvent('ai_news_admin_auth_success', { detail: { token: t, user: currentUser } }));
+        } catch {}
+      }
+    }).catch(() => {});
     const cleanEmail = (currentUser?.email || '').toLowerCase().trim();
     if (cleanEmail) {
       hydrateCloudUserProfile(cleanEmail);

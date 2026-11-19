@@ -118,6 +118,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // API Health Monitoring & Scheduler State (Part 3, 4, 5)
   const [healthItems, setHealthItems] = useState<ApiHealthCheckItem[]>(DEFAULT_INITIAL_HEALTH);
@@ -194,9 +195,13 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         if (json.success) {
           setData(json);
           setVipRoutingToggle(json.vipRoutingEnabled);
+          setAuthError(null);
         }
       } else {
         const errJson = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          setAuthError(errJson.error || 'प्रमाणीकरण आवश्यक है (401 Unauthorized): व्यवस्थापक एंडपॉइंट्स के लिए मान्य ऑथेंटिकेशन टोकन आवश्यक है।');
+        }
         if (!isSilent) {
           showToast(`⚠️ API कीज़ लोड नहीं हो सकीं (${res.status}): ${errJson.error || 'सर्वर त्रुटि'}`);
         }
@@ -422,12 +427,22 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
   useEffect(() => {
     fetchKeysData();
     fetchHealthStatus();
+
+    const handleAuthSuccess = () => {
+      fetchKeysData(true);
+      fetchHealthStatus();
+    };
+    window.addEventListener('ai_news_admin_auth_success', handleAuthSuccess);
+
     // Auto refresh every 30s to update cooldown timers & health snapshot
     const timer = setInterval(() => {
       fetchKeysData(true);
       fetchHealthStatus();
     }, 30000);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('ai_news_admin_auth_success', handleAuthSuccess);
+    };
   }, []);
 
   const handleAddFreeKey = async (e: React.FormEvent) => {
@@ -738,6 +753,23 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
 
   return (
     <div className="space-y-6">
+      {authError && (
+        <div className="p-4 bg-rose-950/80 border border-rose-500/80 text-rose-200 text-xs rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xl">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+            <span className="font-bold leading-relaxed">{authError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('open_admin_login'))}
+            className="px-3.5 py-2 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black text-xs rounded-xl shadow transition cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span>⚡ एडमिन पुनः लॉगिन करें</span>
+          </button>
+        </div>
+      )}
+
       {/* Overview Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-md">
@@ -1468,8 +1500,17 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
       )}
 
       {toastMsg && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 border border-amber-500/50 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-150">
-          {toastMsg}
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900/95 border border-amber-500/50 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-150 flex items-center gap-3 max-w-md">
+          <span className="truncate">{toastMsg}</span>
+          {(toastMsg.includes('401') || toastMsg.includes('प्रमाणीकरण')) && (
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent('open_admin_login'))}
+              className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] rounded-lg transition shrink-0 cursor-pointer shadow whitespace-nowrap"
+            >
+              ⚡ एडमिन पुनः लॉगिन करें
+            </button>
+          )}
         </div>
       )}
     </div>

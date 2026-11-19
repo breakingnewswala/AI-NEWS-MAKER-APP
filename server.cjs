@@ -13440,6 +13440,55 @@ function verifyAuthToken(tokenStr) {
     return null;
   }
 }
+function verifyAuthTokenWithRenewalGrace(tokenStr, gracePeriodSec = 30 * 24 * 60 * 60) {
+  if (!tokenStr || typeof tokenStr !== "string") return null;
+  const parts = tokenStr.trim().split(".");
+  if (parts.length !== 3) return null;
+  const [encodedHeader, encodedPayload, signature] = parts;
+  if (!encodedHeader || !encodedPayload || !signature) return null;
+  let isValid = false;
+  let isLegacySignature = false;
+  const expectedSig = import_crypto2.default.createHmac("sha256", AUTH_SECRET).update(`${encodedHeader}.${encodedPayload}`).digest("base64url");
+  if (signature.length === expectedSig.length) {
+    try {
+      if (import_crypto2.default.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) {
+        isValid = true;
+      }
+    } catch {
+    }
+  }
+  if (!isValid) {
+    for (const legacySecret of LEGACY_AUTH_SECRETS) {
+      if (!legacySecret) continue;
+      const legacyExpectedSig = import_crypto2.default.createHmac("sha256", legacySecret).update(`${encodedHeader}.${encodedPayload}`).digest("base64url");
+      if (signature.length === legacyExpectedSig.length) {
+        try {
+          if (import_crypto2.default.timingSafeEqual(Buffer.from(signature), Buffer.from(legacyExpectedSig))) {
+            isValid = true;
+            isLegacySignature = true;
+            break;
+          }
+        } catch {
+        }
+      }
+    }
+  }
+  if (!isValid) return null;
+  try {
+    const payloadJson = Buffer.from(encodedPayload, "base64url").toString("utf8");
+    const payload = JSON.parse(payloadJson);
+    const nowSec = Math.floor(Date.now() / 1e3);
+    const isExpired = Boolean(payload.exp && payload.exp < nowSec);
+    if (payload.exp && nowSec - payload.exp > gracePeriodSec) {
+      return null;
+    }
+    payload.isLegacySignature = isLegacySignature;
+    payload.isExpired = isExpired;
+    return payload;
+  } catch {
+    return null;
+  }
+}
 var firebaseAdminAuth = null;
 try {
   let projectId = process.env.FIREBASE_PROJECT_ID;
@@ -14301,6 +14350,19 @@ app.post(["/api/auth/refresh-session", "/api/auth/session"], async (req, res) =>
         verifiedEmail = activePayload.email.toLowerCase().trim();
         verifiedUserId = activePayload.userId || verifiedEmail;
         authType = "session";
+      }
+    }
+    const candidateBodyToken = req.body && (req.body.token || req.body.authToken) || "";
+    const hasExplicitRenewalBody = Boolean(candidateBodyToken || idToken || firebaseToken || googleIdToken || req.body && req.body.email);
+    if (!verifiedEmail && hasExplicitRenewalBody) {
+      const candidateTok = candidateBodyToken || rawToken;
+      if (candidateTok && typeof candidateTok === "string" && candidateTok.split(".").length === 3) {
+        const renewalPayload = verifyAuthTokenWithRenewalGrace(candidateTok, 30 * 24 * 60 * 60);
+        if (renewalPayload && renewalPayload.email) {
+          verifiedEmail = renewalPayload.email.toLowerCase().trim();
+          verifiedUserId = renewalPayload.userId || verifiedEmail;
+          authType = "session";
+        }
       }
     }
     const candidateIdentity = identityToken || accessToken || rawToken;
