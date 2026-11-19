@@ -492,6 +492,7 @@ async function main() {
       assert(Array.isArray(res.body) || Array.isArray(res.body?.sources), 'Expected array of RSS sources');
     });
 
+    let addedE2eSourceId = null;
     await runTest('C-T1-2', 'RSS', 'Tier 1', 'POST /api/admin/rss-sources adds a new feed source and updates feed catalog', async () => {
       const res = await request('/api/admin/rss-sources', {
         method: 'POST',
@@ -505,10 +506,12 @@ async function main() {
       });
       assert.strictEqual(res.status, 200, `Expected 200 OK, got ${res.status}`);
       assert(res.body?.id || res.body?.source?.id || res.body?.success, 'Expected added feed record');
+      addedE2eSourceId = res.body?.source?.id || res.body?.id;
     });
 
     await runTest('C-T1-3', 'RSS', 'Tier 1', 'DELETE /api/admin/rss-sources/:id removes a feed source', async () => {
-      const res = await request('/api/admin/rss-sources/non_existent_e2e_id', {
+      const targetId = addedE2eSourceId || 'non_existent_e2e_id';
+      const res = await request('/api/admin/rss-sources/' + encodeURIComponent(targetId), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${getSuperAdminToken()}` },
       });
@@ -1159,6 +1162,14 @@ async function main() {
         },
       });
       assert.strictEqual(addFeedRes.status, 200);
+
+      // Clean up created S3 RSS source immediately
+      if (addFeedRes.body?.source?.id) {
+        await request(`/api/admin/rss-sources/${addFeedRes.body.source.id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
 
       // 2. Convert public web link
       const convertRes = await request('/api/convert-web-to-rss', {

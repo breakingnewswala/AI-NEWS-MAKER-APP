@@ -2060,7 +2060,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
   }
 
   // 4.5 DYNAMIC DATE STAMP (Part 10 & 11: Position, Rotation, Center-Pivot parity & Visibility Toggle)
-  if (df.headerConfig?.showDate !== false && card.showDate !== false) {
+  if ((df.headerConfig?.showDate || card.showDate !== false) && card.showDate !== false) {
     const dateRect = df.headerConfig?.dateRect || { x: 5, y: 18.5, width: 34, height: 3.5 };
     const dx = (dateRect.x / 100) * width;
     const dy = (dateRect.y / 100) * height;
@@ -2068,11 +2068,20 @@ async function drawAuthoritativeDynamicFrameCanvas(
     const dh = (dateRect.height / 100) * height;
     const rotDeg = card.dateRotation ?? df.headerConfig?.dateRotation ?? 270;
     const dateOpacity = card.dateOpacity ?? df.headerConfig?.dateOpacity ?? 0.90;
+    const dateBg = df.headerConfig?.dateBgColor || (df.headerConfig?.dateStampStyle && df.headerConfig.dateStampStyle !== 'only_text' ? 'rgba(0,0,0,0.75)' : undefined);
 
     ctx.save();
     ctx.globalAlpha = Math.max(0.15, Math.min(1.0, dateOpacity));
     ctx.translate(dx + dw / 2, dy + dh / 2);
     ctx.rotate((rotDeg * Math.PI) / 180);
+
+    // Draw Date Background Badge or Box if configured
+    if (dateBg) {
+      ctx.fillStyle = dateBg;
+      const bw = dw * 0.95;
+      const bh = dh * 0.95;
+      ctx.fillRect(-bw / 2, -bh / 2, bw, bh);
+    }
 
     const dateFontSize = Math.round((df.headerConfig?.dateFontSize || 14) * (width / 1080) * 1.4);
     const dateFontName = card.dateFont || card.locationFont || 'Baloo 2';

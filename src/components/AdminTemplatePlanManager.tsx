@@ -754,6 +754,57 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                     </div>
                   )}
 
+                  {/* Authentic Dynamic Frame Overlay on Thumbnail */}
+                  {item.rawDynamicFrame && (
+                    <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
+                      {/* Location Badge */}
+                      {item.rawDynamicFrame.headerConfig?.showLocation && (
+                        <div
+                          className="absolute text-[7px] font-bold text-white bg-red-600/90 px-1 py-0.2 rounded flex items-center gap-0.5 shadow-sm"
+                          style={{
+                            left: `${item.rawDynamicFrame.headerConfig.locationRect?.x ?? 5}%`,
+                            top: `${item.rawDynamicFrame.headerConfig.locationRect?.y ?? 13.5}%`,
+                          }}
+                        >
+                          <span>📍 भोपाल</span>
+                        </div>
+                      )}
+
+                      {/* Headline Preview */}
+                      <div
+                        className="absolute text-center px-1"
+                        style={{
+                          bottom: `${(item.rawDynamicFrame.footerConfig?.footerHeightRatio || 0.08) * 100 + 4}%`,
+                          left: '3%',
+                          right: '3%',
+                        }}
+                      >
+                        <div
+                          className="font-bold text-[8px] leading-tight drop-shadow px-1 py-0.5 rounded truncate"
+                          style={{
+                            color: item.rawDynamicFrame.textSlots?.[0]?.textColor || '#FFFFFF',
+                            backgroundColor: item.rawDynamicFrame.textSlots?.[0]?.backgroundColor || 'transparent',
+                          }}
+                        >
+                          मुख्य समाचार हेडलाइन यहाँ प्रदर्शित होगी
+                        </div>
+                      </div>
+
+                      {/* Permanent Footer */}
+                      <div
+                        className="absolute bottom-0 inset-x-0 border-t flex items-center justify-between px-2 text-[6px] font-bold"
+                        style={{
+                          height: `${(item.rawDynamicFrame.footerConfig?.footerHeightRatio || 0.08) * 100}%`,
+                          backgroundColor: item.rawDynamicFrame.footerConfig?.footerBgColor || '#FFFFFF',
+                          color: item.rawDynamicFrame.footerConfig?.footerTextColor || '#000000',
+                        }}
+                      >
+                        <span>@breakingnewswala</span>
+                        <span>ainewsmaker.online</span>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Badges on preview */}
                   <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded bg-slate-950/85 backdrop-blur-xs text-[9px] font-bold text-amber-300 border border-amber-500/30 shadow-xs">
                     📂 {CATEGORY_HINDI_MAP[item.category] || item.category}
@@ -827,7 +878,9 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                 <button
                   type="button"
                   onClick={() => {
-                    const dfToEdit = item.rawDynamicFrame || {
+                    const localFrames = getLocalDynamicFrames();
+                    const realDf = item.rawDynamicFrame || localFrames.find((f) => f.id === item.id);
+                    const dfToEdit = realDf || {
                       id: item.id,
                       name: item.name,
                       aspectRatio: item.aspectRatio,
@@ -849,6 +902,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                       layers: [],
                     };
                     if (onEditFrame) onEditFrame(dfToEdit);
+                    window.dispatchEvent(new CustomEvent('ai_news_open_dynamic_frame_editor', { detail: { frame: dfToEdit } }));
                   }}
                   className="flex-1 py-1.5 px-2.5 bg-purple-600/30 hover:bg-purple-600 text-purple-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 border border-purple-500/40 cursor-pointer"
                   title="एडिट करें"
@@ -1075,6 +1129,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                       if (onEditFrame) {
                         onEditFrame(target);
                       }
+                      window.dispatchEvent(new CustomEvent('ai_news_open_dynamic_frame_editor', { detail: { frame: target } }));
                     }}
                     className="flex-1 py-2.5 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition"
                   >

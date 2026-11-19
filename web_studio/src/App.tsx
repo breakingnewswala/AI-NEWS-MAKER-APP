@@ -3109,7 +3109,7 @@ export default function App() {
         );
       }
 
-      showToast(`✅ ${fmt === 'jpeg' ? 'JPG' : 'PNG'} 1080x1350 न्यूज़ कार्ड सफलतापूर्वक डाउनलोड हो गया!`);
+      // Center-aligned celebration modal triggers cleanly without redundant top toast
       setShowCelebrationModal(true);
     } catch (err: any) {
       console.error('Download error:', err);
@@ -3931,9 +3931,11 @@ export default function App() {
     return (
       <div className="min-h-screen bg-[#070D1E] text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
         {toastMessage && (
-          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-amber-400 text-slate-950 px-4 py-2 rounded-full font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-2 border border-amber-300 animate-in fade-in slide-in-from-top-4">
-            <Sparkles className="w-4 h-4 text-slate-950" />
-            <span>{toastMessage}</span>
+          <div className="fixed inset-0 z-[100] pointer-events-none flex items-center justify-center top-1/2 -translate-y-1/2 p-4">
+            <div className="pointer-events-auto bg-amber-400 text-slate-950 font-black text-xs sm:text-sm px-6 py-4 rounded-2xl shadow-2xl border-2 border-amber-300 ring-4 ring-amber-400/30 flex items-center gap-2.5 animate-in zoom-in-95 max-w-md text-center justify-center">
+              <Sparkles className="w-4 h-4 text-slate-950 shrink-0" />
+              <span>{toastMessage}</span>
+            </div>
           </div>
         )}
         <AuthWelcomeScreen
@@ -4001,11 +4003,18 @@ export default function App() {
             }
             setIsOnboardingCompleted(true);
             localStorage.setItem('is_onboarding_completed', 'true');
-            if (user.email) {
-              localStorage.setItem(`onboarding_completed_${user.email.toLowerCase().trim()}`, 'true');
+            const cleanUserEmail = (user?.email || '').toLowerCase().trim();
+            if (cleanUserEmail) {
+              localStorage.setItem(`onboarding_completed_${cleanUserEmail}`, 'true');
             }
             navigateToTab('home');
-            setShowWelcomeBackModal(true);
+            const seenGuide = cleanUserEmail && localStorage.getItem(`user_has_seen_guide_${cleanUserEmail}`);
+            if (!seenGuide && cleanUserEmail) {
+              localStorage.setItem(`user_has_seen_guide_${cleanUserEmail}`, 'true');
+              setIsGraphicStudioGuideOpen(true);
+            } else {
+              setShowWelcomeBackModal(true);
+            }
           }}
           onCompleteDetails={(profile, updatedUser) => {
             handleSaveProfile(profile);
@@ -4183,17 +4192,13 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#070D1E] text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
-      {/* Toast Notification */}
+      {/* Toast Notification - 100% Viewport Center Aligned Design */}
       {toastMessage && (
-        <div
-          className={`fixed left-1/2 -translate-x-1/2 z-[100] text-neutral-950 px-5 py-3 rounded-2xl sm:rounded-full font-bold text-xs sm:text-sm shadow-2xl flex items-center gap-2.5 border border-amber-300 animate-in fade-in ${
-            toastMessage.includes('रीसेट')
-              ? 'top-1/2 -translate-y-1/2 bg-amber-400 text-slate-950 text-sm sm:text-base px-6 py-4 shadow-amber-950/60 ring-4 ring-amber-400/30 zoom-in-95'
-              : 'top-16 slide-in-from-top-4 bg-amber-400'
-          }`}
-        >
-          <Sparkles className="w-4 h-4 text-neutral-950 shrink-0" />
-          <span>{toastMessage}</span>
+        <div className="fixed inset-0 z-[100] pointer-events-none flex items-center justify-center top-1/2 -translate-y-1/2 p-4">
+          <div className="pointer-events-auto bg-amber-400 text-slate-950 font-black text-xs sm:text-sm px-6 py-4 rounded-2xl shadow-2xl border-2 border-amber-300 ring-4 ring-amber-400/30 flex items-center gap-2.5 animate-in zoom-in-95 max-w-md text-center justify-center">
+            <Sparkles className="w-5 h-5 text-slate-950 shrink-0" />
+            <span>{toastMessage}</span>
+          </div>
         </div>
       )}
 
@@ -5633,49 +5638,53 @@ export default function App() {
       <AppNotificationModal />
 
       {/* 16. Existing User Welcome Back Centered Modal */}
-      {showWelcomeBackModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="relative bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-500/40 rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-6 text-center shadow-2xl shadow-amber-950/30">
-            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center text-3xl shadow-inner">
-              🌟
-            </div>
+      {showWelcomeBackModal && (() => {
+        const savedProf = getSavedChannelProfile();
+        const displayName = currentUser?.name || savedProf?.channelNameHi || 'साथी';
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+            <div className="relative bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-500/40 rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-6 text-center shadow-2xl shadow-amber-950/30">
+              <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400 mx-auto flex items-center justify-center text-3xl shadow-inner">
+                🌟
+              </div>
 
-            <div className="space-y-3">
-              <h2 className="text-xl sm:text-2xl font-black text-white">
-                वेलकम बैक, <span className="text-amber-400">{currentUser?.name || userChannelProfile?.channelNameHi || 'साथी'}</span>!
-              </h2>
-              {userChannelProfile?.channelNameHi && (
-                <div className="inline-block px-3 py-1 bg-amber-950/60 border border-amber-500/40 rounded-full text-xs font-bold text-amber-300">
-                  📺 {userChannelProfile.channelNameHi}
+              <div className="space-y-3 text-center">
+                <h2 className="text-xl sm:text-2xl font-black text-white">
+                  वेलकम बैक, <span className="text-amber-400">{displayName}</span>!
+                </h2>
+                {savedProf?.channelNameHi && (
+                  <div className="inline-block px-3 py-1 bg-amber-950/60 border border-amber-500/40 rounded-full text-xs font-bold text-amber-300">
+                    📺 {savedProf.channelNameHi}
+                  </div>
+                )}
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-medium text-center">
+                  यहाँ आप लेटेस्ट ख़बरों व वीडियोज़ को अपने सोशल मीडिया प्लेटफ़ॉर्म या अपने चैनल पर आसानी से शेयर कर सकते हैं।
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-center space-y-2">
+                <div className="flex items-center justify-center gap-2.5 text-xs text-amber-200 font-semibold text-center">
+                  <span className="text-sm">⚡</span>
+                  <span>एआई न्यूज़ मेकर: ख़बर देखने से ख़बर बनाने तक सिर्फ़ दो मिनट</span>
                 </div>
-              )}
-              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
-                यहाँ आप लेटेस्ट ख़बरों व वीडियोज़ को अपने सोशल मीडिया प्लेटफ़ॉर्म या अपने चैनल पर आसानी से शेयर कर सकते हैं।
-              </p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-left space-y-2">
-              <div className="flex items-start gap-2.5 text-xs text-amber-200 font-semibold">
-                <span className="text-sm">⚡</span>
-                <span>एआई न्यूज़ मेकर: ख़बर देखने से ख़बर बनाने तक सिर्फ़ दो मिनट</span>
+                <div className="flex items-center justify-center gap-2.5 text-xs text-blue-200 font-semibold text-center">
+                  <span className="text-sm">🎯</span>
+                  <span>एआई के साथ हर ख़बर को दीजिए नया अंदाज़, आपकी ख़बर, आपकी पहचान</span>
+                </div>
               </div>
-              <div className="flex items-start gap-2.5 text-xs text-blue-200 font-semibold">
-                <span className="text-sm">🎯</span>
-                <span>एआई के साथ हर ख़बर को दीजिए नया अंदाज़, आपकी ख़बर, आपकी पहचान</span>
-              </div>
-            </div>
 
-            <button
-              type="button"
-              onClick={() => setShowWelcomeBackModal(false)}
-              className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-sm rounded-xl shadow-lg shadow-amber-500/20 transition cursor-pointer flex items-center justify-center gap-2"
-            >
-              <span>शुरुआत करें</span>
-              <span>→</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setShowWelcomeBackModal(false)}
+                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-sm rounded-xl shadow-lg shadow-amber-500/20 transition cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>शुरुआत करें</span>
+                <span>→</span>
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 17. Celebration Confetti & Marketing Modal on Download */}
       {showCelebrationModal && (
@@ -5692,7 +5701,7 @@ export default function App() {
               🎉
             </div>
 
-            <div className="relative space-y-2">
+            <div className="relative space-y-2 text-center">
               <h2 className="text-xl sm:text-2xl font-black text-white">
                 बधाई हो! आपकी न्यूज़ ग्राफ़िक सफलतापूर्वक तैयार है!
               </h2>
@@ -5701,16 +5710,16 @@ export default function App() {
               </p>
             </div>
 
-            <div className="relative p-4 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-left space-y-2.5">
-              <div className="text-xs text-slate-300 leading-relaxed">
+            <div className="relative p-4 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-center space-y-2.5">
+              <div className="text-xs text-slate-300 leading-relaxed text-center">
                 📱 <strong>सोशल मीडिया पर शेयर करें:</strong> अपने दर्शकों तक सबसे पहले निष्पक्ष व प्रामाणिक समाचार पहुँचाएँ।
               </div>
-              <div className="text-xs text-amber-300 font-medium">
+              <div className="text-xs text-amber-300 font-medium text-center">
                 🚀 <em>"एआई न्यूज़ मेकर: ख़बर देखने से ख़बर बनाने तक सिर्फ दो मिनट — आपकी ख़बर, आपकी पहचान!"</em>
               </div>
             </div>
 
-            <div className="relative flex flex-col sm:flex-row gap-3">
+            <div className="relative flex flex-col sm:flex-row gap-3 justify-center items-center">
               {card.caption && (
                 <button
                   type="button"

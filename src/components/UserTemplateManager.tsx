@@ -11,6 +11,7 @@ import {
   Palette,
   RotateCcw,
   AlertTriangle,
+  AlertCircle,
   Upload,
   Layout,
   ExternalLink,
@@ -117,11 +118,13 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
   // Master Admin Verification for Frame Creation and Publishing
   const isMasterAdmin = isUserMasterAdmin(currentUser) || isEffectiveSuperAdmin(currentUser);
 
-  // New Frame Creation State
+  // New Frame Creation State - Dual Mode: Combo Header+Footer vs 4:5 Single Frame
   const [isAddingFrame, setIsAddingFrame] = useState(false);
-  const [customUploadType, setCustomUploadType] = useState<'frame' | 'header' | 'footer'>('frame');
+  const [customUploadType, setCustomUploadType] = useState<'combo_hf' | 'single_frame'>('combo_hf');
   const [newFrameName, setNewFrameName] = useState('');
   const [newFrameAsset, setNewFrameAsset] = useState('');
+  const [newHeaderAsset, setNewHeaderAsset] = useState('');
+  const [newFooterAsset, setNewFooterAsset] = useState('');
   const [frameError, setFrameError] = useState('');
 
   // New Template Creation State
@@ -176,6 +179,19 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
     };
   }, [currentUser?.email]);
 
+  useEffect(() => {
+    const handleOpenFrameEditor = (e: any) => {
+      const frame = e.detail?.frame;
+      if (frame) {
+        setSelectedEditFrame(frame);
+        setSelectedGeneratorMode(frame.frameMode === 'video' ? 'video' : 'photo');
+        setIsDynamicFrameModalOpen(true);
+      }
+    };
+    window.addEventListener('ai_news_open_dynamic_frame_editor', handleOpenFrameEditor);
+    return () => window.removeEventListener('ai_news_open_dynamic_frame_editor', handleOpenFrameEditor);
+  }, []);
+
   const handleDeleteDynamicFrame = async (frame: DynamicFrameTemplate) => {
     if (!isMasterAdmin) {
       alert('केवल अधिकृत मास्टर एडमिन ही फ्रेम डिलीट कर सकते हैं।');
@@ -208,50 +224,81 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
     reader.readAsDataURL(file);
   };
 
+  const handleHeaderFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFrameError('');
+    const reader = new FileReader();
+    reader.onload = (uploadEvent) => {
+      const res = uploadEvent.target?.result as string;
+      if (res) {
+        setNewHeaderAsset(res);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFooterFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFrameError('');
+    const reader = new FileReader();
+    reader.onload = (uploadEvent) => {
+      const res = uploadEvent.target?.result as string;
+      if (res) {
+        setNewFooterAsset(res);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSaveFrame = () => {
-    if (!newFrameAsset) {
-      setFrameError('कृपया PNG इमेज फाइल चुनें');
-      return;
-    }
     const email = currentUser?.email || 'user';
-    if (customUploadType === 'header') {
-      const current = getAssignedCustomHeaderFooter(email);
+    const name = newFrameName.trim() || (customUploadType === 'combo_hf' ? 'कस्टम हेडर-फुटर कॉम्बो' : 'कस्टम 4:5 फ्रेम');
+
+    if (customUploadType === 'combo_hf') {
+      if (!newHeaderAsset && !newFooterAsset) {
+        setFrameError('कृपया कम से कम हेडर या फुटर ट्रांसपेरेंट PNG चुनें');
+        return;
+      }
+      saveCustomFrame({
+        userId: email,
+        name,
+        assetUrl: newHeaderAsset || newFooterAsset || '',
+        headerUrl: newHeaderAsset || undefined,
+        footerUrl: newFooterAsset || undefined,
+        frameType: 'header_footer',
+      });
       assignCustomHeaderFooterToUser(email, {
-        headerUrl: newFrameAsset,
-        footerUrl: current.footerUrl || '',
+        headerUrl: newHeaderAsset || '',
+        footerUrl: newFooterAsset || '',
+        active: true,
       });
       setNewFrameName('');
-      setNewFrameAsset('');
+      setNewHeaderAsset('');
+      setNewFooterAsset('');
       setIsAddingFrame(false);
       refreshData();
-      showToast(`✅ कस्टम हेडर PNG सफलतापूर्वक अपलोड व सक्रिय किया गया!`);
-      return;
-    }
-    if (customUploadType === 'footer') {
-      const current = getAssignedCustomHeaderFooter(email);
-      assignCustomHeaderFooterToUser(email, {
-        headerUrl: current.headerUrl || '',
-        footerUrl: newFrameAsset,
-      });
-      setNewFrameName('');
-      setNewFrameAsset('');
-      setIsAddingFrame(false);
-      refreshData();
-      showToast(`✅ कस्टम फुटर PNG सफलतापूर्वक अपलोड व सक्रिय किया गया!`);
+      showToast(`✅ "${name}" (हेडर व फुटर कॉम्बो) सफलतापूर्वक सहेजा गया!`);
       return;
     }
 
-    const name = newFrameName.trim() || 'कस्टम 4:5 फ्रेम';
+    if (!newFrameAsset) {
+      setFrameError('कृपया 4:5 ट्रांसपेरेंट PNG इमेज फाइल चुनें');
+      return;
+    }
+
     saveCustomFrame({
       userId: email,
       name,
       assetUrl: newFrameAsset,
+      frameType: 'full_4_5',
     });
     setNewFrameName('');
     setNewFrameAsset('');
     setIsAddingFrame(false);
     refreshData();
-    showToast(`✅ "${name}" कस्टम फ्रेम सफलतापूर्वक बनाई गई!`);
+    showToast(`✅ "${name}" 4:5 कस्टम फ्रेम सफलतापूर्वक बनाई गई!`);
   };
 
   const handleDeleteFrame = (id: string, name: string) => {
@@ -1021,104 +1068,149 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
               </button>
             </div>
 
-            {/* Upload New Frame Drawer */}
+            {/* Upload New Frame Drawer - Dual Mode: Combo Header+Footer vs 4:5 Single Frame */}
             {isAddingFrame && (
-              <div className="p-4 bg-slate-900 border border-purple-500/40 rounded-xl space-y-3 animate-in fade-in">
-                <div className="flex items-center justify-between">
-                  <h5 className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <Upload className="w-3.5 h-3.5 text-purple-400" />
-                    नया कस्टम ग्राफिक अपलोड करें
-                  </h5>
-                  {/* Type Selector Pills */}
-                  <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+              <div className="p-4 sm:p-5 bg-slate-900 border-2 border-purple-500/50 rounded-2xl space-y-4 animate-in fade-in shadow-2xl">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                  <div>
+                    <h5 className="text-sm font-black text-white flex items-center gap-2">
+                      <Upload className="w-4 h-4 text-purple-400" />
+                      कस्टम ग्राफिक अपलोड (PRO & VIP DESK)
+                    </h5>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      अपनी आवश्यकतानुसार हेडर+फुटर कॉम्बो या 4:5 सिंगल मास्टर फ्रेम चुनें।
+                    </p>
+                  </div>
+
+                  {/* Dual Mode Selector */}
+                  <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
                     <button
                       type="button"
-                      onClick={() => setCustomUploadType('frame')}
-                      className={`px-2 py-0.5 text-[10px] font-bold rounded cursor-pointer transition ${
-                        customUploadType === 'frame'
-                          ? 'bg-purple-600 text-white shadow-xs'
+                      onClick={() => { setCustomUploadType('combo_hf'); setFrameError(''); }}
+                      className={`px-3 py-1.5 text-xs font-black rounded-lg cursor-pointer transition flex items-center gap-1.5 ${
+                        customUploadType === 'combo_hf'
+                          ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
                           : 'text-slate-400 hover:text-white'
                       }`}
                     >
-                      4:5 फ्रेम
+                      <span>⚡ हेडर + फुटर कॉम्बो</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => setCustomUploadType('header')}
-                      className={`px-2 py-0.5 text-[10px] font-bold rounded cursor-pointer transition ${
-                        customUploadType === 'header'
-                          ? 'bg-purple-600 text-white shadow-xs'
+                      onClick={() => { setCustomUploadType('single_frame'); setFrameError(''); }}
+                      className={`px-3 py-1.5 text-xs font-black rounded-lg cursor-pointer transition flex items-center gap-1.5 ${
+                        customUploadType === 'single_frame'
+                          ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md'
                           : 'text-slate-400 hover:text-white'
                       }`}
                     >
-                      हेडर PNG
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCustomUploadType('footer')}
-                      className={`px-2 py-0.5 text-[10px] font-bold rounded cursor-pointer transition ${
-                        customUploadType === 'footer'
-                          ? 'bg-purple-600 text-white shadow-xs'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      फुटर PNG
+                      <span>🖼️ 4:5 सिंगल फ्रेम</span>
                     </button>
                   </div>
                 </div>
 
                 {frameError && (
-                  <div className="p-2 bg-red-950/50 border border-red-500 text-red-300 text-xs rounded-lg">
-                    {frameError}
+                  <div className="p-3 bg-red-950/80 border border-red-500 text-red-200 text-xs font-bold rounded-xl flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                    <span>{frameError}</span>
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                      {customUploadType === 'frame' ? 'फ्रेम का नाम:' : customUploadType === 'header' ? 'हेडर का नाम / लेबल:' : 'फुटर का नाम / लेबल:'}
-                    </label>
-                    <input
-                      type="text"
-                      placeholder={customUploadType === 'frame' ? 'उदा. VIP ब्यूरो 4:5 फ्रेम' : customUploadType === 'header' ? 'उदा. चैनल कस्टम हेडर' : 'उदा. चैनल कस्टम फुटर'}
-                      value={newFrameName}
-                      onChange={(e) => setNewFrameName(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-2.5 outline-none focus:border-purple-500"
-                    />
-                  </div>
+                {/* Common Frame Name */}
+                <div>
+                  <label className="text-xs font-bold text-slate-200 block mb-1">
+                    फ्रेम का नाम (Single Frame Name) *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={customUploadType === 'combo_hf' ? 'उदा. दैनिक लाइव हेडर-फुटर कॉम्बो' : 'उदा. VIP ब्यूरो 4:5 मास्टर फ्रेम'}
+                    value={newFrameName}
+                    onChange={(e) => setNewFrameName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 text-white text-xs rounded-xl p-3 outline-none focus:border-purple-500 font-medium"
+                  />
+                </div>
 
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-300 block mb-1">
-                      {customUploadType === 'frame' ? '4:5 ट्रांसपेरेंट PNG चुनें:' : customUploadType === 'header' ? 'हेडर ट्रांसपेरेंट PNG चुनें:' : 'फुटर ट्रांसपेरेंट PNG चुनें:'}
-                    </label>
+                {/* Mode 1: Dual Upload (Header PNG in left box, Footer PNG in right box) */}
+                {customUploadType === 'combo_hf' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Header Slot */}
+                    <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-300">1. हेडर ट्रांसपेरेंट PNG</span>
+                        {newHeaderAsset && <span className="text-[10px] text-emerald-400 font-bold">✓ सिलेक्टेड</span>}
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/png,image/webp"
+                        onChange={handleHeaderFileUpload}
+                        className="w-full text-xs text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-purple-700 file:text-white hover:file:bg-purple-600 cursor-pointer"
+                      />
+                      {newHeaderAsset ? (
+                        <div className="h-14 w-full bg-slate-900 rounded-lg border border-purple-500/30 flex items-center justify-center p-1 overflow-hidden">
+                          <img src={newHeaderAsset} alt="Header Preview" className="max-h-full max-w-full object-contain" />
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-slate-500">शीर्ष बार पर पारदर्शी हेडर ग्राफिक</p>
+                      )}
+                    </div>
+
+                    {/* Footer Slot */}
+                    <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-300">2. फुटर ट्रांसपेरेंट PNG</span>
+                        {newFooterAsset && <span className="text-[10px] text-emerald-400 font-bold">✓ सिलेक्टेड</span>}
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/png,image/webp"
+                        onChange={handleFooterFileUpload}
+                        className="w-full text-xs text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-purple-700 file:text-white hover:file:bg-purple-600 cursor-pointer"
+                      />
+                      {newFooterAsset ? (
+                        <div className="h-14 w-full bg-slate-900 rounded-lg border border-purple-500/30 flex items-center justify-center p-1 overflow-hidden">
+                          <img src={newFooterAsset} alt="Footer Preview" className="max-h-full max-w-full object-contain" />
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-slate-500">निचले बार पर पारदर्शी फुटर ग्राफिक</p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  /* Mode 2: Single 4:5 Frame Upload */
+                  <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-amber-300">4:5 ट्रांसपेरेंट मास्टर फ्रेम PNG</span>
+                      {newFrameAsset && <span className="text-[10px] text-emerald-400 font-bold">✓ सिलेक्टेड</span>}
+                    </div>
                     <input
                       type="file"
-                      accept="image/png,image/jpeg,image/webp"
+                      accept="image/png,image/webp"
                       onChange={handleFrameFileUpload}
                       className="w-full text-xs text-slate-300 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-purple-700 file:text-white hover:file:bg-purple-600 cursor-pointer"
                     />
-                  </div>
-                </div>
-
-                {newFrameAsset && (
-                  <div className="flex items-center gap-3 p-2 bg-slate-800/80 rounded-lg">
-                    <img src={newFrameAsset} alt="Preview" className="w-12 h-15 object-contain bg-slate-950 rounded border border-purple-500/30" />
-                    <span className="text-xs text-emerald-400">✓ इमेज तैयार है</span>
+                    {newFrameAsset ? (
+                      <div className="h-28 w-24 mx-auto bg-slate-900 rounded-lg border border-purple-500/30 flex items-center justify-center p-1 overflow-hidden">
+                        <img src={newFrameAsset} alt="Frame Preview" className="max-h-full max-w-full object-contain" />
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-slate-500 text-center">1080x1350 पारदर्शी 4:5 सिंगल फ्रेम फ़ाइल</p>
+                    )}
                   </div>
                 )}
 
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex items-center gap-3 pt-2">
                   <button
                     type="button"
                     onClick={handleSaveFrame}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg cursor-pointer"
+                    className="flex-1 py-2.5 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-black rounded-xl shadow-lg cursor-pointer transition flex items-center justify-center gap-2"
                   >
-                    सेव व लाइब्रेरी में जोड़ें
+                    <span>सेव व लाइब्रेरी में जोड़ें</span>
+                    <span>✓</span>
                   </button>
                   <button
                     type="button"
-                    onClick={() => setIsAddingFrame(false)}
-                    className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg cursor-pointer"
+                    onClick={() => { setIsAddingFrame(false); setFrameError(''); }}
+                    className="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl cursor-pointer"
                   >
                     रद्द करें
                   </button>
@@ -1527,7 +1619,15 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
             </button>
             {isGraphicsExpanded && (
               <div className="p-4 sm:p-6 border-t border-purple-500/20 bg-slate-950/40 animate-in fade-in">
-                <AdminTemplatePlanManager isAdmin={true} onOpenStudioWithTemplate={onOpenStudioWithTemplate} />
+                <AdminTemplatePlanManager
+                  isAdmin={true}
+                  onOpenStudioWithTemplate={onOpenStudioWithTemplate}
+                  onEditFrame={(frame) => {
+                    setSelectedEditFrame(frame);
+                    setSelectedGeneratorMode(frame.frameMode === 'video' ? 'video' : 'photo');
+                    setIsDynamicFrameModalOpen(true);
+                  }}
+                />
               </div>
             )}
           </div>

@@ -16,6 +16,7 @@ export interface FooterGraphicProps {
   footerIconStyle?: 'color' | 'dark' | 'neutral';
   showMasterBranding?: boolean;
   footerConfig?: CustomFooterConfig;
+  previewScale?: number;
 }
 
 function getLuminance(hexColor: string): number {
@@ -60,6 +61,7 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   footerIconStyle = 'color',
   showMasterBranding = true,
   footerConfig,
+  previewScale,
 }) => {
   const effectiveBgColor = footerConfig?.footerBgColor || footerBgColor || '#FFFFFF';
   const effectiveCustomTextColor = footerConfig?.footerTextColor || footerTextColor;
@@ -160,6 +162,20 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   const totalActive = activeElements.length;
   const isMulti = totalActive >= 2;
 
+  // Proportional font and icon sizes if previewScale is passed, or responsive tailwind fallback
+  const computedFontSize = previewScale && previewScale > 0
+    ? Math.max(8.5, Math.min(18, Math.round((totalActive >= 3 ? 29 : isMulti ? 33 : 37) * previewScale)))
+    : undefined;
+  const computedIconSize = previewScale && previewScale > 0
+    ? Math.max(10, Math.min(24, Math.round((totalActive >= 3 ? 32 : isMulti ? 36 : 42) * previewScale)))
+    : undefined;
+  const computedGap = previewScale && previewScale > 0
+    ? `${Math.max(3, Math.round((totalActive >= 3 ? 12 : 18) * previewScale))}px`
+    : undefined;
+  const computedInnerGap = previewScale && previewScale > 0
+    ? `${Math.max(2, Math.round(5 * previewScale))}px`
+    : undefined;
+
   // Responsive larger typography & uncropped icon sizes (Task 2 & User Request: icon and text further enlarged)
   const textSizeClass = totalActive >= 3
     ? 'text-[13.5px] sm:text-[15px]'
@@ -189,7 +205,11 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   const channelNameElement = (footerConfig?.elements?.showChannelName && channelName && channelName.trim()) ? (
     <span
       key="ch"
-      style={{ color: effectiveTextColor, fontFamily: 'Arial, Helvetica, sans-serif' }}
+      style={{
+        color: effectiveTextColor,
+        fontFamily: 'Arial, Helvetica, sans-serif',
+        fontSize: computedFontSize ? `${computedFontSize}px` : undefined,
+      }}
       className={`font-black ${textSizeClass} tracking-tight whitespace-nowrap`}
     >
       {channelName}
@@ -197,8 +217,8 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   ) : null;
 
   const socialElement = (socialIconsList.length > 0 || displayHandle) ? (
-    <div key="soc" className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+    <div key="soc" className="flex items-center gap-1.5 sm:gap-2 shrink-0" style={{ gap: computedInnerGap }}>
+      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0" style={{ gap: computedInnerGap }}>
         {socialIconsList.map((platform) => (
           <img
             key={platform}
@@ -206,8 +226,8 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
             alt={platform}
             className={`${iconSizeClass} object-contain shrink-0`}
             style={{
-              width: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : undefined,
-              height: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : undefined,
+              width: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : computedIconSize ? `${computedIconSize}px` : undefined,
+              height: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : computedIconSize ? `${computedIconSize}px` : undefined,
             }}
             loading="eager"
             onError={(e) => {
@@ -219,7 +239,11 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
       </div>
       {displayHandle && (
         <span
-          style={{ color: effectiveTextColor, fontFamily: 'Arial, Helvetica, sans-serif' }}
+          style={{
+            color: effectiveTextColor,
+            fontFamily: 'Arial, Helvetica, sans-serif',
+            fontSize: computedFontSize ? `${computedFontSize}px` : undefined,
+          }}
           className={`font-black ${textSizeClass} tracking-tight whitespace-nowrap`}
         >
           {displayHandle}
@@ -229,14 +253,14 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   ) : null;
 
   const websiteElement = isWebsiteActive ? (
-    <div key="web" className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+    <div key="web" className="flex items-center gap-1.5 sm:gap-2 shrink-0" style={{ gap: computedInnerGap }}>
       <img
         src={getSocialIconSrc('website')}
         alt="Website"
         className={`${iconSizeClass} object-contain shrink-0`}
         style={{
-          width: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : undefined,
-          height: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : undefined,
+          width: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : computedIconSize ? `${computedIconSize}px` : undefined,
+          height: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : computedIconSize ? `${computedIconSize}px` : undefined,
         }}
         loading="eager"
         onError={(e) => {
@@ -245,7 +269,11 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
         }}
       />
       <span
-        style={{ color: effectiveTextColor, fontFamily: 'Arial, Helvetica, sans-serif' }}
+        style={{
+          color: effectiveTextColor,
+          fontFamily: 'Arial, Helvetica, sans-serif',
+          fontSize: computedFontSize ? `${computedFontSize}px` : undefined,
+        }}
         className={`font-black ${textSizeClass} tracking-tight whitespace-nowrap`}
       >
         {cleanWebsite}
@@ -254,11 +282,15 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   ) : null;
 
   const phoneElement = isWhatsappActive ? (
-    <div key="phone" className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+    <div key="phone" className="flex items-center gap-1.5 sm:gap-2 shrink-0" style={{ gap: computedInnerGap }}>
       <img
         src={getSocialIconSrc('whatsapp')}
         alt="WhatsApp"
         className={`${iconSizeClass} object-contain shrink-0`}
+        style={{
+          width: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : computedIconSize ? `${computedIconSize}px` : undefined,
+          height: footerConfig?.iconSize ? `${footerConfig.iconSize}px` : computedIconSize ? `${computedIconSize}px` : undefined,
+        }}
         loading="eager"
         onError={(e) => {
           const target = e.currentTarget;
@@ -266,7 +298,11 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
         }}
       />
       <span
-        style={{ color: effectiveTextColor, fontFamily: 'Arial, Helvetica, sans-serif' }}
+        style={{
+          color: effectiveTextColor,
+          fontFamily: 'Arial, Helvetica, sans-serif',
+          fontSize: computedFontSize ? `${computedFontSize}px` : undefined,
+        }}
         className={`font-black ${textSizeClass} tracking-tight whitespace-nowrap`}
       >
         {displayPhone}
@@ -330,8 +366,8 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
         backgroundColor: effectiveBgColor,
         color: effectiveTextColor,
         fontFamily: 'Arial, Helvetica, sans-serif',
-        paddingLeft: footerConfig?.paddingX ? `${footerConfig.paddingX}px` : undefined,
-        paddingRight: footerConfig?.paddingX ? `${footerConfig.paddingX}px` : undefined,
+        paddingLeft: footerConfig?.paddingX ? `${footerConfig.paddingX}px` : previewScale ? `${Math.max(4, Math.round(16 * previewScale))}px` : undefined,
+        paddingRight: footerConfig?.paddingX ? `${footerConfig.paddingX}px` : previewScale ? `${Math.max(4, Math.round(16 * previewScale))}px` : undefined,
       }}
       className="h-full w-full border-t border-neutral-300/40 px-2 sm:px-4 py-0 flex items-center justify-center select-none overflow-hidden text-center"
     >
@@ -341,7 +377,7 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
           footerConfig?.alignment === 'left' ? 'justify-start' : footerConfig?.alignment === 'right' ? 'justify-end' : 'justify-center'
         } ${gapClass} max-w-full overflow-hidden flex-nowrap text-center`}
         style={{
-          gap: footerConfig?.elementSpacing ? `${footerConfig.elementSpacing}px` : undefined,
+          gap: footerConfig?.elementSpacing ? `${footerConfig.elementSpacing}px` : computedGap,
         }}
       >
         {/* ELEMENT 1: Social Media Icons + Username (No circular crop, original shape preserved) */}
@@ -350,7 +386,10 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
         {/* Partition Divider 1 (between Social and Website, OR Social and WhatsApp if Website is hidden) */}
         {sepChar && (isWebsiteActive || isWhatsappActive) && socialElement && (
           <span
-            style={{ color: separatorColor }}
+            style={{
+              color: separatorColor,
+              fontSize: computedFontSize ? `${computedFontSize}px` : undefined,
+            }}
             className="select-none text-xs sm:text-sm font-light opacity-50 shrink-0 px-0.5"
             aria-hidden="true"
           >
@@ -364,7 +403,10 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
         {/* Partition Divider 2 (between Website and WhatsApp if both are active) */}
         {sepChar && isWebsiteActive && isWhatsappActive && (
           <span
-            style={{ color: separatorColor }}
+            style={{
+              color: separatorColor,
+              fontSize: computedFontSize ? `${computedFontSize}px` : undefined,
+            }}
             className="select-none text-xs sm:text-sm font-light opacity-50 shrink-0 px-0.5"
             aria-hidden="true"
           >

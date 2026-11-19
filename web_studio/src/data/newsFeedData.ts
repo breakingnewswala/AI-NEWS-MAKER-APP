@@ -89,12 +89,40 @@ export interface VideoFeedItem {
 export const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 export const FOUR_DAYS_MS = SEVEN_DAYS_MS; // Backwards compatibility alias
 
+export function isRealHindiNews(p: NewsFeedPost | any): boolean {
+  if (!p || !p.id) return false;
+  const title = (p.title || p.headline || '').trim();
+  const desc = (p.description || p.summary || '').trim();
+  const text = `${title} ${desc}`;
+
+  // Must have Devanagari characters for Hindi news app
+  const hasDevanagari = /[\u0900-\u097F]/.test(text);
+  if (!hasDevanagari) return false;
+
+  // Filter out any automated test wire pollution
+  const lower = `${text} ${p.channelName || ''}`.toLowerCase();
+  if (
+    lower.includes('e2e wire') ||
+    lower.includes('s3 wire') ||
+    lower.includes('unreachable feed') ||
+    lower.includes('ssrf feed') ||
+    lower.includes('grand theft auto') ||
+    lower.includes('voyager 1') ||
+    lower.includes('russell brand') ||
+    lower.includes('fantasy football')
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 export function filterActiveVideos(videos: VideoFeedItem[]): VideoFeedItem[] {
   return (videos || []).filter((v) => v && v.id);
 }
 
 export function filterActiveNews(posts: NewsFeedPost[]): NewsFeedPost[] {
-  return (posts || []).filter((p) => p && p.id);
+  return (posts || []).filter((p) => isRealHindiNews(p));
 }
 
 export interface EPaperEditionData {

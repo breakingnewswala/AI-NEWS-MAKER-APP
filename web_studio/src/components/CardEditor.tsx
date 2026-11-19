@@ -5460,28 +5460,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 })}
               </div>
 
-              {/* Callouts Grid */}
+              {/* Callouts Grid - Styled Badges with Role-Based Permissions */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                {/* Default option */}
-                <button
-                  type="button"
-                  onClick={() => onChange({ customCalloutAssetUrl: undefined, calloutTag: currentDynamicFrame?.fullStoryCalloutConfig?.text || undefined })}
-                  className={`p-2 rounded-xl text-left border transition-all cursor-pointer flex flex-col gap-1.5 ${
-                    !card.customCalloutAssetUrl
-                      ? 'bg-amber-950/60 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
-                      : 'bg-neutral-900 border-neutral-800 hover:border-neutral-700'
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-[11px] font-bold text-neutral-200">
-                    <span>डिफ़ॉल्ट कॉलआउट (Default)</span>
-                    {!card.customCalloutAssetUrl && <span className="text-[10px] font-black text-amber-400">✓ चयनित</span>}
-                  </div>
-                  <div className="h-6 w-full bg-neutral-950 rounded border border-neutral-800 flex items-center justify-center px-2 text-[9px] text-amber-300 font-bold truncate">
-                    {currentDynamicFrame?.fullStoryCalloutConfig?.text || 'फ़्रेम डिफ़ॉल्ट (कोई कस्टम कॉलआउट नहीं)'}
-                  </div>
-                </button>
-
-                {/* Library Callouts */}
+                {/* Library Callouts (Red badges, Blue badges, Ribbons) */}
                 {libraryCallouts
                   .filter((lc) => {
                     if (calloutCategoryFilter === 'all') return true;
@@ -5489,19 +5470,18 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     return c === calloutCategoryFilter;
                   })
                   .map((lc) => {
-                    const isSelected = card.customCalloutAssetUrl === (lc.url || lc.assetUrl);
-                    const plans = lc.allowedPlans;
+                    const isSelected = card.customCalloutAssetUrl === (lc.url || lc.assetUrl) || (!card.customCalloutAssetUrl && lc.id === (currentDynamicFrame?.fullStoryCalloutConfig?.calloutAssetId || 'callout_story_live_update'));
                     const planHierarchy: Record<string, number> = { BASIC: 1, ADVANCED: 2, PRO: 3, PROFESSIONAL: 3, 'VIP DESK': 4, VIP: 4, ULTRA: 4 };
                     const userTierRank = effectiveAdmin ? 99 : (effectiveTier === 'ultra' ? 4 : (effectiveTier === 'professional' ? 3 : (effectiveTier === 'advanced' ? 2 : 1)));
-                    const isAllowed = effectiveAdmin || !plans || !Array.isArray(plans) || plans.length === 0 || plans.some((p: string) => (planHierarchy[p.toUpperCase()] || 1) <= userTierRank);
+                    const canChangeCallout = effectiveAdmin || userTierRank >= 3;
 
                     return (
                       <button
                         key={lc.id}
                         type="button"
                         onClick={() => {
-                          if (!isAllowed) {
-                            alert('यह प्रीमियम स्टोरी कॉलआउट केवल प्रो या वीआईपी डेस्क प्लान के लिए उपलब्ध है।');
+                          if (!canChangeCallout && !isSelected) {
+                            alert('कॉलआउट कस्टमाइज़ेशन केवल PRO और VIP DESK यूज़र्स के लिए उपलब्ध है। बेसिक और एडवांस प्लान में मास्टर फ्रेम का निर्धारित कॉलआउट लॉक रहता है।');
                             return;
                           }
                           onChange({ customCalloutAssetUrl: lc.url || lc.assetUrl, showCallout: true });
@@ -5509,17 +5489,17 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         className={`p-2 rounded-xl text-left border transition-all cursor-pointer flex flex-col gap-1.5 relative ${
                           isSelected
                             ? 'bg-amber-950/60 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
-                            : isAllowed
+                            : canChangeCallout
                               ? 'bg-neutral-900 border-neutral-800 hover:border-neutral-700'
                               : 'bg-neutral-950/60 border-neutral-800 opacity-60'
                         }`}
                       >
                         <div className="flex items-center justify-between text-[11px] font-bold text-neutral-200">
                           <span className="truncate">{lc.name}</span>
-                          {!isAllowed ? (
+                          {!canChangeCallout && !isSelected ? (
                             <span className="flex items-center gap-0.5 text-[9px] font-bold text-amber-400 bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-600/40 shrink-0">
                               <Lock className="w-2.5 h-2.5" />
-                              <span>PRO</span>
+                              <span>PRO/VIP</span>
                             </span>
                           ) : isSelected ? (
                             <span className="text-[10px] font-black text-amber-400 shrink-0">✓ चयनित</span>

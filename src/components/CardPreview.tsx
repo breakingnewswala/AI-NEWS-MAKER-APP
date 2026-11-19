@@ -1600,6 +1600,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               footerIconStyle={card.footerIconStyle || 'color'}
               showMasterBranding={card.showMasterBranding}
               footerConfig={card.customFooterConfig || (df as any)?.footerConfig}
+              previewScale={previewScale}
             />
           </div>
         </div>) : card.frameDesign === 'graphic_002' ? (/* ================= GRAPHIC 2 (THIN ORANGE BORDER, 4:5 TOP PHOTO, LOGO & LOCATION BOXES, TEXTURED HEADLINE WITH ORANGE ACCENTS, "पूरी खबर कमेंट बॉक्स में" CTA, YELLOW FOOTER) ================= */
@@ -1728,6 +1729,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 footerTextColor="#000000"
                 footerIconStyle="color"
                 showMasterBranding={card.showMasterBranding}
+                previewScale={previewScale}
               />
             </div>
           </div>
@@ -1837,6 +1839,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 footerTextColor="#FFFFFF"
                 footerIconStyle="color"
                 showMasterBranding={card.showMasterBranding}
+                previewScale={previewScale}
               />
             </div>
           </div>
@@ -1964,6 +1967,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               footerTextColor="#FFE600"
               footerIconStyle="color"
               showMasterBranding={card.showMasterBranding}
+              previewScale={previewScale}
             />
           </div>
         </div>
@@ -2065,6 +2069,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 footerTextColor={card.footerTextColor}
                 footerIconStyle={card.footerIconStyle}
                 showMasterBranding={card.showMasterBranding}
+                previewScale={previewScale}
               />
             </div>
           </div>
@@ -2270,6 +2275,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             footerTextColor={card.footerTextColor}
             footerIconStyle={card.footerIconStyle}
             showMasterBranding={card.showMasterBranding}
+            previewScale={previewScale}
           />
         </div>
       ) : card.frameDesign === 'jacket-epaper' ? (
@@ -3257,6 +3263,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             footerTextColor={card.footerTextColor}
             footerIconStyle={card.footerIconStyle}
             showMasterBranding={card.showMasterBranding}
+            previewScale={previewScale}
           />
         </div>
       ) : card.frameDesign === 'jacket-text-breaking' ? (
@@ -3346,6 +3353,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               footerTextColor={card.footerTextColor}
               footerIconStyle={card.footerIconStyle}
               showMasterBranding={card.showMasterBranding}
+              previewScale={previewScale}
             />
           </div>
         </div>
@@ -3440,6 +3448,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               footerTextColor={card.footerTextColor}
               footerIconStyle={card.footerIconStyle}
               showMasterBranding={card.showMasterBranding}
+              previewScale={previewScale}
             />
           </div>
         </div>
@@ -3556,6 +3565,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 footerTextColor={card.footerTextColor}
                 footerIconStyle={card.footerIconStyle}
                 showMasterBranding={card.showMasterBranding}
+                previewScale={previewScale}
               />
             </div>
           );
@@ -3716,25 +3726,34 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 );
               })()}
 
-              {/* Dynamic Date Stamp */}
-              {df.headerConfig?.showDate && card.showDate !== false && (() => {
-                const rot = card.dateRotation ?? df.headerConfig.dateRotation ?? 270;
+              {/* Dynamic Date Stamp (Always visible when showDate !== false with authentic Date Box/Badge support) */}
+              {(df.headerConfig?.showDate || card.showDate !== false) && card.showDate !== false && (() => {
+                const rot = card.dateRotation ?? df.headerConfig?.dateRotation ?? 270;
+                const dateBg = df.headerConfig?.dateBgColor || (df.headerConfig?.dateStampStyle && df.headerConfig.dateStampStyle !== 'only_text' ? 'rgba(0,0,0,0.75)' : undefined);
+                const dateColor = df.headerConfig?.dateTextColor || '#CBD5E1';
+                const dateAsset = (df.headerConfig as any)?.dateBoxAssetUrl || (card as any)?.customDateAssetUrl;
+
                 return (
                   <div
-                    className="absolute pointer-events-auto flex items-center justify-center text-center font-bold"
+                    className="absolute pointer-events-auto flex items-center justify-center text-center font-bold overflow-hidden"
                     style={{
-                      left: `${df.headerConfig.dateRect?.x ?? 5}%`,
-                      top: `${df.headerConfig.dateRect?.y ?? 18.5}%`,
-                      width: `${df.headerConfig.dateRect?.width ?? 34}%`,
-                      height: `${df.headerConfig.dateRect?.height ?? 3.5}%`,
+                      left: `${df.headerConfig?.dateRect?.x ?? 5}%`,
+                      top: `${df.headerConfig?.dateRect?.y ?? 18.5}%`,
+                      width: `${df.headerConfig?.dateRect?.width ?? 34}%`,
+                      height: `${df.headerConfig?.dateRect?.height ?? 3.5}%`,
                       transform: rot !== 0 ? `rotate(${rot}deg)` : undefined,
                       transformOrigin: 'center center',
-                      color: df.headerConfig.dateTextColor || '#CBD5E1',
+                      color: dateColor,
+                      backgroundColor: !dateAsset && dateBg ? dateBg : undefined,
+                      borderRadius: df.headerConfig?.dateStampStyle === 'rounded_badge' ? '9999px' : '4px',
                       fontFamily: card.dateFont || card.locationFont || 'Baloo 2',
-                      fontSize: `${Math.max(9, Math.round((df.headerConfig.dateFontSize || 14) * previewScale))}px`,
+                      fontSize: `${Math.max(9, Math.round((df.headerConfig?.dateFontSize || 14) * previewScale))}px`,
                     }}
                   >
-                    <span className="truncate">{card.dateStr || getFormattedHindiDate()}</span>
+                    {dateAsset && (
+                      <img src={dateAsset} alt="Date Box" className="absolute inset-0 w-full h-full object-contain pointer-events-none" />
+                    )}
+                    <span className="truncate relative z-10 px-1">{card.dateStr || getFormattedHindiDate()}</span>
                   </div>
                 );
               })()}
@@ -3849,6 +3868,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     const defaultItem = getAssetLibraryItemById('callout_bully_forward_story') || getDefaultAssetLibrariesFallback('callout_png')[0];
                     if (defaultItem && defaultItem.url) calloutUrl = defaultItem.url;
                   }
+                  const effectiveCalloutText = (card.calloutTag && card.calloutTag.trim()) || (df.fullStoryCalloutConfig.text && df.fullStoryCalloutConfig.text.trim()) || '';
+                  if (!calloutUrl && !effectiveCalloutText) return null;
                   if (!calloutUrl || calloutImgError) return null;
 
                   const calloutRawY = df.fullStoryCalloutConfig?.rect?.y ?? 85;
@@ -3965,6 +3986,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   footerIconStyle={card.footerIconStyle}
                   showMasterBranding={card.showMasterBranding}
                   footerConfig={card.customFooterConfig || (df as any)?.footerConfig}
+                  previewScale={previewScale}
                 />
               </div>
             </div>
@@ -4045,6 +4067,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               footerTextColor={card.footerTextColor}
               footerIconStyle={card.footerIconStyle}
               showMasterBranding={card.showMasterBranding}
+              previewScale={previewScale}
             />
           )}
         </div>

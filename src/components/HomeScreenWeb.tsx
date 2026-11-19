@@ -60,7 +60,7 @@ import {
 } from 'lucide-react';
 import { fetchUserFavorites, toggleUserFavorite, getUserFavoritesLocal } from '../lib/userFavoritesManager';
 import { scheduleNewsReminder, cancelNewsReminder, getUserRemindersLocal, UserReminderItem } from '../lib/reminderManager';
-import { NewsFeedPost, filterActiveNews } from '../data/newsFeedData';
+import { NewsFeedPost, filterActiveNews, isRealHindiNews } from '../data/newsFeedData';
 import type { CardLayout } from '../types';
 import { inferStateFromDistrict } from '../data/indianStatesDistricts';
 import { WhatsAppNotificationCenterModal } from './WhatsAppNotificationCenterModal';
@@ -1648,6 +1648,32 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [activeRssPosts, setActiveRssPosts] = useState<NewsFeedPost[]>(() => getActiveRssNewsPosts());
 
   useEffect(() => {
+    // Purge any stale English dummy posts or test wire pollution from client storage
+    try {
+      const syncedRaw = localStorage.getItem('ai_news_admin_synced_rss_posts_v1');
+      if (syncedRaw) {
+        const parsed = JSON.parse(syncedRaw);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter(isRealHindiNews);
+          if (cleaned.length !== parsed.length) {
+            localStorage.setItem('ai_news_admin_synced_rss_posts_v1', JSON.stringify(cleaned));
+            setActiveRssPosts(cleaned);
+          }
+        }
+      }
+      const localRaw = localStorage.getItem('app_news_posts_v2');
+      if (localRaw) {
+        const parsed = JSON.parse(localRaw);
+        if (Array.isArray(parsed)) {
+          const cleaned = parsed.filter(isRealHindiNews);
+          if (cleaned.length !== parsed.length) {
+            localStorage.setItem('app_news_posts_v2', JSON.stringify(cleaned));
+            setLocalPosts(cleaned);
+          }
+        }
+      }
+    } catch {}
+
     // Synchronize server-authoritative approved IDs on mount: replace state with exact server response (fail closed to empty Set)
     syncAndMigrateLocalApprovals().then((serverSet) => {
       setApprovedRssIds(serverSet instanceof Set ? serverSet : new Set<string>());
@@ -1790,8 +1816,25 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
     const rawList = [...newFromRss, ...validPosts];
 
+    // Deduplicate by clean title and URL so duplicate cards never appear on feed
+    const seenTitles = new Set<string>();
+    const seenPostUrls = new Set<string>();
+    const deduplicatedList: NewsFeedPost[] = [];
+
+    for (const p of rawList) {
+      if (!p || !p.id) continue;
+      const cleanTitle = (p.title || p.headline || '').trim().toLowerCase().replace(/[^\w\u0900-\u097F]/g, '');
+      const cleanUrl = normalizeUrl(p.sourceUrl);
+      if (cleanTitle && seenTitles.has(cleanTitle)) continue;
+      if (cleanUrl.length > 8 && seenPostUrls.has(cleanUrl)) continue;
+
+      if (cleanTitle) seenTitles.add(cleanTitle);
+      if (cleanUrl.length > 8) seenPostUrls.add(cleanUrl);
+      deduplicatedList.push(p);
+    }
+
     // Part M: Both Home Feed and Video Feed must show the newest eligible content first and older content below
-    rawList.sort((a, b) => {
+    deduplicatedList.sort((a, b) => {
       const timeA = typeof a?.timestamp === 'number' ? a.timestamp : new Date(a?.timestamp || 0).getTime();
       const timeB = typeof b?.timestamp === 'number' ? b.timestamp : new Date(b?.timestamp || 0).getTime();
       if ((timeB || 0) !== (timeA || 0)) {
@@ -1800,7 +1843,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       return String(b?.id || '').localeCompare(String(a?.id || ''));
     });
 
-    return rawList;
+    return deduplicatedList;
   }, [posts, localPosts, activeRssPosts, canModerate, approvedRssIds]);
 
   // Bonus News Graphic Download Listener: triggers bonus claim popup

@@ -671,6 +671,11 @@ export function getActiveRssNewsPosts(serverApprovedIds?: Set<string>): NewsFeed
         const approvedSet = serverApprovedIds || memoryServerApprovedIds;
         return parsed.filter((p: any) => {
           if (!p || !p.id) return false;
+          // Invariant: Must contain Devanagari Hindi text (reject English dummy posts & wire pollutions)
+          const text = `${p.title || p.headline || ''} ${p.description || p.summary || ''}`;
+          if (!/[\u0900-\u097F]/.test(text)) return false;
+          if (text.toLowerCase().includes('e2e wire') || text.toLowerCase().includes('s3 wire')) return false;
+
           // P0 Invariant: Must pass isRssPostApproved with server-confirmed IDs; status in localStorage cannot forge approval
           if (!isRssPostApproved(p, approvedSet)) return false;
           if (p.sourceId && activeIds.has(p.sourceId)) return true;
@@ -690,7 +695,11 @@ export function getActiveRssNewsPosts(serverApprovedIds?: Set<string>): NewsFeed
 export function setSyncedRssNewsPosts(posts: NewsFeedPost[]) {
   if (typeof window === 'undefined') return;
   try {
-    const normalized = posts.map((p) => {
+    const hindiPosts = (posts || []).filter((p) => {
+      const text = `${p.title || p.headline || ''} ${p.description || p.summary || ''}`;
+      return /[\u0900-\u097F]/.test(text) && !text.toLowerCase().includes('e2e wire') && !text.toLowerCase().includes('s3 wire');
+    });
+    const normalized = hindiPosts.map((p) => {
       const isFeed = Boolean(p.id && (p.id.startsWith('rss-') || p.id.startsWith('web-')));
       if (isFeed) {
         const isRejected = p.status === 'REJECTED' || (p as any).status === 'rejected' || (p as any).approvalStatus === 'REJECTED';
