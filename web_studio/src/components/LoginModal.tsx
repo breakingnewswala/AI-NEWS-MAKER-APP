@@ -774,7 +774,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </div>
           )}
 
-          {/* SIGN IN FORM (Google Login Sole User-Facing Auth per Part B) */}
+          {/* SIGN IN FORM (Google Login + Admin Credentials Form) */}
           {authMode === 'login' && (
             <div className="space-y-4 py-2">
               <div className="p-4 bg-gradient-to-r from-amber-500/10 via-slate-900 to-amber-500/10 border border-amber-500/30 rounded-2xl text-center space-y-2">
@@ -782,13 +782,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                   <Lock className="w-6 h-6 text-slate-950" />
                 </div>
                 <h3 className="text-sm font-black text-white">
-                  Google खाते से सुरक्षित लॉगिन करें
+                  मास्टर एडमिन व यूज़र सुरक्षित लॉगिन
                 </h3>
                 <p className="text-xs text-slate-300 max-w-sm mx-auto leading-relaxed">
-                  एडमिन एवं यूज़र्स के लिए त्वरित व सुरक्षित 1-क्लिक एक्सेस। नए यूज़र्स को तुरंत 7-Day Free VIP Access प्राप्त होगा।
+                  Google खाते से 1-क्लिक एक्सेस करें अथवा अपने एडमिन क्रेडेंशियल्स (पासवर्ड) से सीधे लॉगिन करें।
                 </p>
               </div>
 
+              {/* Option 1: Google One-Click Login */}
               <button
                 type="button"
                 onClick={handleGoogleLogin}
@@ -803,6 +804,66 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 </svg>
                 <span>Google से जारी रखें (Continue with Google)</span>
               </button>
+
+              {/* Divider */}
+              <div className="flex items-center gap-3 my-2">
+                <div className="h-px flex-1 bg-neutral-800" />
+                <span className="text-[11px] text-neutral-400 font-bold uppercase tracking-wider">
+                  या एडमिन क्रेडेंशियल्स (पासवर्ड)
+                </span>
+                <div className="h-px flex-1 bg-neutral-800" />
+              </div>
+
+              {/* Option 2: Admin Password Login Form */}
+              <form onSubmit={handleLogin} className="space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-300 mb-1 flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-yellow-400" />
+                    <span>यूज़रनेम या ईमेल:</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="breakingnewswala.com@gmail.com या breakingnewswala"
+                    className="w-full bg-neutral-950 border border-neutral-700 rounded-xl px-3.5 py-2 text-sm text-white placeholder-neutral-500 focus:border-yellow-400 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-300 mb-1 flex items-center gap-1.5">
+                    <KeyRound className="w-3.5 h-3.5 text-yellow-400" />
+                    <span>पासवर्ड:</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full bg-neutral-950 border border-neutral-700 rounded-xl px-3.5 py-2 pr-10 text-sm text-white placeholder-neutral-500 focus:border-yellow-400 focus:outline-none transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-200 transition-colors cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3 px-4 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-neutral-950 font-black text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Lock className="w-4 h-4" />
+                  <span>{loading ? 'लॉगिन हो रहा है...' : 'सुरक्षित लॉगिन करें ➔'}</span>
+                </button>
+              </form>
 
               <p className="text-[11px] text-neutral-400 text-center">
                 🔒 आपका डेटा पूरी तरह सुरक्षित है।

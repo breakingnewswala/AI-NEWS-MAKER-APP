@@ -30,7 +30,8 @@ function runScenario(num, name, fn) {
 
 // Read and parse source files (normalize CRLF to LF)
 const serverCode = fs.readFileSync('server.ts', 'utf8').replace(/\r\n/g, '\n');
-const apiConfigCode = fs.readFileSync('src/lib/apiConfig.ts', 'utf8').replace(/\r\n/g, '\n');
+const authServiceCode = fs.readFileSync('src/lib/authService.ts', 'utf8').replace(/\r\n/g, '\n');
+const apiConfigCode = (fs.readFileSync('src/lib/apiConfig.ts', 'utf8') + '\n' + authServiceCode).replace(/\r\n/g, '\n');
 const apphostingYaml = fs.readFileSync('apphosting.yaml', 'utf8').replace(/\r\n/g, '\n');
 const rssSourceManagerCode = fs.readFileSync('src/lib/rssSourceManager.ts', 'utf8').replace(/\r\n/g, '\n');
 

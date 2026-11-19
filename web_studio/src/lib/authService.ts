@@ -247,7 +247,10 @@ export function initAuthReady(): Promise<boolean> {
 
       // 2. Synchronize with Firebase Auth authStateReady()
       if (auth && typeof (auth as any).authStateReady === 'function') {
-        await (auth as any).authStateReady().catch((err: any) => {
+        await Promise.race([
+          (auth as any).authStateReady(),
+          new Promise((r) => setTimeout(r, 1500)),
+        ]).catch((err: any) => {
           console.warn('[AUTH-SERVICE] authStateReady error:', err);
         });
       }
@@ -628,7 +631,20 @@ export async function reauthenticateAdmin(onSuccess?: () => void): Promise<boole
       }
     } catch (popupErr: any) {
       console.warn('[REAUTH] Google popup notice:', popupErr);
-      window.dispatchEvent(new CustomEvent('open_auth_welcome_screen'));
+      if (typeof window !== 'undefined') {
+        if (onSuccess) {
+          window.addEventListener(
+            'ai_news_admin_auth_success',
+            () => {
+              try {
+                onSuccess();
+              } catch {}
+            },
+            { once: true }
+          );
+        }
+        window.dispatchEvent(new CustomEvent('open_admin_login'));
+      }
       return false;
     }
   } catch (err) {

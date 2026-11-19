@@ -115,6 +115,7 @@ import {
   saveNewsChannel,
   deleteSavedNewsChannel,
   fetchAdminChannelsFromBackend,
+  fetchAdminRssSourcesFromBackend,
   formatHindiDate,
 } from '../lib/rssSourceManager';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
@@ -1296,6 +1297,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         return prev;
       });
       handleSyncUsers();
+      fetchAdminRssSourcesFromBackend().then((sources) => {
+        if (Array.isArray(sources) && sources.length > 0) {
+          setRssSources(sources);
+        }
+      }).catch(() => {});
     };
     window.addEventListener('ai_news_plans_updated', handlePlansUpdated);
     window.addEventListener('ai_news_promo_codes_changed', handlePromoUpdated);
@@ -5520,7 +5526,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         const ok = await reauthenticateAdmin();
                         if (ok) {
                           setRssMsg(null);
-                          loadRssFeeds();
+                          fetchAdminRssSourcesFromBackend().then((sources) => {
+                            if (Array.isArray(sources) && sources.length > 0) {
+                              setRssSources(sources);
+                            }
+                          }).catch(() => {});
                         }
                       }}
                       className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] rounded-lg transition cursor-pointer shadow whitespace-nowrap"
