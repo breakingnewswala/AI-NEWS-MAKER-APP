@@ -2811,7 +2811,7 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
                   >
                     <option value="gemini-3.5-flash">gemini-3.5-flash (अनुशंसित - तीव्र व सटीक)</option>
                     <option value="gemini-1.5-pro">gemini-1.5-pro (गहरा विश्लेषण)</option>
-                    <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                    <option value="gemini-2.0-flash">gemini-2.0-flash</option>
                   </select>
                 </div>
 

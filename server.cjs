@@ -14555,8 +14555,8 @@ var quotaExceededInfo = {
   message: "Google Gemini AI \u092E\u0949\u0921\u0932 \u0938\u0947\u0935\u093E \u0938\u0915\u094D\u0930\u093F\u092F \u0914\u0930 \u0924\u0948\u092F\u093E\u0930 \u0939\u0948\u0964"
 };
 var GEMINI_MODELS_POOL = [
-  "gemini-2.5-flash",
-  "gemini-2.0-flash"
+  "gemini-2.0-flash",
+  "gemini-1.5-flash"
 ];
 var CP1252_REVERSE_MAP = {
   8364: 128,
@@ -20855,16 +20855,17 @@ app.post("/api/admin/notifications/mark-read", requireAdminMiddleware, (req, res
       });
     }
     if (all) {
-      if (category === "rss" || !category) {
+      const matchCat = (targetCat) => !category || category === "all" || category === targetCat;
+      if (matchCat("rss")) {
         loadNewsDatabase().forEach((p) => readIds.add(`admin_rss_${p.id}`));
       }
-      if (category === "support" || !category) {
+      if (matchCat("support")) {
         loadSupportRequestsDatabase().forEach((s) => readIds.add(`admin_support_${s.id}`));
       }
-      if (category === "logo" || !category) {
+      if (matchCat("logo")) {
         loadLogoRequestsDatabase().forEach((l) => readIds.add(`admin_logo_${l.id}`));
       }
-      if (category === "requests" || !category) {
+      if (matchCat("requests")) {
         loadLimitIncreaseRequests().forEach((r) => readIds.add(`admin_req_${r.id || `${r.email}_${r.timestamp}`}`));
       }
       try {
@@ -28340,7 +28341,6 @@ function resolveUserTierAndRole(req) {
   return { tier: explicitTier || "basic", role: explicitRole || "reporter" };
 }
 var DEFAULT_FALLBACK_MODELS = [
-  "gemini-2.5-flash",
   "gemini-2.0-flash",
   "gemini-1.5-flash"
 ];
@@ -28638,7 +28638,7 @@ function loadApiKeysVault(skipCache = false) {
           successCount: 0,
           errorCount: 0,
           provider: "Google Gemini",
-          model: "gemini-2.5-flash",
+          model: "gemini-2.0-flash",
           lastHealthStatus: "healthy"
         }
       ],
@@ -28928,13 +28928,13 @@ function mapAiPoolErrorToUserResponse(err) {
     return {
       status: 503,
       errorCode: "ALL_API_KEYS_UNAVAILABLE",
-      error: "AI \u0938\u0947\u0935\u093E \u092B\u093F\u0932\u0939\u093E\u0932 \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 API Pool \u0915\u0940 \u0938\u092D\u0940 \u0909\u092A\u0932\u092C\u094D\u0927 Keys \u0915\u0940 \u0938\u0940\u092E\u093E \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948 \u092F\u093E \u0935\u0947 \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902\u0964"
+      error: "\u0924\u0915\u0928\u0940\u0915\u0940 \u0938\u092E\u0938\u094D\u092F\u093E: AI \u0938\u0947\u0935\u093E \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u092A\u0928\u0940 Gemini API Key \u0915\u0940 \u091C\u093E\u0902\u091A \u0915\u0930\u0947\u0902 \u0905\u0925\u0935\u093E \u0915\u0941\u091B \u0938\u092E\u092F \u092C\u093E\u0926 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964"
     };
   }
   return {
     status: 503,
     errorCode: "AI_SERVICE_UNAVAILABLE",
-    error: "AI \u0938\u0947\u0935\u093E \u092B\u093F\u0932\u0939\u093E\u0932 \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 API Pool \u0915\u0940 \u0938\u092D\u0940 \u0909\u092A\u0932\u092C\u094D\u0927 Keys \u0915\u0940 \u0938\u0940\u092E\u093E \u092A\u0942\u0930\u0940 \u0939\u094B \u091A\u0941\u0915\u0940 \u0939\u0948 \u092F\u093E \u0935\u0947 \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0902\u0964"
+    error: "\u0924\u0915\u0928\u0940\u0915\u0940 \u0938\u092E\u0938\u094D\u092F\u093E: AI \u0938\u0947\u0935\u093E \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0905\u092A\u0928\u0940 Gemini API Key \u0915\u0940 \u091C\u093E\u0902\u091A \u0915\u0930\u0947\u0902 \u0905\u0925\u0935\u093E \u0915\u0941\u091B \u0938\u092E\u092F \u092C\u093E\u0926 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964"
   };
 }
 var cachedDefaultGeminiHealth = null;
@@ -28944,7 +28944,7 @@ async function checkDefaultGeminiHealth(forceRefresh = false) {
     return {
       isConfigured: false,
       healthStatus: "not_configured",
-      model: DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash",
+      model: DEFAULT_FALLBACK_MODELS[0] || "gemini-2.0-flash",
       errorMessage: "\u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F GEMINI_API_KEY \u092A\u0930\u094D\u092F\u093E\u0935\u0930\u0923 \u092E\u0947\u0902 \u0938\u0947\u091F \u0928\u0939\u0940\u0902 \u0939\u0948"
     };
   }
@@ -28954,7 +28954,7 @@ async function checkDefaultGeminiHealth(forceRefresh = false) {
   }
   const cleanKey = process.env.GEMINI_API_KEY.trim();
   const start = Date.now();
-  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash";
+  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.0-flash";
   let lastErr = null;
   let testSuccess = false;
   for (const candidateModel of DEFAULT_FALLBACK_MODELS) {
@@ -29025,7 +29025,7 @@ app.get("/api/admin/api-keys", requireAdminMiddleware, async (req, res) => {
     lastHealthStatus: k.lastHealthStatus || (k.status === "active" ? "healthy" : "error"),
     lastError: k.lastError || null,
     provider: k.provider || "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
-    model: k.model || "gemini-2.5-flash"
+    model: k.model || "gemini-2.0-flash"
   }));
   const paidConfigured = Boolean(vault.paidKey?.key && vault.paidKey.key.trim().length > 5);
   const maskedPaidKey = paidConfigured ? maskApiKey(vault.paidKey.key) : null;
@@ -29059,7 +29059,7 @@ app.get("/api/admin/api-keys", requireAdminMiddleware, async (req, res) => {
       lastHealthStatus: vault.paidKey?.lastHealthStatus || (paidConfigured ? "healthy" : "inactive"),
       lastError: vault.paidKey?.lastError || null,
       provider: vault.paidKey?.provider || "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
-      model: vault.paidKey?.model || "gemini-2.5-flash"
+      model: vault.paidKey?.model || "gemini-2.0-flash"
     },
     vipRoutingEnabled: vault.vipRoutingEnabled,
     stats: {
@@ -29103,7 +29103,7 @@ app.post("/api/admin/api-keys/free", requireAdminMiddleware, async (req, res) =>
   let initialHealth = "healthy";
   let initialLatency;
   let initialError;
-  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash";
+  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.0-flash";
   const testStart = Date.now();
   let testSuccess = false;
   let lastTestErr = null;
@@ -29212,7 +29212,7 @@ app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, r
       updatedAt: Date.now(),
       status: "active",
       provider: "Google Gemini",
-      model: "gemini-2.5-flash",
+      model: "gemini-2.0-flash",
       lastHealthStatus: "healthy"
     };
   }
@@ -29260,10 +29260,22 @@ app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, r
       apiKey: apiKey.trim(),
       httpOptions: { headers: { "User-Agent": "aistudio-build-test" } }
     });
-    const result = await testAi.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: "Respond in 2 words: Connected successfully"
-    });
+    let result;
+    try {
+      result = await testAi.models.generateContent({
+        model: "gemini-2.0-flash",
+        contents: "Respond in 2 words: Connected successfully"
+      });
+    } catch (tryErr) {
+      if (String(tryErr?.message || "").includes("404") || String(tryErr?.message || "").includes("not found")) {
+        result = await testAi.models.generateContent({
+          model: "gemini-1.5-flash",
+          contents: "Respond in 2 words: Connected successfully"
+        });
+      } else {
+        throw tryErr;
+      }
+    }
     const latency = Date.now() - start;
     return res.json({
       success: true,
@@ -29300,15 +29312,28 @@ async function probeGeminiKeyZeroQuota(apiKey) {
           apiKey: cleanKey,
           httpOptions: { headers: { "User-Agent": "ai-news-maker-health-probe-1token" } }
         });
-        const probeCall = testAiProbe.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: "1",
-          config: { maxOutputTokens: 1 }
-        });
         const timeoutCall = new Promise(
           (_, reject) => setTimeout(() => reject(new Error("Probe token timeout after 5s")), 5e3)
         );
-        await Promise.race([probeCall, timeoutCall]);
+        let probeCall = testAiProbe.models.generateContent({
+          model: "gemini-2.0-flash",
+          contents: "1",
+          config: { maxOutputTokens: 1 }
+        });
+        try {
+          await Promise.race([probeCall, timeoutCall]);
+        } catch (firstProbeErr) {
+          if (String(firstProbeErr?.message || "").includes("404") || String(firstProbeErr?.message || "").includes("not found")) {
+            probeCall = testAiProbe.models.generateContent({
+              model: "gemini-1.5-flash",
+              contents: "1",
+              config: { maxOutputTokens: 1 }
+            });
+            await Promise.race([probeCall, timeoutCall]);
+          } else {
+            throw firstProbeErr;
+          }
+        }
         return { success: true, state: "READY", latencyMs: Date.now() - start, statusCode: 200 };
       } catch (genErr) {
         const genLatency = Date.now() - start;

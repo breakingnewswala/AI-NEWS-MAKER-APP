@@ -1124,7 +1124,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
 
         <div className="text-[11px] text-slate-400 bg-slate-950/40 p-2.5 rounded-xl border border-slate-850 flex items-center justify-between">
           <span>
-            💡 <strong>फॉलबैक मॉडल्स:</strong> gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-flash (ऑटो-रोटेशन सपोर्टेड)
+            💡 <strong>फॉलबैक मॉडल्स:</strong> gemini-2.0-flash, gemini-1.5-flash (ऑटो-रोटेशन सपोर्टेड)
           </span>
           <span className="text-indigo-400 font-bold text-[10px]">
             डिफ़ॉल्ट इंजन स्थिति: {data?.defaultProvider?.configured ? 'कॉन्फ़िगर्ड व सक्रिय' : 'अक्रिय'}

@@ -2248,70 +2248,113 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 )
               )}
 
-              {/* 4 Plan Cards Grid */}
+              {/* 4 Plan Cards Grid - Enhanced User View */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
                 {sortPlansByCanonicalOrder(getPlansCatalog()).map((plan) => {
                   const isCurrent = subscription.tier === plan.id;
+                  const regPrice = plan.id === 'basic' ? 2999 : plan.id === 'advanced' ? 4999 : plan.id === 'professional' ? 6999 : 9999;
+                  const discountPct = plan.discountPercent || (plan.id === 'basic' ? 67 : plan.id === 'advanced' ? 50 : plan.id === 'professional' ? 40 : 35);
+                  const regPriceDisplay = plan.regularPriceDisplay || `₹${regPrice.toLocaleString('en-IN')}`;
+                  
                   return (
                     <div
                       key={plan.id}
-                      className={`relative rounded-2xl p-4 border flex flex-col justify-between transition-all ${
+                      className={`relative rounded-2xl p-4 sm:p-5 border flex flex-col justify-between transition-all duration-300 ${
                         isCurrent
-                          ? 'bg-slate-900 border-amber-400 shadow-xl shadow-amber-500/10 ring-2 ring-amber-400/40'
+                          ? 'bg-gradient-to-b from-slate-900 to-slate-950 border-amber-400 shadow-xl shadow-amber-500/10 ring-2 ring-amber-400/50'
+                          : plan.id === 'vip_desk' || plan.id === 'vip'
+                          ? 'bg-gradient-to-b from-amber-950/20 via-slate-950 to-slate-950 border-amber-500/50 hover:border-amber-400 shadow-lg shadow-amber-500/5'
                           : plan.popular
-                          ? 'bg-slate-950/90 border-blue-500/50 hover:border-blue-400'
+                          ? 'bg-gradient-to-b from-blue-950/20 via-slate-950 to-slate-950 border-blue-500/60 hover:border-blue-400 shadow-lg shadow-blue-500/5'
                           : 'bg-slate-950/90 border-slate-800 hover:border-slate-700'
                       }`}
                     >
                       {/* Top Badges */}
-                      <div className="flex items-center justify-between gap-1 mb-2">
+                      <div className="flex items-center justify-between gap-1 mb-2.5">
                         <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
                           isCurrent
-                            ? 'bg-amber-400 text-slate-950'
+                            ? 'bg-amber-400 text-slate-950 shadow-sm'
                             : plan.popular
-                            ? 'bg-blue-500 text-white'
+                            ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm'
+                            : plan.id === 'vip_desk' || plan.id === 'vip'
+                            ? 'bg-gradient-to-r from-amber-500 to-red-600 text-slate-950 font-black shadow-sm'
                             : 'bg-slate-800 text-slate-300'
                         }`}>
-                          {isCurrent ? 'सक्रिय (Active)' : plan.badge}
+                          {isCurrent ? 'सक्रिय प्लान (Active)' : plan.badge}
                         </span>
 
                         {plan.id === 'basic' ? (
-                          <span className="text-[9px] text-amber-400 font-bold bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-800">
-                            मास्टर ब्रांडिंग अनिवार्य
+                          <span className="text-[9.5px] text-amber-400 font-bold bg-amber-950/70 px-2 py-0.5 rounded-md border border-amber-800/80">
+                            मास्टर ब्रांडिंग
                           </span>
                         ) : (
-                          <span className="text-[9px] text-emerald-400 font-bold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800">
-                            फुल एचडी
+                          <span className="text-[9.5px] text-emerald-400 font-bold bg-emerald-950/70 px-2 py-0.5 rounded-md border border-emerald-800/80 flex items-center gap-1">
+                            <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
+                            <span>फुल एचडी 1080p</span>
                           </span>
                         )}
                       </div>
 
                       {/* Plan Name & Pricing */}
                       <div>
-                        <h4 className="text-sm font-black text-white">{plan.nameHi}</h4>
-                        <div className="mt-2 space-y-1">
-                          <div className="flex items-center gap-2">
+                        <h4 className="text-base font-black text-white flex items-center gap-1.5">
+                          {plan.id === 'vip_desk' || plan.id === 'vip' ? (
+                            <Crown className="w-4 h-4 text-amber-400 shrink-0" />
+                          ) : (
+                            <Zap className="w-4 h-4 text-amber-400 shrink-0" />
+                          )}
+                          <span>{plan.nameHi}</span>
+                        </h4>
+
+                        <div className="mt-2.5 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                          <div className="flex items-center gap-2 mb-1">
                             <span className="text-xs text-slate-500 line-through font-bold">
-                              {plan.regularPriceDisplay || (plan.id === 'basic' ? '₹2,999' : plan.id === 'advanced' ? '₹4,999' : plan.id === 'professional' ? '₹6,999' : '₹9,999')}
+                              {regPriceDisplay}
                             </span>
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-xs">
-                              Launching Offer ({plan.discountPercent || (plan.id === 'basic' ? 67 : plan.id === 'advanced' ? 50 : plan.id === 'professional' ? 40 : 35)}%)
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-xs animate-pulse">
+                              🔥 Launching Offer ({discountPct}% OFF)
                             </span>
                           </div>
                           <div className="flex items-baseline gap-1">
-                            <span className="text-2xl font-black text-amber-400">{plan.priceDisplay}</span>
-                            <span className="text-[11px] text-slate-400">/{plan.period}</span>
+                            <span className="text-2xl font-black text-amber-400 font-mono">{plan.priceDisplay}</span>
+                            <span className="text-xs text-slate-400">/ {plan.period || 'माह'}</span>
                           </div>
                         </div>
-                        <p className="text-[11px] text-slate-400 mt-1 min-h-[32px] leading-tight">
+
+                        <p className="text-[11px] text-slate-400 mt-2 min-h-[30px] leading-tight">
                           {plan.tagline}
                         </p>
 
-                        {/* Feature List */}
-                        <div className="space-y-1.5 pt-3 border-t border-slate-800/80 my-3 text-[11px] text-slate-300">
+                        {/* Detailed Key Specs (Matching Admin Manager) */}
+                        <div className="mt-3 pt-2.5 border-t border-slate-800 space-y-1.5 text-[11px]">
+                          <div className="flex items-center justify-between text-slate-400">
+                            <span>मास्टर ब्रांडिंग:</span>
+                            <span className={plan.id === 'basic' ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>
+                              {plan.id === 'basic' ? 'अनिवार्य' : '✅ कस्टम लोगो व नाम'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-slate-400">
+                            <span>एक्सपोर्ट क्वालिटी:</span>
+                            <span className="text-white font-bold">{plan.graphicExportResolution || (plan.id === 'basic' ? '720p HD' : plan.id === 'advanced' ? '1080p Full HD' : '1080p Ultra HD')}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-slate-400">
+                            <span>डाउनलोड सीमा:</span>
+                            <span className="text-amber-300 font-mono font-bold">{plan.dailyDownloadLimit ? `${plan.dailyDownloadLimit}/दिन` : plan.id === 'basic' ? '5/दिन' : plan.id === 'advanced' ? '30/दिन' : '100/दिन'}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-slate-400">
+                            <span>वीडियो व रील एक्सेस:</span>
+                            <span className={plan.id === 'basic' ? 'text-slate-400 font-bold' : 'text-emerald-400 font-bold'}>
+                              {plan.id === 'basic' ? 'ट्रायल केवल' : '✅ फुल एक्सेस'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Feature Checklist */}
+                        <div className="space-y-1.5 pt-2.5 border-t border-slate-800/80 my-2.5 text-[11px] text-slate-300">
                           {plan.features.map((feat, idx) => (
-                            <div key={idx} className="leading-snug">
-                              {feat}
+                            <div key={idx} className="flex items-start gap-1.5 leading-snug">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                              <span>{feat}</span>
                             </div>
                           ))}
                         </div>
@@ -2334,13 +2377,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             <button
                               type="button"
                               onClick={() => handleUpgradePlan(plan.id)}
-                              className="w-full py-2 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
+                              className="w-full py-2.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-1.5"
                             >
                               <Zap className="w-3.5 h-3.5" />
                               <span>पुनः सक्रिय करें (Reactivate Plan)</span>
                             </button>
                           ) : (
-                            <div className="w-full py-2 bg-slate-800 text-amber-300 text-center font-black text-xs rounded-xl border border-amber-400/40">
+                            <div className="w-full py-2.5 bg-slate-800 text-amber-300 text-center font-black text-xs rounded-xl border border-amber-400/40">
                               ✓ वर्तमान सक्रिय प्लान
                             </div>
                           )
@@ -2348,7 +2391,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                           <button
                             type="button"
                             onClick={() => handleUpgradePlan(plan.id)}
-                            className={`w-full py-2 font-black text-xs rounded-xl shadow-md transition cursor-pointer flex items-center justify-center gap-1.5 ${
+                            className={`w-full py-2.5 font-black text-xs rounded-xl shadow-lg transition cursor-pointer flex items-center justify-center gap-1.5 ${
                               plan.id === 'basic'
                                 ? 'bg-slate-800 hover:bg-slate-700 text-slate-200'
                                 : plan.id === 'advanced'
@@ -2359,7 +2402,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                             }`}
                           >
                             <Zap className="w-3.5 h-3.5" />
-                            <span><span>अपग्रेड करें</span></span>
+                            <span>🚀 अभी अपग्रेड करें ({plan.priceDisplay})</span>
                           </button>
                         )}
                       </div>

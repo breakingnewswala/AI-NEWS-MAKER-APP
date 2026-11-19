@@ -623,12 +623,12 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
               <div>
                 {/* Header Badge Row */}
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="font-mono text-[10px] text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded-md border border-purple-500/20 truncate max-w-[130px]">
+                  <span className="font-mono text-[10px] text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded-md border border-purple-500/20 truncate max-w-[110px]">
                     {item.id}
                   </span>
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0">
                     <span
-                      className={`px-2 py-0.5 text-[9.5px] font-black rounded ${
+                      className={`px-1.5 py-0.5 text-[9px] font-black rounded ${
                         isStory
                           ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
                           : item.aspectRatio === '1:1'
@@ -636,11 +636,78 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                           : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
                       }`}
                     >
-                      {isStory ? '9:16 स्टोरी' : item.aspectRatio === '1:1' ? '1:1 स्क्वायर' : '4:5 पोर्ट्रेट'}
+                      {isStory ? '9:16' : item.aspectRatio === '1:1' ? '1:1' : '4:5'}
                     </span>
-                    <span className="px-1.5 py-0.5 text-[9.5px] font-bold bg-slate-800 text-slate-300 rounded">
-                      v{item.version}
-                    </span>
+                    {/* Header Preview Action */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const dfToPreview = item.rawDynamicFrame || {
+                          id: item.id,
+                          name: item.name,
+                          aspectRatio: item.aspectRatio,
+                          canvasWidth: 1080,
+                          canvasHeight: item.aspectRatio === '9:16' ? 1920 : 1350,
+                          designCategory: item.category as any,
+                          allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+                          publicationStatus: 'published',
+                          createdBy: 'breakingnewswala.com@gmail.com',
+                          createdAt: Date.now(),
+                          updatedAt: Date.now(),
+                          version: item.version,
+                          sampleReferenceUrl: item.previewUrl,
+                          previewImageUrl: item.previewUrl,
+                          headerConfig: { showLogo: true, logoPosition: 'top_left', logoRect: { x: 5, y: 3.5, width: 22, height: 9 }, showLocation: true, locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 } },
+                          footerConfig: { footerHeightRatio: item.aspectRatio === '9:16' ? 0.065 : 0.08, enforcePermanentFooter: true, footerBgColor: '#FFFFFF', footerTextColor: '#000000' },
+                          photoSlots: [{ id: '1', name: 'फोटो', slotType: 'normal', rect: { x: 0, y: 0, width: 100, height: 62 }, required: true }],
+                          textSlots: [{ id: '1', name: 'हेडलाइन', role: 'headline', rect: { x: 7, y: 64, width: 86, height: 26 }, fontFamily: 'Noto Sans Devanagari', fontSize: 70, textColor: '#FFFFFF', alignment: 'center', maxLines: 3, backgroundColor: 'transparent' }],
+                          layers: [],
+                        };
+                        setPreviewFrame(dfToPreview);
+                      }}
+                      className="py-0.5 px-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded text-[10px] font-bold transition flex items-center gap-1 cursor-pointer border border-slate-700"
+                      title="प्रीव्यू देखें"
+                    >
+                      <Eye className="w-3 h-3 text-purple-400" />
+                      <span>प्रीव्यू</span>
+                    </button>
+
+                    {/* Header Test Action */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const dfToTest = item.rawDynamicFrame || {
+                          id: item.id,
+                          name: item.name,
+                          aspectRatio: item.aspectRatio,
+                          canvasWidth: 1080,
+                          canvasHeight: item.aspectRatio === '9:16' ? 1920 : 1350,
+                          designCategory: item.category as any,
+                          allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
+                          publicationStatus: 'published',
+                          createdBy: 'breakingnewswala.com@gmail.com',
+                          createdAt: Date.now(),
+                          updatedAt: Date.now(),
+                          version: item.version,
+                          sampleReferenceUrl: item.previewUrl,
+                          previewImageUrl: item.previewUrl,
+                          headerConfig: { showLogo: true, logoPosition: 'top_left', logoRect: { x: 5, y: 3.5, width: 22, height: 9 }, showLocation: true, locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 } },
+                          footerConfig: { footerHeightRatio: item.aspectRatio === '9:16' ? 0.065 : 0.08, enforcePermanentFooter: true, footerBgColor: '#FFFFFF', footerTextColor: '#000000' },
+                          photoSlots: [{ id: '1', name: 'फोटो', slotType: 'normal', rect: { x: 0, y: 0, width: 100, height: 62 }, required: true }],
+                          textSlots: [{ id: '1', name: 'हेडलाइन', role: 'headline', rect: { x: 7, y: 64, width: 86, height: 26 }, fontFamily: 'Noto Sans Devanagari', fontSize: 70, textColor: '#FFFFFF', alignment: 'center', maxLines: 3, backgroundColor: 'transparent' }],
+                          layers: [],
+                        };
+                        setTestingFrame(dfToTest);
+                      }}
+                      className="py-0.5 px-2 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 rounded text-[10px] font-bold transition flex items-center gap-1 border border-amber-500/40 cursor-pointer"
+                      title="सैंपल न्यूज़ के साथ टेस्ट करें"
+                    >
+                      <Sparkles className="w-3 h-3 text-amber-400" />
+                      <span>टेस्ट</span>
+                    </button>
+
                     {/* Top Active ON/OFF Toggle */}
                     <button
                       type="button"
@@ -755,41 +822,8 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                 </div>
               </div>
 
-              {/* Actions Row: Preview, Edit, Test, Delete */}
+              {/* Actions Row: Edit, Delete, Redirect (Preview and Test moved to Header) */}
               <div className="flex items-center justify-between gap-1.5 pt-2.5 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const dfToPreview = item.rawDynamicFrame || {
-                      id: item.id,
-                      name: item.name,
-                      aspectRatio: item.aspectRatio,
-                      canvasWidth: 1080,
-                      canvasHeight: item.aspectRatio === '9:16' ? 1920 : 1350,
-                      designCategory: item.category as any,
-                      allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
-                      publicationStatus: 'published',
-                      createdBy: 'breakingnewswala.com@gmail.com',
-                      createdAt: Date.now(),
-                      updatedAt: Date.now(),
-                      version: item.version,
-                      sampleReferenceUrl: item.previewUrl,
-                      previewImageUrl: item.previewUrl,
-                      headerConfig: { showLogo: true, logoPosition: 'top_left', logoRect: { x: 5, y: 3.5, width: 22, height: 9 }, showLocation: true, locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 } },
-                      footerConfig: { footerHeightRatio: item.aspectRatio === '9:16' ? 0.065 : 0.08, enforcePermanentFooter: true, footerBgColor: '#FFFFFF', footerTextColor: '#000000' },
-                      photoSlots: [{ id: '1', name: 'फोटो', slotType: 'normal', rect: { x: 0, y: 0, width: 100, height: 62 }, required: true }],
-                      textSlots: [{ id: '1', name: 'हेडलाइन', role: 'headline', rect: { x: 7, y: 64, width: 86, height: 26 }, fontFamily: 'Noto Sans Devanagari', fontSize: 70, textColor: '#FFFFFF', alignment: 'center', maxLines: 3, backgroundColor: 'transparent' }],
-                      layers: [],
-                    };
-                    setPreviewFrame(dfToPreview);
-                  }}
-                  className="py-1 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
-                  title="प्रीव्यू देखें"
-                >
-                  <Eye className="w-3.5 h-3.5 text-purple-400" />
-                  <span>प्रीव्यू</span>
-                </button>
-
                 <button
                   type="button"
                   onClick={() => {
@@ -816,45 +850,11 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                     };
                     if (onEditFrame) onEditFrame(dfToEdit);
                   }}
-                  className="py-1 px-2.5 bg-purple-600/30 hover:bg-purple-600 text-purple-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center gap-1 border border-purple-500/40 cursor-pointer"
+                  className="flex-1 py-1.5 px-2.5 bg-purple-600/30 hover:bg-purple-600 text-purple-200 hover:text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 border border-purple-500/40 cursor-pointer"
                   title="एडिट करें"
                 >
                   <Edit2 className="w-3.5 h-3.5" />
                   <span>एडिट</span>
-                </button>
-
-                {/* Test Action: opens canonical sample news card in test preview */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    const dfToTest = item.rawDynamicFrame || {
-                      id: item.id,
-                      name: item.name,
-                      aspectRatio: item.aspectRatio,
-                      canvasWidth: 1080,
-                      canvasHeight: item.aspectRatio === '9:16' ? 1920 : 1350,
-                      designCategory: item.category as any,
-                      allowedPlans: ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'],
-                      publicationStatus: 'published',
-                      createdBy: 'breakingnewswala.com@gmail.com',
-                      createdAt: Date.now(),
-                      updatedAt: Date.now(),
-                      version: item.version,
-                      sampleReferenceUrl: item.previewUrl,
-                      previewImageUrl: item.previewUrl,
-                      headerConfig: { showLogo: true, logoPosition: 'top_left', logoRect: { x: 5, y: 3.5, width: 22, height: 9 }, showLocation: true, locationRect: { x: 5, y: 13.5, width: 28, height: 4.5 } },
-                      footerConfig: { footerHeightRatio: item.aspectRatio === '9:16' ? 0.065 : 0.08, enforcePermanentFooter: true, footerBgColor: '#FFFFFF', footerTextColor: '#000000' },
-                      photoSlots: [{ id: '1', name: 'फोटो', slotType: 'normal', rect: { x: 0, y: 0, width: 100, height: 62 }, required: true }],
-                      textSlots: [{ id: '1', name: 'हेडलाइन', role: 'headline', rect: { x: 7, y: 64, width: 86, height: 26 }, fontFamily: 'Noto Sans Devanagari', fontSize: 70, textColor: '#FFFFFF', alignment: 'center', maxLines: 3, backgroundColor: 'transparent' }],
-                      layers: [],
-                    };
-                    setTestingFrame(dfToTest);
-                  }}
-                  className="py-1 px-2.5 bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-amber-500/40 cursor-pointer"
-                  title="सैंपल न्यूज़ के साथ टेस्ट करें"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                  <span>टेस्ट</span>
                 </button>
 
                 {/* Delete button with safety check modal */}
@@ -862,7 +862,7 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                   <button
                     type="button"
                     onClick={() => setDeletingFrame({ id: item.id, name: item.name })}
-                    className="py-1 px-2.5 bg-rose-950/40 hover:bg-rose-900/70 text-rose-300 hover:text-rose-100 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-rose-500/30 cursor-pointer"
+                    className="py-1.5 px-2.5 bg-rose-950/40 hover:bg-rose-900/70 text-rose-300 hover:text-rose-100 rounded-lg text-xs font-bold transition flex items-center gap-1 border border-rose-500/30 cursor-pointer"
                     title="फ्रेम डिलीट करें"
                   >
                     <Trash2 className="w-3.5 h-3.5 text-rose-400" />
@@ -874,10 +874,11 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                   <button
                     type="button"
                     onClick={() => onOpenStudioWithTemplate(item.id)}
-                    className="py-1 px-2 bg-emerald-950/50 hover:bg-emerald-900/80 text-emerald-300 hover:text-white border border-emerald-600/40 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
-                    title="स्टूडियो में उपयोग करें"
+                    className="py-1.5 px-3 bg-emerald-950/50 hover:bg-emerald-900/80 text-emerald-300 hover:text-white border border-emerald-600/40 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                    title="स्टूडियो में उपयोग करें (रीडायरेक्ट)"
                   >
                     <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>रीडायरेक्ट</span>
                   </button>
                 )}
               </div>

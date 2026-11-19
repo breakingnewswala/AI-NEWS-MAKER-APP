@@ -123,7 +123,7 @@ import { UserTemplateManager } from './UserTemplateManager';
 import { AdminMusicLibraryManager } from './AdminMusicLibraryManager';
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
 import { CashfreePaymentModal } from './CashfreePaymentModal';
-import { getApiUrl, getAdminAuthHeaders, ensureAuthToken, isTokenExpired } from '../lib/apiConfig';
+import { getApiUrl, getAdminAuthHeaders, getAdminAuthHeadersAsync, ensureAuthToken, isTokenExpired } from '../lib/apiConfig';
 import {
   RestrictedChannel,
   getRestrictedChannels,
@@ -476,11 +476,12 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const handleMarkAdminNotifRead = async (id?: string, markAll: boolean = false, category?: string) => {
     try {
       const adminEmail = effectiveCurrentUser?.email || 'admin.ainewsmaker@gmail.com';
+      const authHeaders = await getAdminAuthHeadersAsync();
       const res = await fetch('/api/admin/notifications/mark-read', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...getAdminAuthHeaders(),
+          ...authHeaders,
           'x-admin-key': 'master-admin',
           'x-admin-email': adminEmail,
           'x-user-role': 'admin',
@@ -506,6 +507,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             setAdminNotifCounts({ all: 0, rss: 0, support: 0, logo: 0, requests: 0 });
           }
           setAdminNotifActionMsg('✅ सभी नोटिफिकेशन पढ़े गए मार्क कर दिए गए');
+          try {
+            window.dispatchEvent(new Event('admin_notifications_cleared'));
+          } catch {}
         } else if (id) {
           setAdminNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)));
           const target = adminNotifications.find((n) => n.id === id);
