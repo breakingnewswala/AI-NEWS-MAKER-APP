@@ -106,6 +106,7 @@ import {
   addAdminRssSource,
   toggleAdminRssSource,
   deleteAdminRssSource,
+  deleteAdminRssSourceAsync,
   syncAllSourcesLive,
 } from '../lib/rssSourceManager';
 
@@ -1276,9 +1277,11 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     syncAllSourcesLive();
   };
 
-  const handleDeleteRssSource = (id: string) => {
-    deleteAdminRssSource(id);
-    syncAllSourcesLive();
+  const handleDeleteRssSource = async (id: string) => {
+    const updated = await deleteAdminRssSourceAsync(id);
+    setRssSources(updated);
+    setRssSuccessMsg('RSS स्रोत सफलतापूर्वक हटा दिया गया है!');
+    setTimeout(() => setRssSuccessMsg(''), 3000);
   };
 
   const handleSyncRssSource = (source: any) => {

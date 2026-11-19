@@ -21695,7 +21695,7 @@ function cleanNewsDescription(rawText, maxParagraphs = 2) {
 }
 function cleanAndCraftHindiHeadline(rawHeadline, articleText) {
   let title = rawHeadline || "";
-  title = title.replace(/^(breaking\s*news\s*[:\-–—]|ब्रेकिंग\s*न्यूज़\s*[:\-–—]|एक्सक्लूसिव\s*[:\-–—]|exclusive\s*[:\-–—]|बड़ी\s*खबर\s*[:\-–—])/i, "").replace(/(?:^|\s)(जानिए|देखिए|सुनिए|सन्न\s*रह\s*जाएंगे|हैरान\s*हो\s*जाएंगे|बड़ा\s*खुलासा|चौंकाने\s*वाला|वायरल\s*सच)\s*[:\-–—]?\s*/gu, " ").replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री)\s+/gu, " ").replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, " ").replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "").replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, "").replace(/\.{2,}/g, "").replace(/\s+/g, " ").trim();
+  title = title.replace(/^(breaking\s*news\s*[:\-–—]|ब्रेकिंग\s*न्यूज़\s*[:\-–—]|एक्सक्लूसिव\s*[:\-–—]|exclusive\s*[:\-–—]|बड़ी\s*खबर\s*[:\-–—])/i, "").replace(/(?:^|\s)(जानिए|देखिए|सुनिए|सन्न\s*रह\s*जाएंगे|हैरान\s*हो\s*जाएंगे|बड़ा\s*खुलासा|चौंकाने\s*वाला|वायरल\s*सच)\s*[:\-–—]?\s*/gu, " ").replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री)\s+/gu, " ").replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, " ").replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "").replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, "").replace(/[\.]{2,}/g, " ").replace(/[\u2026]/g, " ").replace(/\s+/g, " ").trim();
   const locationList = [
     "\u0936\u0939\u0921\u094B\u0932",
     "\u0930\u0940\u0935\u093E",
@@ -21731,12 +21731,26 @@ function cleanAndCraftHindiHeadline(rawHeadline, articleText) {
     }
   }
   const words = title.split(/\s+/).filter(Boolean);
-  if (words.length > 15) {
-    title = words.slice(0, 15).join(" ");
+  if (words.length > 26) {
+    let cutIdx = 25;
+    for (let i = 14; i <= 25; i++) {
+      if (/[,;।\-–—:]$/.test(words[i])) {
+        cutIdx = i;
+        break;
+      }
+    }
+    title = words.slice(0, cutIdx + 1).join(" ");
   }
-  let summary = articleText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-  if (summary.length > 220) {
-    summary = summary.slice(0, 215) + "...";
+  title = title.replace(/\s+(?:अब|हर|के|में|और|पर|से|को|का|की|ने|या|तक|हुए|हुई|गए|गई|था|थी|है|हैं|कि|तो|भी|सहित|द्वारा|बीच|दौरान|वाले|वाली|वाला|जारी|खारिज)$/u, "").replace(/[\s,\-–—:\.]+$/g, "").trim();
+  let summary = articleText.replace(/<[^>]*>/g, " ").replace(/[\u2026]/g, " ").replace(/\s+/g, " ").trim();
+  if (summary.length > 260) {
+    const periodIdx = summary.lastIndexOf("\u0964", 255);
+    if (periodIdx > 140) {
+      summary = summary.slice(0, periodIdx + 1).trim();
+    } else {
+      const spaceIdx = summary.lastIndexOf(" ", 250);
+      summary = (spaceIdx > 140 ? summary.slice(0, spaceIdx) : summary.slice(0, 250)).replace(/\s+(?:और|के|में|पर|से|को|का|की|ने|कि|तथा|एवं)$/u, "").trim() + "\u0964";
+    }
   }
   if (!summary) {
     summary = title;
@@ -21757,15 +21771,16 @@ async function processRssItemWithAiEditorial(rawTitle, rawDesc, sourceCategory, 
   try {
     const aiPromise = executeGeminiWithKeyPool(async (ai) => {
       const prompt = `\u0906\u092A \u090F\u0915 \u0935\u0930\u093F\u0937\u094D\u0920, \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u0914\u0930 \u0924\u0925\u094D\u092F\u092A\u0930\u0915 \u0939\u093F\u0902\u0926\u0940 \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0902\u092A\u093E\u0926\u0915 \u0939\u0948\u0902\u0964
-\u0928\u0940\u091A\u0947 \u0926\u0940 \u0917\u0908 \u0916\u092C\u0930 \u0915\u0947 \u0935\u093F\u0935\u0930\u0923 \u0914\u0930 \u0936\u0940\u0930\u094D\u0937\u0915 \u0915\u093E \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0915\u0930\u0947\u0902 \u0914\u0930 \u090F\u0915 \u0924\u0925\u094D\u092F\u092A\u0930\u0915, \u0938\u094D\u092A\u0937\u094D\u091F, \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0914\u0930 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (Headline) \u0935 2 \u0935\u093E\u0915\u094D\u092F\u094B\u0902 \u0915\u093E \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0938\u093E\u0930 (Summary) \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964
+\u0928\u0940\u091A\u0947 \u0926\u0940 \u0917\u0908 \u0916\u092C\u0930 \u0915\u0947 \u0935\u093F\u0935\u0930\u0923 \u0914\u0930 \u0936\u0940\u0930\u094D\u0937\u0915 \u0915\u093E \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0915\u0930\u0947\u0902 \u0914\u0930 \u090F\u0915 \u0924\u0925\u094D\u092F\u092A\u0930\u0915, \u0938\u094D\u092A\u0937\u094D\u091F, \u092A\u0942\u0930\u094D\u0923 \u0914\u0930 \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 (Headline) \u0935 2 \u0935\u093E\u0915\u094D\u092F\u094B\u0902 \u0915\u093E \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0938\u093E\u0930 (Summary) \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964
 
 \u0928\u093F\u092F\u092E:
 1. \u0915\u0947\u0935\u0932 \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 (factual), \u0938\u094D\u092A\u0937\u094D\u091F (clear) \u0914\u0930 \u0928\u094D\u092F\u0942\u091F\u094D\u0930\u0932 (neutral) \u092D\u093E\u0937\u093E \u0915\u093E \u092A\u094D\u0930\u092F\u094B\u0917 \u0915\u0930\u0947\u0902\u0964
 2. "\u091C\u093E\u0928\u093F\u090F", "\u0926\u0947\u0916\u093F\u090F", "Breaking News:", "Exclusive", "\u092C\u0921\u093C\u093E \u0916\u0941\u0932\u093E\u0938\u093E" \u091C\u0948\u0938\u0947 \u0915\u094D\u0932\u093F\u0915\u092C\u0947\u091F \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u093E \u092A\u094D\u0930\u092F\u094B\u0917 \u0915\u0924\u0908 \u0928 \u0915\u0930\u0947\u0902\u0964
 3. \u0905\u0928\u093E\u0935\u0936\u094D\u092F\u0915 \u0906\u0926\u0930\u0938\u0942\u091A\u0915 \u0936\u092C\u094D\u0926 (\u0936\u094D\u0930\u0940, \u092E\u093E\u0928\u0928\u0940\u092F, \u091C\u0940) \u0928 \u0932\u0917\u093E\u090F\u0902\u0964
-4. \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0905\u0927\u093F\u0915\u0924\u092E 12 \u0938\u0947 14 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u0940 \u0939\u094B (\u0924\u093E\u0915\u093F 4:5 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0915\u093E\u0930\u094D\u0921 \u092E\u0947\u0902 2-3 \u0932\u093E\u0907\u0928\u094B\u0902 \u092E\u0947\u0902 \u0938\u0939\u0940 \u0926\u093F\u0916\u0947)\u0964
-5. \u0906\u0909\u091F\u092A\u0941\u091F \u0915\u0947\u0935\u0932 \u0935\u0948\u0927 JSON \u092E\u0947\u0902 \u0926\u0947\u0902:
-{"headline": "\u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0939\u0947\u0921\u0932\u093E\u0907\u0928", "summary": "\u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0935\u093F\u0935\u0930\u0923", "location": "\u091C\u093F\u0932\u0947/\u0936\u0939\u0930 \u0915\u093E \u0928\u093E\u092E"}`;
+4. \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u090F\u0915 \u092A\u0942\u0930\u094D\u0923, \u0905\u0930\u094D\u0925\u092A\u0942\u0930\u094D\u0923 \u0914\u0930 \u0935\u094D\u092F\u093E\u0915\u0930\u0923 \u0915\u0940 \u0926\u0943\u0937\u094D\u091F\u093F \u0938\u0947 \u0936\u0941\u0926\u094D\u0927 \u0935\u093E\u0915\u094D\u092F \u0939\u094B\u0928\u0940 \u091A\u093E\u0939\u093F\u090F\u0964 \u0915\u092D\u0940 \u092D\u0940 \u0905\u0927\u0942\u0930\u093E \u0935\u093E\u0915\u094D\u092F \u092F\u093E \u0905\u0927\u0942\u0930\u093E \u0935\u093F\u091A\u093E\u0930 \u0928 \u091B\u094B\u0921\u093C\u0947\u0902 (14 \u0938\u0947 22 \u0936\u092C\u094D\u0926)\u0964
+5. \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u093E \u0915\u094B\u0908 \u092D\u0940 \u0936\u092C\u094D\u0926 \u0906\u0927\u093E-\u0905\u0927\u0942\u0930\u093E \u0928 \u091B\u0942\u091F\u0947 \u0914\u0930 \u0935\u093E\u0915\u094D\u092F \u0915\u093E \u0905\u0902\u0924 \u0938\u094D\u0935\u093E\u092D\u093E\u0935\u093F\u0915 \u0935 \u092A\u0942\u0930\u094D\u0923 \u0939\u094B\u0964
+6. \u0906\u0909\u091F\u092A\u0941\u091F \u0915\u0947\u0935\u0932 \u0935\u0948\u0927 JSON \u092E\u0947\u0902 \u0926\u0947\u0902:
+{"headline": "\u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u092A\u0942\u0930\u094D\u0923 \u0939\u0947\u0921\u0932\u093E\u0907\u0928", "summary": "\u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0938\u094D\u092A\u0937\u094D\u091F \u0935\u093F\u0935\u0930\u0923", "location": "\u091C\u093F\u0932\u0947/\u0936\u0939\u0930 \u0915\u093E \u0928\u093E\u092E"}`;
       const res = await generateWithFallbackAndRetry(ai, GEMINI_MODELS_POOL.slice(0, 1), {
         contents: `${prompt}
 
@@ -22401,30 +22416,43 @@ app.delete(["/api/admin/delete-rss-source/:id", "/api/admin/rss-sources/:id"], r
     }
     const { id } = req.params;
     if (!id) return res.status(400).json({ error: "Source ID is required" });
+    const decodedId = decodeURIComponent(id).trim();
     let sources = loadRssSourcesDatabase();
-    const targetSource = sources.find((s) => s.id === id);
-    sources = sources.filter((s) => s.id !== id);
+    const targetSource = sources.find((s) => s.id === id || s.id === decodedId || s.url === id || s.url === decodedId);
+    const matchedId = targetSource?.id || id;
+    sources = sources.filter((s) => s.id !== id && s.id !== decodedId && s.url !== id && s.url !== decodedId);
     recordDeletedRssSourceId(id);
+    recordDeletedRssSourceId(matchedId);
+    if (targetSource?.url) recordDeletedRssSourceId(targetSource.url);
     saveRssSourcesDatabase(sources);
     if (centralDb) {
       try {
-        await centralDb.deleteRssSource(id).catch(() => {
+        await centralDb.deleteRssSource(matchedId).catch(() => {
         });
-        if (centralDb.cache?.rssSources) centralDb.cache.rssSources.delete(id);
+        if (centralDb.cache?.rssSources) centralDb.cache.rssSources.delete(matchedId);
+        if (targetSource?.id && targetSource.id !== matchedId) {
+          await centralDb.deleteRssSource(targetSource.id).catch(() => {
+          });
+        }
       } catch {
       }
     }
     try {
       const adapter = require_server_firestore_adapter();
       if (adapter && typeof adapter.firestoreDeleteDoc === "function") {
-        await adapter.firestoreDeleteDoc("rss_sources", id).catch(() => {
+        await adapter.firestoreDeleteDoc("rss_sources", matchedId).catch(() => {
         });
+        if (targetSource?.id && targetSource.id !== matchedId) {
+          await adapter.firestoreDeleteDoc("rss_sources", targetSource.id).catch(() => {
+          });
+        }
       }
     } catch {
     }
     let posts = loadNewsDatabase();
     posts = posts.filter((p) => {
       if (p.id.startsWith(`rss-${id}`) || p.id.startsWith(`web-${id}`)) return false;
+      if (p.id.startsWith(`rss-${matchedId}`) || p.id.startsWith(`web-${matchedId}`)) return false;
       if (targetSource?.url && p.sourceUrl === targetSource.url) return false;
       return true;
     });
@@ -23859,7 +23887,8 @@ app.get(["/api/user-profile", "/api/user/profile"], (req, res) => {
       callerEmail && profileEmail && callerEmail === profileEmail || callerUid && profileUid && callerUid === profileUid
     );
     const isMaster = isAuthorizedMasterAdmin(req) || callerEmail === MASTER_ADMIN_EMAIL || callerEmail === "admin.ainewsmaker@gmail.com" || (caller?.role === "superadmin" || caller?.role === "admin");
-    if (!isOwner && !isMaster) {
+    const isTargetAdmin = profileEmail === MASTER_ADMIN_EMAIL || profileEmail === "admin.ainewsmaker@gmail.com";
+    if (!isOwner && !isMaster && !isTargetAdmin) {
       delete safeProfile.city;
     }
     return res.json({ success: true, profile: sanitizeObjectStrings(safeProfile) });

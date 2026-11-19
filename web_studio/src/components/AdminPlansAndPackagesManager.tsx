@@ -650,9 +650,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
   const isSuperAdminUser = isUserMasterAdmin(effectiveCurrentUser) || isUserSuperAdmin(effectiveCurrentUser) || isEffectiveSuperAdmin(effectiveCurrentUser);
 
-  // Module C Security: Regular admin cannot view or access the 5 restricted tabs
+  // Module C Security: Regular admin cannot view or access the restricted tabs
   useEffect(() => {
-    if (!isSuperAdminUser && (subTab === 'plans' || subTab === 'templates' || subTab === 'promocodes' || subTab === 'package_coupons' || subTab === 'users' || subTab === 'restricted')) {
+    if (!isSuperAdminUser && (subTab === 'plans' || subTab === 'templates' || subTab === 'promocodes' || subTab === 'package_coupons' || subTab === 'users' || subTab === 'upgrade' || subTab === 'rss' || subTab === 'api_keys')) {
       setSubTab('');
     }
   }, [isSuperAdminUser, subTab]);
@@ -1883,8 +1883,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
 
         {/* ========================================================================= */}
-        {/* STEP 2: मेंबरशिप प्लान व अपग्रेड (MEMBERSHIP PLANS & UPGRADE)              */}
+        {/* STEP 2: मेंबरशिप प्लान व अपग्रेड (MEMBERSHIP PLANS & UPGRADE) - Master Admin Only */}
         {/* ========================================================================= */}
+        {isSuperAdminUser && (
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'upgrade' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -1994,6 +1995,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           )}
         </div>
+        )}
 
 
         {/* ========================================================================= */}
@@ -2438,9 +2440,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         )}
 
 {/* ========================================================================= */}
-        {/* STEP 4B: एडमिन नोटिफिकेशन पैनल (ADMIN NOTIFICATION PANEL - MOVED AFTER TEMPLATE MANAGER)         */}
+        {/* STEP 4B: एडमिन नोटिफिकेशन पैनल (ADMIN NOTIFICATION PANEL - ALL ADMINS)         */}
         {/* ========================================================================= */}
-        {isSuperAdminUser && (
         <div id="section-notifications" className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'notifications' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -2723,7 +2724,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
             </div>
           )}
         </div>
-        )}
 
         {/* ========================================================================= */}
         {/* STEP 5: Music Library / म्यूजिक लाइब्रेरी                                 */}
@@ -5395,8 +5395,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         </div>
 
         {/* ========================================================================= */}
-        {/* STEP 9: RSS लिंक्स डैशबोर्ड (RSS LINKS DASHBOARD)                         */}
+        {/* STEP 9: RSS लिंक्स डैशबोर्ड (RSS LINKS DASHBOARD) - Master Admin Only      */}
         {/* ========================================================================= */}
+        {isSuperAdminUser && (
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'rss' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -6006,6 +6007,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   </div>
 )}
   </div>
+  )}
 
 
         {/* ========================================================================= */}
@@ -6276,9 +6278,8 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
 
         {/* ========================================================================= */}
-        {/* STEP 11: श्रेणी व चैनल मैनेजर (CATEGORY & CHANNEL MANAGER) - Master Admin Only */}
+        {/* STEP 11: श्रेणी व चैनल मैनेजर (CATEGORY & CHANNEL MANAGER) - ALL ADMINS */}
         {/* ========================================================================= */}
-        {isSuperAdminUser && (
         <div className={`rounded-2xl border transition-all overflow-hidden shadow-lg ${subTab === 'restricted' ? 'border-amber-400 bg-slate-900/95 ring-2 ring-amber-400/20' : 'border-slate-800 bg-slate-900/80 hover:border-slate-700'}`}>
           <button
             type="button"
@@ -6307,21 +6308,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           </button>
           {subTab === 'restricted' && (
             <div className="p-3 sm:p-5 border-t border-slate-800/80 bg-slate-950/70 animate-in fade-in slide-in-from-top-2 duration-200">
-              
-            {!isSuperAdminUser ? (
-              <div className="p-8 bg-slate-900/90 border border-rose-500/40 rounded-2xl text-center space-y-4 shadow-2xl my-2">
-                <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400">
-                  <ShieldAlert className="w-8 h-8" />
-                </div>
-                <div className="space-y-1">
-                  <h4 className="text-base sm:text-lg font-black text-white">सुपर एडमिन सुरक्षा नियंत्रण</h4>
-                  <p className="text-xs sm:text-sm text-slate-300 max-w-lg mx-auto leading-relaxed">
-                    यह सेक्शन केवल प्राथमिक <strong>सुपर एडमिन (admin.ainewsmaker@gmail.com)</strong> के लिए आरक्षित है। सामान्य एडमिन इसे देख या संपादित नहीं कर सकते।
-                  </p>
-                </div>
-              </div>
-            ) : (
-        <div className="space-y-6">
+              <div className="space-y-6">
           {/* Subtab Selector for Category & Channel Manager (3 Separate Tabs - Exact Hindi Labels per Phase 3) */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 border-b border-slate-800 pb-3">
             <button
@@ -6980,11 +6967,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         </div>
         )}
               </div>
-            )}
             </div>
           )}
         </div>
-        )}
 
         {/* ========================================================================= */}
         {/* STEP 11B: एपीआई की मैनेजर (API KEY MANAGER - MASTER ADMIN ONLY)             */}

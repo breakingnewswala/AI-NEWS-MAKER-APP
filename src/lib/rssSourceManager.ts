@@ -329,19 +329,31 @@ export function deleteAdminRssSource(id: string): AdminRssSource[] {
 
 export async function deleteAdminRssSourceAsync(id: string): Promise<AdminRssSource[]> {
   addDeletedSourceId(id);
-  const list = getAdminRssSources().filter((s) => s.id !== id);
-  saveAdminRssSources(list);
+  let list = getAdminRssSources().filter((s) => s.id !== id);
   try {
     const authHeaders = await getAdminAuthHeadersAsync();
-    await fetch(getApiUrl(`/api/admin/delete-rss-source/${encodeURIComponent(id)}`), {
+    const token = await ensureAuthToken().catch(() => '');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-user-role': 'admin',
+      ...authHeaders,
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch(getApiUrl(`/api/admin/delete-rss-source/${encodeURIComponent(id)}`), {
       method: 'DELETE',
-      headers: {
-        'x-user-role': 'admin',
-        ...authHeaders,
-      },
-      body: JSON.stringify({ userRole: 'admin' }),
+      headers,
     });
-  } catch {}
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data && data.success && Array.isArray(data.sources)) {
+        list = data.sources;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to delete RSS source from server:', err);
+  }
+  saveAdminRssSources(list);
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
   }

@@ -1,1 +1,39 @@
-[]
+[
+  {
+    "id": "src_1794763273176_ty2e",
+    "docId": "src_1794763273176_ty2e",
+    "url": "https://ainewsmakerapp-401033199805.asia-east1.run.app/api/rss/web-feed?feedId=wf_1794763271574_f49947",
+    "lastFetchedAt": 1795078902224,
+    "category": "📍 मध्यप्रदेश",
+    "name": "नई दुनिया",
+    "originalWebUrl": "https://www.naidunia.com",
+    "truncated": false,
+    "itemsFetchedCount": 397,
+    "lastSyncStatus": "success",
+    "pagesFetched": 1,
+    "addedDateFormatted": "15 नवंबर 2026",
+    "type": "rss",
+    "updatedAt": 1795078912682,
+    "addedAt": 1794763273176,
+    "isActive": true,
+    "createdAt": 1794763273176
+  },
+  {
+    "id": "src_1794991900524_h8qw",
+    "docId": "src_1794991900524_h8qw",
+    "lastSyncStatus": "success",
+    "truncated": false,
+    "category": "📍 मध्यप्रदेश",
+    "addedDateFormatted": "18 नवंबर 2026",
+    "name": "नई दुनिया",
+    "itemsFetchedCount": 241,
+    "pagesFetched": 1,
+    "addedAt": 1794991900524,
+    "url": "https://ainewsmakerapp-401033199805.asia-east1.run.app/api/rss/web-feed?feedId=wf_1794991899584_97c403",
+    "createdAt": 1794991900524,
+    "lastFetchedAt": 1795078902330,
+    "type": "rss",
+    "isActive": true,
+    "updatedAt": 1795078912682
+  }
+]

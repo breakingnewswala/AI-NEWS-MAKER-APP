@@ -1109,6 +1109,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     });
   }
 
+  if (card.layout === 'inset-circle' || card.showCirclePhoto || Boolean(card.images?.insetCircle) || Boolean(card.circlePhotoUrl)) {
+    availableCropPhotos.push({
+      key: 'insetCircle',
+      label: 'सर्कल फोटो (Circle Photo)',
+    });
+  }
+
   // Dynamic frame multi-slot photos support (Bug Group D)
   const currentDfForCrop = currentDynamicFrame || getDynamicFrameById(card.frameDesign || '');
   if (currentDfForCrop && currentDfForCrop.photoSlots && currentDfForCrop.photoSlots.length > 1) {
@@ -3452,13 +3459,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           </div>
         ) : (
           <div className="space-y-3">
-            {/* 1. Primary Layout Selection Tabs: 1 Image vs 2 Image vs Multi Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {/* 1. Primary Layout Selection Tabs: 1 Image vs 2 Image vs Multi Grid vs Inset Circle */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <button
                 type="button"
-                onClick={() => onChange({ layout: 'single' })}
+                onClick={() => onChange({ layout: 'single', showCirclePhoto: false })}
                 className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer border ${
-                  card.layout === 'single' || card.layout === 'full'
+                  (card.layout === 'single' || card.layout === 'full') && !card.showCirclePhoto
                     ? 'border-yellow-400 bg-yellow-500/20 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
                     : 'border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-neutral-700'
                 }`}
@@ -3468,6 +3475,36 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   <span>1 फोटो (सिंगल फ्रेम)</span>
                 </div>
                 <span className="text-[10px] font-normal opacity-80">सिंगल फुल स्क्रीन</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="layout-btn-inset-circle"
+                onClick={() => {
+                  const updates: Partial<NewsCardData> = { layout: 'inset-circle', showCirclePhoto: true };
+                  const availablePhotos = card.extractedArticlePhotos || [];
+                  const circlePhoto = (card.images?.insetCircle && card.images.insetCircle !== card.images.main)
+                    ? card.images.insetCircle
+                    : (card.images?.second && card.images.second !== card.images.main
+                      ? card.images.second
+                      : (availablePhotos[1] && availablePhotos[1] !== card.images.main ? availablePhotos[1] : card.images?.insetCircle));
+                  if (circlePhoto) {
+                    updates.images = { ...card.images, insetCircle: circlePhoto };
+                    updates.circlePhotoUrl = circlePhoto;
+                  }
+                  onChange(updates);
+                }}
+                className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer border ${
+                  card.layout === 'inset-circle' || card.showCirclePhoto
+                    ? 'border-yellow-400 bg-yellow-500/20 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
+                    : 'border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-neutral-700'
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3.5 h-3.5 rounded-full border-2 border-yellow-400 bg-yellow-400/30" />
+                  <span>1 फोटो + 1 सर्कल फोटो</span>
+                </div>
+                <span className="text-[10px] font-normal opacity-80">मुख्य फोटो + फ्लोटिंग सर्कल</span>
               </button>
 
               {effectiveTier === 'basic' && !effectiveAdmin ? (
@@ -3486,7 +3523,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     const targetLayout = (card.layout === 'double' || card.layout === 'double-h' || card.layout === 'split-h')
                       ? card.layout
                       : 'split-v';
-                    const updates: Partial<NewsCardData> = { layout: targetLayout };
+                    const updates: Partial<NewsCardData> = { layout: targetLayout, showCirclePhoto: false };
                     const availablePhotos = card.extractedArticlePhotos || [];
                     const secondPhoto = (card.images?.second && card.images.second !== card.images.main)
                       ? card.images.second
@@ -3497,7 +3534,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     onChange(updates);
                   }}
                   className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer border ${
-                    card.layout === 'split-v' || card.layout === 'double' || card.layout === 'double-h' || card.layout === 'split-h'
+                    (card.layout === 'split-v' || card.layout === 'double' || card.layout === 'double-h' || card.layout === 'split-h') && !card.showCirclePhoto
                       ? 'border-yellow-400 bg-yellow-500/20 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
                       : 'border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-neutral-700'
                   }`}
@@ -3511,7 +3548,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               )}
 
               {(effectiveTier === 'basic' || effectiveTier === 'advanced') && !effectiveAdmin ? (
-                <div className="py-2.5 px-3 rounded-xl text-xs font-bold border border-neutral-800 bg-neutral-950/60 text-neutral-500 flex flex-col items-center justify-center gap-1 cursor-not-allowed select-none col-span-2 sm:col-span-1">
+                <div className="py-2.5 px-3 rounded-xl text-xs font-bold border border-neutral-800 bg-neutral-950/60 text-neutral-500 flex flex-col items-center justify-center gap-1 cursor-not-allowed select-none">
                   <div className="flex items-center gap-1.5">
                     <Lock className="w-3.5 h-3.5 text-amber-500/80" />
                     <span>मल्टी ग्रिड (Locked)</span>
@@ -3526,7 +3563,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     const targetLayout = (card.layout === 'grid-3-bottom' || card.layout === 'grid-4')
                       ? card.layout
                       : 'grid-3';
-                    const updates: Partial<NewsCardData> = { layout: targetLayout };
+                    const updates: Partial<NewsCardData> = { layout: targetLayout, showCirclePhoto: false };
                     const availablePhotos = card.extractedArticlePhotos || [];
                     const newImages = { ...card.images };
                     let changed = false;
@@ -3541,20 +3578,86 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     if (changed) updates.images = newImages;
                     onChange(updates);
                   }}
-                  className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer border col-span-2 sm:col-span-1 ${
-                    card.layout === 'grid-3' || card.layout === 'grid-3-bottom' || card.layout === 'grid-4'
+                  className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer border ${
+                    (card.layout === 'grid-3' || card.layout === 'grid-3-bottom' || card.layout === 'grid-4') && !card.showCirclePhoto
                       ? 'border-yellow-400 bg-yellow-500/20 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
                       : 'border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-neutral-700'
                   }`}
                 >
                   <div className="flex items-center gap-1.5">
                     <Layers className="w-4 h-4 text-yellow-400" />
-                    <span>मल्टी ग्रिड (3-4 तस्वीरें)</span>
+                    <span>मल्टी ग्रिड (3-4 फोटो)</span>
                   </div>
                   <span className="text-[10px] font-normal opacity-80">3 या 4 तस्वीरें</span>
                 </button>
               )}
             </div>
+
+            {/* Sub-variant selector for Circle Photo Overlay */}
+            {(card.layout === 'inset-circle' || card.showCirclePhoto) && (
+              <div className="p-3 bg-neutral-950 rounded-xl border border-yellow-500/30 space-y-3">
+                <div className="text-[11px] font-bold text-yellow-300 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <span>🔘</span>
+                    <span>सर्कल फोटो ओवरले सेटिंग्स (Circle Photo Settings)</span>
+                  </span>
+                  <span className="text-[10px] text-neutral-400">मुख्य फोटो पर फ्लोटिंग सर्कल</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Circle Size Slider */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] text-neutral-300 font-bold">
+                      <span>सर्कल आकार (Size)</span>
+                      <span className="text-yellow-400">{card.circlePhotoScale || 28}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={15}
+                      max={45}
+                      step={1}
+                      value={card.circlePhotoScale || 28}
+                      onChange={(e) => onChange({ circlePhotoScale: Number(e.target.value) })}
+                      className="w-full accent-yellow-400 h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Position X Slider */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] text-neutral-300 font-bold">
+                      <span>क्षैतिज स्थिति (X %)</span>
+                      <span className="text-yellow-400">{card.insetPosition?.x ?? 72}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={10}
+                      max={90}
+                      step={1}
+                      value={card.insetPosition?.x ?? 72}
+                      onChange={(e) => onChange({ insetPosition: { x: Number(e.target.value), y: card.insetPosition?.y ?? 28 } })}
+                      className="w-full accent-yellow-400 h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Position Y Slider */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] text-neutral-300 font-bold">
+                      <span>लंबवत स्थिति (Y %)</span>
+                      <span className="text-yellow-400">{card.insetPosition?.y ?? 28}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={10}
+                      max={90}
+                      step={1}
+                      value={card.insetPosition?.y ?? 28}
+                      onChange={(e) => onChange({ insetPosition: { x: card.insetPosition?.x ?? 72, y: Number(e.target.value) } })}
+                      className="w-full accent-yellow-400 h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Sub-variant selector for 2 Images */}
             {(card.layout === 'split-v' || card.layout === 'double' || card.layout === 'double-h' || card.layout === 'split-h') && (
@@ -3818,8 +3921,118 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 );
               })()}
 
+              {/* INSET CIRCLE WORKSPACE: Main Photo + Circle Overlay Photo */}
+              {(card.layout === 'inset-circle' || card.showCirclePhoto) && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Slot 1 (मुख्य फोटो) */}
+                  <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-neutral-200 flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-yellow-400" />
+                        <span>मुख्य फोटो (Photo 1)</span>
+                      </span>
+                      <span className="text-[10px] text-yellow-400 font-bold bg-yellow-500/10 px-1.5 py-0.5 rounded border border-yellow-500/20">
+                        फुल बैकग्राउंड
+                      </span>
+                    </div>
+
+                    {card.images.main ? (
+                      <div className="flex items-center gap-2.5 bg-neutral-900/80 p-2 rounded border border-neutral-800">
+                        <img
+                          src={card.images.main}
+                          alt="Photo 1 preview"
+                          className="w-14 h-14 object-cover rounded border border-neutral-700 shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-green-400 font-bold truncate flex items-center gap-1">
+                            <Check className="w-3 h-3 text-green-400" /> मुख्य फोटो सक्रिय
+                          </p>
+                          <p className="text-[11px] text-neutral-300 font-medium truncate">लाइव कार्ड बैकग्राउंड</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-2.5 bg-neutral-900/60 rounded border border-dashed border-neutral-700 text-center text-xs text-neutral-300">
+                        मुख्य फोटो अपलोड करें
+                      </div>
+                    )}
+
+                    <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-yellow-400/80 hover:border-yellow-300 rounded-lg cursor-pointer text-xs font-bold text-yellow-300 hover:text-white bg-yellow-500/15 hover:bg-yellow-500/25 transition-all">
+                      <Upload className="w-3.5 h-3.5 text-yellow-400" />
+                      <span>{card.images.main ? 'मुख्य फोटो बदलें' : 'मुख्य फोटो अपलोड'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) handleFileUpload('main', f);
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Slot 2 (सर्कल ओवरले फोटो) */}
+                  <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-neutral-200 flex items-center gap-1.5">
+                        <div className="w-3.5 h-3.5 rounded-full border border-pink-400 bg-pink-400/20" />
+                        <span>सर्कल फोटो (Overlay)</span>
+                      </span>
+                      <span className="text-[10px] text-pink-400 font-bold bg-pink-500/10 px-1.5 py-0.5 rounded border border-pink-500/20">
+                        फ्लोटिंग सर्कल
+                      </span>
+                    </div>
+
+                    {(card.images?.insetCircle || card.circlePhotoUrl || card.images?.second) ? (
+                      <div className="flex items-center gap-2.5 bg-neutral-900/80 p-2 rounded border border-neutral-800">
+                        <img
+                          src={card.images?.insetCircle || card.circlePhotoUrl || card.images?.second}
+                          alt="Circle overlay preview"
+                          className="w-14 h-14 object-cover rounded-full border-2 border-white shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-green-400 font-bold truncate flex items-center gap-1">
+                            <Check className="w-3 h-3 text-green-400" /> सर्कल फोटो सक्रिय
+                          </p>
+                          <p className="text-[11px] text-neutral-300 font-medium truncate">कार्ड पर गोल फ्रेम में दिखेगी</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-2.5 bg-neutral-900/60 rounded border border-dashed border-neutral-700 text-center text-xs text-neutral-300">
+                        सर्कल फोटो अपलोड करें (नेता, वक्ता, अधिकारी, आदि)
+                      </div>
+                    )}
+
+                    <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-pink-400/80 hover:border-pink-300 rounded-lg cursor-pointer text-xs font-bold text-pink-300 hover:text-white bg-pink-500/15 hover:bg-pink-500/25 transition-all">
+                      <Upload className="w-3.5 h-3.5 text-pink-400" />
+                      <span>{(card.images?.insetCircle || card.circlePhotoUrl) ? 'सर्कल फोटो बदलें' : 'सर्कल फोटो अपलोड करें'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) {
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              const b64 = reader.result as string;
+                              onChange({
+                                images: { ...card.images, insetCircle: b64 },
+                                circlePhotoUrl: b64,
+                                showCirclePhoto: true,
+                              });
+                            };
+                            reader.readAsDataURL(f);
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
               {/* SINGLE PHOTO WORKSPACE: Exactly 1 Photo Slot */}
-              {(card.layout === 'single' || card.layout === 'full' || (card.frameDesign as string) === 'jacket-quote') && (
+              {(card.layout === 'single' || card.layout === 'full' || (card.frameDesign as string) === 'jacket-quote') && card.layout !== 'inset-circle' && !card.showCirclePhoto && (
                 <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5 space-y-3">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-neutral-200 flex items-center gap-1.5">

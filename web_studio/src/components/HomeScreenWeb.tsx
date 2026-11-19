@@ -61,6 +61,7 @@ import {
 import { fetchUserFavorites, toggleUserFavorite, getUserFavoritesLocal } from '../lib/userFavoritesManager';
 import { scheduleNewsReminder, cancelNewsReminder, getUserRemindersLocal, UserReminderItem } from '../lib/reminderManager';
 import { NewsFeedPost, filterActiveNews } from '../data/newsFeedData';
+import type { CardLayout } from '../types';
 import { inferStateFromDistrict } from '../data/indianStatesDistricts';
 import { WhatsAppNotificationCenterModal } from './WhatsAppNotificationCenterModal';
 import { WebNotificationModal } from './WebNotificationModal';
@@ -569,14 +570,14 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             e.stopPropagation();
             handleToggleFavorite(post.id);
           }}
-          className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+          className={`w-8 h-8 sm:w-7 sm:h-7 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-md ${
             isFav
-              ? 'bg-red-600 text-white shadow-md'
-              : 'bg-black/60 hover:bg-black/85 text-white/90 hover:text-red-400 border border-white/20'
+              ? 'bg-red-600 text-white shadow-red-600/40'
+              : 'bg-black/85 hover:bg-black text-white hover:text-red-400 border border-white/40'
           }`}
-          title={isFav ? 'पसंदीदा से हटाएं' : 'पसंदीदा में जोड़ें'}
+          title={isFav ? 'पसंदीदा से हटाएं' : 'पसंदीदा में जोड़ें (खबर पसंद करें)'}
         >
-          <Heart className={`w-3.5 h-3.5 ${isFav ? 'fill-white text-white' : ''}`} />
+          <Heart className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${isFav ? 'fill-white text-white' : 'text-white'}`} />
         </button>
 
         {/* Reminder Clock Button (Triggers Non-Clipped Portal) */}
@@ -601,14 +602,14 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
             }
             setActiveReminderPortal({ post, x: left, y: top });
           }}
-          className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+          className={`w-8 h-8 sm:w-7 sm:h-7 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-md ${
             hasReminder
-              ? 'bg-amber-500 text-slate-950 font-black shadow-md'
-              : 'bg-black/60 hover:bg-black/85 text-white/90 hover:text-amber-400 border border-white/20'
+              ? 'bg-amber-500 text-slate-950 font-black shadow-amber-500/40'
+              : 'bg-black/85 hover:bg-black text-white hover:text-amber-400 border border-white/40'
           }`}
           title={hasReminder ? 'रिमाइंडर सक्रिय है' : 'रिमाइंडर सेट करें'}
         >
-          <Clock className={`w-3.5 h-3.5 ${hasReminder ? 'text-slate-950 font-bold' : ''}`} />
+          <Clock className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${hasReminder ? 'text-slate-950 font-bold' : 'text-white'}`} />
         </button>
       </div>
     );
@@ -1053,6 +1054,62 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const handleOpenWebAlert = (post: NewsFeedPost) => {
     setWebNotificationPost(post);
     setIsWebNotificationOpen(true);
+  };
+
+  // Pre-Approval / Pre-Publish Modal State (Requirement 2)
+  const [pendingApprovalPost, setPendingApprovalPost] = useState<NewsFeedPost | null>(null);
+  const [approvalPhotoTag, setApprovalPhotoTag] = useState<'NONE' | 'AI_GENERATED' | 'SYMBOLIC'>('NONE');
+  const [approvalLayoutMode, setApprovalLayoutMode] = useState<CardLayout>('single');
+
+  const handleOpenApprovalModal = (post: NewsFeedPost) => {
+    setPendingApprovalPost(post);
+    setApprovalPhotoTag('NONE');
+    setApprovalLayoutMode('single');
+  };
+
+  const handleConfirmApproval = async () => {
+    if (!pendingApprovalPost) return;
+    const post = pendingApprovalPost;
+    const updatedPost: NewsFeedPost = {
+      ...post,
+      photoWatermarkTag: approvalPhotoTag === 'AI_GENERATED' ? 'AI GENERATED IMAGE' : approvalPhotoTag === 'SYMBOLIC' ? 'प्रतीकात्मक फोटो' : undefined,
+      watermarkGlobalMode: approvalPhotoTag === 'AI_GENERATED' ? 'AI_GENERATED' : approvalPhotoTag === 'SYMBOLIC' ? 'SYMBOLIC_PHOTO' : 'OFF',
+      layoutMode: approvalLayoutMode,
+    } as any;
+    const ok = await approveRssPost(post.id, updatedPost);
+    setPendingApprovalPost(null);
+    if (ok) {
+      showAppSuccess('यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!', 'खबर स्वीकृत');
+    } else {
+      showAppError('खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।', 'स्वीकृति विफल');
+    }
+  };
+
+  const handleOpenStudioFromApproval = async () => {
+    if (!pendingApprovalPost) return;
+    const post = pendingApprovalPost;
+    const updatedPost: NewsFeedPost = {
+      ...post,
+      photoWatermarkTag: approvalPhotoTag === 'AI_GENERATED' ? 'AI GENERATED IMAGE' : approvalPhotoTag === 'SYMBOLIC' ? 'प्रतीकात्मक फोटो' : undefined,
+      watermarkGlobalMode: approvalPhotoTag === 'AI_GENERATED' ? 'AI_GENERATED' : approvalPhotoTag === 'SYMBOLIC' ? 'SYMBOLIC_PHOTO' : 'OFF',
+      layoutMode: approvalLayoutMode,
+    } as any;
+    approveRssPost(post.id, updatedPost).catch(() => {});
+    setPendingApprovalPost(null);
+
+    try {
+      const saved = localStorage.getItem('news_card_data');
+      const existing = saved ? JSON.parse(saved) : {};
+      localStorage.setItem('news_card_data', JSON.stringify({
+        ...existing,
+        layout: approvalLayoutMode,
+        showCirclePhoto: approvalLayoutMode === 'inset-circle',
+        watermarkGlobalMode: approvalPhotoTag === 'AI_GENERATED' ? 'AI_GENERATED' : approvalPhotoTag === 'SYMBOLIC' ? 'SYMBOLIC_PHOTO' : 'OFF',
+        photoWatermarkTag: approvalPhotoTag === 'AI_GENERATED' ? 'AI GENERATED IMAGE' : approvalPhotoTag === 'SYMBOLIC' ? 'प्रतीकात्मक फोटो' : undefined,
+      }));
+    } catch {}
+
+    onOpenStudioWithNews(updatedPost);
   };
   const [coinConfigCost, setCoinConfigCost] = useState<number>(50);
   const [coinConfigPlans, setCoinConfigPlans] = useState<string[]>(['Basic']);
@@ -2831,7 +2888,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             </span>
                           )}
                         </div>
-                        <span className="px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded-md text-[10px] text-slate-300">
+                        <span className="px-2 py-0.5 bg-black/90 backdrop-blur-sm rounded-md text-[10px] text-slate-100 font-bold border border-slate-700/60 shadow-md">
                           {formatDynamicTime(post.timestamp, post.publishedTime)}
                         </span>
                       </div>
@@ -2848,14 +2905,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         {canModerate && (post.id.startsWith('rss-') || post.id.startsWith('web-')) && !isRssPostApproved(post, approvedRssIds) && (
                           <button
                             type="button"
-                            onClick={async (e) => {
+                            onClick={(e) => {
                               e.stopPropagation();
-                              const ok = await approveRssPost(post.id, post);
-                              if (ok) {
-                                showAppSuccess('यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!', 'खबर स्वीकृत');
-                              } else {
-                                showAppError('खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।', 'स्वीकृति विफल');
-                              }
+                              handleOpenApprovalModal(post);
                             }}
                             className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded flex items-center gap-1 transition cursor-pointer shrink-0 shadow animate-pulse"
                             title="इस RSS खबर को स्वीकृत करें"
@@ -2873,7 +2925,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         onClick={() => {
                           setDetailModalPost(post);
                         }}
-                        className="text-sm sm:text-base font-bold text-slate-900 dark:text-white hover:text-amber-600 dark:hover:text-amber-300 cursor-pointer transition-colors leading-snug line-clamp-2"
+                        className="text-sm sm:text-base font-bold text-slate-900 dark:text-white hover:text-amber-600 dark:hover:text-amber-300 cursor-pointer transition-colors leading-snug line-clamp-3 sm:line-clamp-4"
                         title="क्लिक करके पूरा विवरण देखें"
                       >
                         {cleanViewerHeadline(post.title)}
@@ -3367,14 +3419,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                       {(post.id.startsWith('rss-') || post.id.startsWith('web-')) && !isRssPostApproved(post, approvedRssIds) && (
                         <button
                           type="button"
-                          onClick={async (e) => {
+                          onClick={(e) => {
                             e.stopPropagation();
-                            const ok = await approveRssPost(post.id, post);
-                            if (ok) {
-                              showAppSuccess('यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!', 'खबर स्वीकृत');
-                            } else {
-                              showAppError('खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।', 'स्वीकृति विफल');
-                            }
+                            handleOpenApprovalModal(post);
                           }}
                           className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black rounded-lg flex items-center gap-1 transition cursor-pointer shadow animate-pulse"
                           title="इस RSS खबर को स्वीकृत करें और पाठकों के होम फ़ीड पर प्रकाशित करें"
@@ -3473,7 +3520,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         {renderCardActions(post)}
                       </div>
 
-                      <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/70 backdrop-blur-sm rounded text-[10px] text-slate-300">
+                      <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/90 backdrop-blur-sm rounded text-[10px] text-slate-100 font-bold border border-slate-700/60 shadow-md">
                         {formatDynamicTime(post.timestamp, post.publishedTime)}
                       </div>
                     </div>
@@ -3489,7 +3536,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           onClick={() => {
                             setDetailModalPost(post);
                           }}
-                          className="text-base font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-2 leading-snug"
+                          className="text-base font-bold text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors cursor-pointer line-clamp-3 sm:line-clamp-4 leading-snug"
                           title="क्लिक करके पूरा विवरण देखें"
                         >
                           {cleanViewerHeadline(post.title)}
@@ -3546,14 +3593,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     <div className="px-4 pb-2 flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={async (e) => {
+                        onClick={(e) => {
                           e.stopPropagation();
-                          const ok = await approveRssPost(post.id, post);
-                          if (ok) {
-                            showAppSuccess('यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!', 'खबर स्वीकृत');
-                          } else {
-                            showAppError('खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।', 'स्वीकृति विफल');
-                          }
+                          handleOpenApprovalModal(post);
                         }}
                         className="flex-1 py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition active:scale-98 cursor-pointer"
                         title="इस RSS खबर को स्वीकृत कर होम फ़ीड पर प्रकाशित करें"
@@ -5822,6 +5864,145 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       </section>
 
         {/* Floating Back to Top Button */}
+      {/* News Approval & Pre-Publish Configuration Modal */}
+      {pendingApprovalPost && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-black">
+                  <Check className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-white">
+                    स्वीकृति एवं प्रकाशन पूर्व सेटिंग्स
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    खबर प्रकाशित करने से पहले फोटो टैग और ग्राफिक लेआउट चुनें
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPendingApprovalPost(null)}
+                className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+              {/* News Preview Snippet */}
+              <div className="p-3 bg-slate-950/90 border border-slate-800 rounded-xl flex items-center gap-3">
+                <img
+                  src={getPostThumbnail(pendingApprovalPost)}
+                  alt=""
+                  className="w-14 h-14 object-cover rounded-lg border border-slate-700 shrink-0"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '/assets/internet_photo_search_fallback.jpg';
+                  }}
+                />
+                <div className="min-w-0 flex-1">
+                  <span className="text-[10px] text-amber-400 font-bold block truncate">
+                    स्रोत: {cleanViewerChannel(pendingApprovalPost.sourceChannel)}
+                  </span>
+                  <h4 className="text-xs sm:text-sm font-bold text-white line-clamp-2 leading-snug">
+                    {cleanViewerHeadline(pendingApprovalPost.title)}
+                  </h4>
+                </div>
+              </div>
+
+              {/* 1. Photo Tag Selection */}
+              <div className="space-y-2">
+                <label className="text-xs font-black text-amber-400 flex items-center gap-1.5">
+                  <span>🏷️</span>
+                  <span>फोटो टैग चयन (Photo Tag):</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'NONE' as const, label: 'कोई नहीं / सामान्य', desc: 'मूल स्रोत फोटो' },
+                    { id: 'AI_GENERATED' as const, label: 'AI GENERATED', desc: 'एआई जनरेटेड फोटो' },
+                    { id: 'SYMBOLIC' as const, label: 'प्रतीकात्मक फोटो', desc: 'सांकेतिक फोटो' },
+                  ].map((tag) => (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      onClick={() => setApprovalPhotoTag(tag.id)}
+                      className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                        approvalPhotoTag === tag.id
+                          ? 'border-amber-400 bg-amber-500/20 text-white shadow-sm ring-1 ring-amber-400/50'
+                          : 'border-slate-800 bg-slate-950/60 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      <span className="text-xs font-bold block text-white">{tag.label}</span>
+                      <span className="text-[10px] text-slate-400 mt-1 block">{tag.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2. Layout Mode Selection */}
+              <div className="space-y-2">
+                <label className="text-xs font-black text-amber-400 flex items-center gap-1.5">
+                  <span>📐</span>
+                  <span>लेआउट प्रारूप (Graphic Layout):</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: 'single' as CardLayout, label: 'सिंगल फोटो', desc: '1 मुख्य फोटो' },
+                    { id: 'double' as CardLayout, label: 'दो फोटो', desc: '50-50 दो फोटो' },
+                    { id: 'inset-circle' as CardLayout, label: '1 फोटो + 1 सर्कल', desc: 'फ्लोटिंग सर्कल' },
+                  ].map((lay) => (
+                    <button
+                      key={lay.id}
+                      type="button"
+                      onClick={() => setApprovalLayoutMode(lay.id)}
+                      className={`p-2.5 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between ${
+                        approvalLayoutMode === lay.id
+                          ? 'border-emerald-400 bg-emerald-500/20 text-white shadow-sm ring-1 ring-emerald-400/50'
+                          : 'border-slate-800 bg-slate-950/60 text-slate-400 hover:border-slate-700'
+                      }`}
+                    >
+                      <span className="text-xs font-bold block text-white">{lay.label}</span>
+                      <span className="text-[10px] text-slate-400 mt-1 block">{lay.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="px-5 py-3.5 border-t border-slate-800 bg-slate-950/90 flex flex-col sm:flex-row items-center gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setPendingApprovalPost(null)}
+                className="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition cursor-pointer"
+              >
+                रद्द करें
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenStudioFromApproval}
+                className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-slate-950 font-black text-xs rounded-xl transition cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>इस खबर से स्टूडियो खोलें</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmApproval}
+                className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-black text-xs rounded-xl transition cursor-pointer shadow-md flex items-center justify-center gap-1.5"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>स्वीकृत करें व प्रकाशित करें</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* WhatsApp Notification Center Modal for Admins */}
       {isWhatsAppCampaignOpen && (
         <WhatsAppNotificationCenterModal

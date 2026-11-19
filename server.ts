@@ -10579,7 +10579,7 @@ function cleanNewsDescription(rawText: string, maxParagraphs: number = 2): strin
 function cleanAndCraftHindiHeadline(rawHeadline: string, articleText: string): { title: string; summary: string; location: string } {
   let title = rawHeadline || "";
 
-  // 1. Remove clickbait / hype markers
+  // 1. Remove clickbait / hype markers & leading noise
   title = title
     .replace(/^(breaking\s*news\s*[:\-–—]|ब्रेकिंग\s*न्यूज़\s*[:\-–—]|एक्सक्लूसिव\s*[:\-–—]|exclusive\s*[:\-–—]|बड़ी\s*खबर\s*[:\-–—])/i, "")
     .replace(/(?:^|\s)(जानिए|देखिए|सुनिए|सन्न\s*रह\s*जाएंगे|हैरान\s*हो\s*जाएंगे|बड़ा\s*खुलासा|चौंकाने\s*वाला|वायरल\s*सच)\s*[:\-–—]?\s*/gu, " ")
@@ -10587,7 +10587,8 @@ function cleanAndCraftHindiHeadline(rawHeadline: string, articleText: string): {
     .replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, " ")
     .replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, "")
     .replace(/\s+जी(?=[,\s.!?।\n]|$)/gu, "")
-    .replace(/\.{2,}/g, "")
+    .replace(/[\.]{2,}/g, " ")
+    .replace(/[\u2026]/g, " ") // ellipsis char …
     .replace(/\s+/g, " ")
     .trim();
 
@@ -10605,16 +10606,38 @@ function cleanAndCraftHindiHeadline(rawHeadline: string, articleText: string): {
     }
   }
 
-  // 3. Keep concise: max 14-16 words for ideal 4:5 2-3 line capacity
+  // 3. Complete Headline Preservation (No blind 15-word truncation)
+  // Preserves full meaningful headline up to 26 words without chopping off sentences mid-phrase.
   const words = title.split(/\s+/).filter(Boolean);
-  if (words.length > 15) {
-    title = words.slice(0, 15).join(" ");
+  if (words.length > 26) {
+    let cutIdx = 25;
+    for (let i = 14; i <= 25; i++) {
+      if (/[,;।\-–—:]$/.test(words[i])) {
+        cutIdx = i;
+        break;
+      }
+    }
+    title = words.slice(0, cutIdx + 1).join(" ");
   }
 
-  // 4. Clean summary
-  let summary = articleText.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-  if (summary.length > 220) {
-    summary = summary.slice(0, 215) + "...";
+  // Remove trailing dangling connectors/prepositions to guarantee grammatical and semantic completion
+  title = title
+    .replace(/\s+(?:अब|हर|के|में|और|पर|से|को|का|की|ने|या|तक|हुए|हुई|गए|गई|था|थी|है|हैं|कि|तो|भी|सहित|द्वारा|बीच|दौरान|वाले|वाली|वाला|जारी|खारिज)$/u, "")
+    .replace(/[\s,\-–—:\.]+$/g, "")
+    .trim();
+
+  // 4. Clean & Complete Summary (Break cleanly on sentence boundaries)
+  let summary = articleText.replace(/<[^>]*>/g, " ").replace(/[\u2026]/g, " ").replace(/\s+/g, " ").trim();
+  if (summary.length > 260) {
+    const periodIdx = summary.lastIndexOf("।", 255);
+    if (periodIdx > 140) {
+      summary = summary.slice(0, periodIdx + 1).trim();
+    } else {
+      const spaceIdx = summary.lastIndexOf(" ", 250);
+      summary = (spaceIdx > 140 ? summary.slice(0, spaceIdx) : summary.slice(0, 250))
+        .replace(/\s+(?:और|के|में|पर|से|को|का|की|ने|कि|तथा|एवं)$/u, "")
+        .trim() + "।";
+    }
   }
   if (!summary) {
     summary = title;
@@ -10645,15 +10668,16 @@ async function processRssItemWithAiEditorial(
   try {
     const aiPromise = executeGeminiWithKeyPool(async (ai) => {
       const prompt = `आप एक वरिष्ठ, निष्पक्ष और तथ्यपरक हिंदी समाचार संपादक हैं।
-नीचे दी गई खबर के विवरण और शीर्षक का विश्लेषण करें और एक तथ्यपरक, स्पष्ट, संक्षिप्त और निष्पक्ष हिंदी हेडलाइन (Headline) व 2 वाक्यों का संक्षिप्त सार (Summary) तैयार करें।
+नीचे दी गई खबर के विवरण और शीर्षक का विश्लेषण करें और एक तथ्यपरक, स्पष्ट, पूर्ण और निष्पक्ष हिंदी हेडलाइन (Headline) व 2 वाक्यों का संक्षिप्त सार (Summary) तैयार करें।
 
 नियम:
 1. केवल तथ्यात्मक (factual), स्पष्ट (clear) और न्यूट्रल (neutral) भाषा का प्रयोग करें।
 2. "जानिए", "देखिए", "Breaking News:", "Exclusive", "बड़ा खुलासा" जैसे क्लिकबेट शब्दों का प्रयोग कतई न करें।
 3. अनावश्यक आदरसूचक शब्द (श्री, माननीय, जी) न लगाएं।
-4. हेडलाइन अधिकतम 12 से 14 शब्दों की हो (ताकि 4:5 ग्राफिक कार्ड में 2-3 लाइनों में सही दिखे)।
-5. आउटपुट केवल वैध JSON में दें:
-{"headline": "तथ्यात्मक हेडलाइन", "summary": "संक्षिप्त विवरण", "location": "जिले/शहर का नाम"}`;
+4. हेडलाइन एक पूर्ण, अर्थपूर्ण और व्याकरण की दृष्टि से शुद्ध वाक्य होनी चाहिए। कभी भी अधूरा वाक्य या अधूरा विचार न छोड़ें (14 से 22 शब्द)।
+5. हेडलाइन का कोई भी शब्द आधा-अधूरा न छूटे और वाक्य का अंत स्वाभाविक व पूर्ण हो।
+6. आउटपुट केवल वैध JSON में दें:
+{"headline": "तथ्यात्मक पूर्ण हेडलाइन", "summary": "संक्षिप्त स्पष्ट विवरण", "location": "जिले/शहर का नाम"}`;
 
       const res = await generateWithFallbackAndRetry(ai, GEMINI_MODELS_POOL.slice(0, 1), {
         contents: `${prompt}\n\nमूल शीर्षक: ${rawTitle}\nमूल विवरण: ${rawDesc.slice(0, 500)}`,
@@ -11405,22 +11429,32 @@ app.delete(["/api/admin/delete-rss-source/:id", "/api/admin/rss-sources/:id"], r
     }
     const { id } = req.params;
     if (!id) return res.status(400).json({ error: "Source ID is required" });
+    const decodedId = decodeURIComponent(id).trim();
     let sources = loadRssSourcesDatabase();
-    const targetSource = sources.find((s) => s.id === id);
-    sources = sources.filter((s) => s.id !== id);
+    const targetSource = sources.find((s) => s.id === id || s.id === decodedId || s.url === id || s.url === decodedId);
+    const matchedId = targetSource?.id || id;
+    sources = sources.filter((s) => s.id !== id && s.id !== decodedId && s.url !== id && s.url !== decodedId);
     recordDeletedRssSourceId(id);
+    recordDeletedRssSourceId(matchedId);
+    if (targetSource?.url) recordDeletedRssSourceId(targetSource.url);
     saveRssSourcesDatabase(sources);
 
     if (centralDb) {
       try {
-        await centralDb.deleteRssSource(id).catch(() => {});
-        if (centralDb.cache?.rssSources) centralDb.cache.rssSources.delete(id);
+        await centralDb.deleteRssSource(matchedId).catch(() => {});
+        if (centralDb.cache?.rssSources) centralDb.cache.rssSources.delete(matchedId);
+        if (targetSource?.id && targetSource.id !== matchedId) {
+          await centralDb.deleteRssSource(targetSource.id).catch(() => {});
+        }
       } catch {}
     }
     try {
       const adapter = require("./server_firestore_adapter.cjs");
       if (adapter && typeof adapter.firestoreDeleteDoc === 'function') {
-        await adapter.firestoreDeleteDoc("rss_sources", id).catch(() => {});
+        await adapter.firestoreDeleteDoc("rss_sources", matchedId).catch(() => {});
+        if (targetSource?.id && targetSource.id !== matchedId) {
+          await adapter.firestoreDeleteDoc("rss_sources", targetSource.id).catch(() => {});
+        }
       }
     } catch {}
 
@@ -11428,6 +11462,7 @@ app.delete(["/api/admin/delete-rss-source/:id", "/api/admin/rss-sources/:id"], r
     let posts = loadNewsDatabase();
     posts = posts.filter((p) => {
       if (p.id.startsWith(`rss-${id}`) || p.id.startsWith(`web-${id}`)) return false;
+      if (p.id.startsWith(`rss-${matchedId}`) || p.id.startsWith(`web-${matchedId}`)) return false;
       if (targetSource?.url && p.sourceUrl === targetSource.url) return false;
       return true;
     });

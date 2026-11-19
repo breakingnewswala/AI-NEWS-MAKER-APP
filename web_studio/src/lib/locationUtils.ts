@@ -38,6 +38,18 @@ export function formatCleanLocationText(rawLocation?: string | null): string {
     }
   }
 
+  // When state is accompanied by a city or district, abbreviate full state names
+  // e.g., 'ग्वालियर, मध्य प्रदेश' -> 'ग्वालियर, मप्र'; 'वाराणसी, उत्तर प्रदेश' -> 'वाराणसी, उप्र'
+  if (uniqueParts.length > 1) {
+    return uniqueParts.map((p) => {
+      if (p === 'मध्य प्रदेश') return 'मप्र';
+      if (p === 'उत्तर प्रदेश') return 'उप्र';
+      if (p === 'हिमाचल प्रदेश') return 'हिप्र';
+      if (p === 'आंध्र प्रदेश') return 'आप्र';
+      return p;
+    }).join(', ');
+  }
+
   return uniqueParts.join(', ');
 }
 

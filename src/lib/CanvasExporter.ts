@@ -2412,10 +2412,42 @@ async function drawGraphic001Canvas(
     ctx.fillRect(0, 0, width, height);
   }
 
-  // 2. TOP PHOTO AREA (Y = 0 to 61.33% Height, ~828px on 1080x1350, with ratio adjustments)
+  // 2. TOP PHOTO AREA (Dynamic Height based on headline line count, with ratio adjustments)
   const isStory = card.aspectRatio === '9:16';
   const isSquare = card.aspectRatio === '1:1';
-  const photoH = isStory ? Math.round(height * 0.64) : isSquare ? Math.round(height * 0.60) : Math.round(height * 0.6133);
+
+  // Pre-calculate Headline Canonical Layout to dynamically size Photo & Red Banner based on line count (Requirement 8)
+  const rawHeadlineForMetrics = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
+  const fontFamForMetrics = card.headlineFontFamily || 'Baloo 2';
+  const previewHeadlineLayout = computeCanonicalHeadlineLayout({
+    headline: rawHeadlineForMetrics,
+    highlightWords: card.highlightWords,
+    fontFamily: fontFamForMetrics,
+    templateId: 'graphic_001',
+    aspectRatio: card.aspectRatio,
+    userFontSize: card.headlineFontSize,
+    ctx,
+  });
+
+  const headlineLineCount = (previewHeadlineLayout.lines && previewHeadlineLayout.lines.length > 0) ? previewHeadlineLayout.lines.length : 3;
+  let bannerYFraction = 0.6133;
+  let bannerHFraction = 0.3067;
+  if (!isStory && !isSquare) {
+    if (headlineLineCount <= 2) {
+      bannerHFraction = 0.23;
+      bannerYFraction = 0.69;
+    } else if (headlineLineCount >= 4) {
+      bannerHFraction = 0.35;
+      bannerYFraction = 0.57;
+    } else {
+      bannerHFraction = 0.3067;
+      bannerYFraction = 0.6133;
+    }
+  }
+
+  const photoH = isStory ? Math.round(height * 0.64) : isSquare ? Math.round(height * 0.60) : Math.round(height * bannerYFraction);
+  const bannerY = Math.round(height * bannerYFraction);
+  const bannerH = Math.round(height * bannerHFraction);
   const hasValidMainPhoto = Boolean(
     card.images?.main &&
     card.images.main.trim().length > 0 &&
@@ -2584,6 +2616,48 @@ async function drawGraphic001Canvas(
           drawImageCover(ctx, mainImg, halfW + 2, halfH + 2, halfW - 2, halfH - 2, foCropX, foCropY, foZoom, canvasFilterStr);
         }
       }
+
+      // Draw Circle Photo Overlay if active (1 Photo + 1 Circle Overlay Photo)
+      if (layout === 'inset-circle' || card.showCirclePhoto || Boolean(card.images?.insetCircle) || Boolean(card.circlePhotoUrl)) {
+        const circleSrc = card.images?.insetCircle || card.circlePhotoUrl || card.images?.second || card.secondaryPhoto;
+        if (circleSrc) {
+          try {
+            const circleImg = await loadImage(getSafeCanvasPhotoUrl(circleSrc));
+            const cX = Math.round(((card.insetPosition?.x ?? 72) / 100) * width);
+            const cY = Math.round(((card.insetPosition?.y ?? 28) / 100) * photoH);
+            const cDiameter = Math.round(((card.circlePhotoScale || 28) / 100) * width);
+            const cRadius = Math.round(cDiameter / 2);
+
+            ctx.save();
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+            ctx.shadowBlur = 18;
+            ctx.shadowOffsetY = 6;
+            ctx.beginPath();
+            ctx.arc(cX, cY, cRadius, 0, Math.PI * 2);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fill();
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(cX, cY, cRadius - 3, 0, Math.PI * 2);
+            ctx.clip();
+
+            const cCrop = card.imagePositions?.insetCircle || { x: 50, y: 50, zoom: 1 };
+            const cCropX = (cCrop.x ?? 50) / 100;
+            const cCropY = (cCrop.y ?? 50) / 100;
+            const cZoom = Math.max(1, cCrop.zoom || 1);
+            drawImageCover(ctx, circleImg, cX - cRadius, cY - cRadius, cDiameter, cDiameter, cCropX, cCropY, cZoom, canvasFilterStr);
+            ctx.restore();
+
+            ctx.lineWidth = 6;
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.stroke();
+            ctx.restore();
+          } catch (cErr) {
+            console.warn('[CanvasExporter] Could not draw circle photo overlay:', cErr);
+          }
+        }
+      }
     } catch (e) {
       console.warn('Failed to draw photos for graphic_001:', e);
     }
@@ -2746,10 +2820,7 @@ async function drawGraphic001Canvas(
     ctx.restore();
   }
 
-  // 5. RED HEADLINE AREA (Height: 30.67%, starting at 61.33% and ending at 92.0% - Expanded by ~30px with 8% footer)
-  const bannerY = Math.round(height * 0.6133);
-  const bannerH = Math.round(height * 0.3067);
-
+  // 5. RED HEADLINE AREA (Dynamic Height & Position auto-adjusted to headline lines)
   const hasUserHeadline = Boolean(
     card.headline &&
     card.headline.trim().length > 0 &&
@@ -2829,6 +2900,7 @@ async function drawGraphic001Canvas(
       templateId: 'graphic_001',
       aspectRatio: card.aspectRatio,
       userFontSize: card.headlineFontSize,
+      customBounds: { x: 84, y: bannerY, width: 912, height: bannerH },
       ctx,
     });
 

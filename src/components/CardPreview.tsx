@@ -433,6 +433,24 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
   ]);
 
   // Canonical preview font size scaled proportionally to preview container (true miniature on mobile/tablet)
+  // Dynamic Red Headline Box Auto-Adjustment (Requirement 8)
+  const headlineLineCount = (canonicalLayout.lines && canonicalLayout.lines.length > 0) ? canonicalLayout.lines.length : 3;
+  const dynamicBannerMetrics = React.useMemo(() => {
+    if (card.aspectRatio === '9:16') {
+      return { top: '64%', height: '28%', photoBottom: 'calc(36% - 1.5px)' };
+    }
+    if (card.aspectRatio === '1:1') {
+      return { top: '60%', height: '32%', photoBottom: 'calc(40% - 1.5px)' };
+    }
+    // 4:5 Portrait default graphic
+    if (headlineLineCount <= 2) {
+      return { top: '69%', height: '23%', photoBottom: 'calc(31% - 1.5px)' };
+    }
+    if (headlineLineCount >= 4) {
+      return { top: '57%', height: '35%', photoBottom: 'calc(43% - 1.5px)' };
+    }
+    return { top: '61.33%', height: '30.67%', photoBottom: 'calc(38.67% - 1.5px)' };
+  }, [card.aspectRatio, headlineLineCount]);
   const effectivePreviewFontSize = Math.max(7, Math.round(canonicalLayout.fontSize * previewScale));
 
   // Render Canonical Headline Lines matching exported canvas layout pixel-for-pixel
@@ -842,7 +860,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           bottom: card.frameDesign === 'graphic_003'
             ? '0px'
             : card.frameDesign === 'graphic_001'
-            ? (card.aspectRatio === '9:16' ? 'calc(36% - 1.5px)' : card.aspectRatio === '1:1' ? 'calc(40% - 1.5px)' : 'calc(38.67% - 1.5px)')
+            ? dynamicBannerMetrics.photoBottom
             : card.frameDesign === 'graphic_002'
             ? '47%'
             : card.frameDesign === 'graphic_004'
@@ -911,8 +929,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         {/* Render photo layouts when user has uploaded a photo, otherwise show Neutral Blank Photo Area */}
         {hasUploadedPhoto ? (
           <>
-            {/* Layout 1: Single Image (Clear, Bright, Prominent) */}
-            {card.frameDesign !== 'graphic_004' && (card.layout === 'single' || !card.layout) && (
+            {/* Layout 1: Single Image (Clear, Bright, Prominent) & Inset Circle Base */}
+            {card.frameDesign !== 'graphic_004' && (card.layout === 'single' || !card.layout || card.layout === 'inset-circle') && (
               <div className="w-full h-full overflow-hidden relative">
             <img
               src={mainPhotoSrc}
@@ -1179,6 +1197,37 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             <span className="text-[11px] text-slate-300 font-['Noto_Sans_Devanagari'] mt-1 drop-shadow-sm">
               (यहाँ आपकी चुनी गई खबर की फोटो प्रदर्शित होगी)
             </span>
+          </div>
+        )}
+
+        {/* Circle Photo Overlay (1 Photo + 1 Circle Overlay Photo) */}
+        {(card.layout === 'inset-circle' || card.showCirclePhoto || Boolean(card.images?.insetCircle) || Boolean(card.circlePhotoUrl)) && (
+          <div
+            className="absolute z-15 pointer-events-none"
+            style={{
+              left: `${card.insetPosition?.x ?? 72}%`,
+              top: `${card.insetPosition?.y ?? 28}%`,
+              width: `${card.circlePhotoScale || 28}%`,
+              aspectRatio: '1/1',
+              transform: 'translate(-50%, -50%)',
+            }}
+          >
+            <div className="w-full h-full rounded-full border-[3px] sm:border-[4px] border-white shadow-2xl overflow-hidden bg-neutral-900 relative">
+              {(card.images?.insetCircle || card.circlePhotoUrl || card.images?.second || card.secondaryPhoto) ? (
+                <img
+                  src={card.images?.insetCircle || card.circlePhotoUrl || card.images?.second || card.secondaryPhoto}
+                  alt="Circle Inset"
+                  className="w-full h-full object-cover transition-all duration-150"
+                  style={insetCircleStyle}
+                  crossOrigin="anonymous"
+                  onError={handleImgError}
+                />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900/90 text-white/70 p-2 text-center text-[10px]">
+                  <span>सर्कल फोटो</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1453,14 +1502,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             </div>
           )}
 
-          {/* Red Headline Area (Top: 61.33%, Height: 30.67% - Expanded by ~30px with 8% footer):
+          {/* Red Headline Area (Dynamic Top & Height Auto-Adjusted to line count):
               - Always renders the authentic red banner overlay to ensure clean default slate.
               - When user writes a headline, text is rendered centered in real time. */}
           <div
             className="absolute inset-x-0 z-25 flex items-center justify-center px-4 sm:px-8 pointer-events-auto"
             style={{
-              top: '61.33%',
-              height: '30.67%',
+              top: dynamicBannerMetrics.top,
+              height: dynamicBannerMetrics.height,
               background: 'linear-gradient(180deg, #E20000 0%, #BA0000 50%, #900000 100%)',
               boxShadow: 'inset 0 2px 10px rgba(255, 255, 255, 0.25), inset 0 -2px 10px rgba(0, 0, 0, 0.4)',
             }}

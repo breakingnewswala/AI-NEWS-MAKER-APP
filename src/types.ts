@@ -324,6 +324,9 @@ export interface NewsCardData {
   images: NewsCardImages;
   imagePositions?: NewsCardImagePositions;
   insetPosition: { x: number; y: number }; // percentage coordinates
+  showCirclePhoto?: boolean; // 1 Photo + 1 Circle Overlay Photo
+  circlePhotoUrl?: string; // Direct URL for secondary circle photo
+  circlePhotoScale?: number; // Size percentage of card width (15% to 45%, default 28%)
   aspectRatio: AspectRatio;
   headlineFontSize: number;
   headlineAlign?: 'justify' | 'center' | 'left';
