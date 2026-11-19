@@ -1837,15 +1837,21 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const handleSaveChannelBranding = async () => {
     setIsSavingBranding(true);
     try {
+      const cleanEmail = (effectiveUser?.email || currentUser?.email || '').toLowerCase().trim();
+      const isBnwAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
+      const isAinewsAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com';
+      const defaultAdminLogo = isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : (isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : '');
+
       // Check account uniqueness and restricted brands
       const uniqCheck = checkAccountUniqueness({
         username: channelProfile.username,
         websiteUrl: channelProfile.websiteUrl,
         channelName: channelProfile.channelNameHi,
-        currentEmail: effectiveUser?.email || currentUser?.email,
+        currentEmail: cleanEmail,
       });
       if (!uniqCheck.valid) {
         showAppWarning(uniqCheck.error || 'यह यूज़रनेम, वेबसाइट या चैनल नाम उपयोग नहीं किया जा सकता!', 'अमान्य विवरण');
+        setIsSavingBranding(false);
         return;
       }
 
@@ -1853,18 +1859,10 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       const effectiveHeaderPng = isProOrVipUser ? customHeaderPng : '';
       const effectiveFooterPng = isProOrVipUser ? customFooterPng : '';
 
-      const isBnwAdmin = cleanEmail === 'breakingnewswala.com@gmail.com';
-      const isAinewsAdmin = cleanEmail === 'admin.ainewsmaker@gmail.com';
-      const defaultAdminLogo = isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : (isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : '');
-
       const userPngCandidate = channelProfile.channelLogoPngUrl || (channelProfile.channelLogoUrl?.endsWith('.gif') ? '' : channelProfile.channelLogoUrl) || '';
       const safeUserLogo = (!isAinewsAdmin && userPngCandidate.includes('ai_news_maker_logo.png')) ? '' : userPngCandidate;
 
-      const primaryPngLogo = isBnwAdmin
-        ? '/assets/breaking_news_wala_logo.png'
-        : isAinewsAdmin
-          ? '/assets/ai_news_maker_logo.png'
-          : (safeUserLogo || defaultAdminLogo || '');
+      const primaryPngLogo = safeUserLogo || defaultAdminLogo || (isBnwAdmin ? '/assets/breaking_news_wala_logo.png' : isAinewsAdmin ? '/assets/ai_news_maker_logo.png' : '');
       const finalPhone = (channelProfile.whatsappNumber || channelProfile.mobileNumber || '').trim();
 
       const rawDistrict = (reporterDistrict || channelProfile.district || channelProfile.location || '').trim();
@@ -1888,6 +1886,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         accountType: channelProfile.accountType || 'channel',
         state: reporterState || channelProfile.state || '',
         district: finalDistrict,
+        city: (channelProfile.city || '').trim(),
         location: finalDistrict,
         defaultLocation: defaultLoc,
         whatsappNumber: finalPhone,
@@ -1910,7 +1909,6 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       localStorage.setItem('app_channel_name_en', channelProfile.channelNameEn);
       localStorage.setItem('user_profile_data', JSON.stringify(updatedProfile));
 
-      const cleanEmail = (effectiveUser?.email || currentUser?.email || '').toLowerCase().trim();
       if (cleanEmail) {
         localStorage.setItem(`user_profile_${cleanEmail}`, JSON.stringify(updatedProfile));
       }
@@ -1983,6 +1981,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           channelLogoGifUrl: channelProfile.channelLogoGifUrl || undefined,
           channelLogoType: channelProfile.channelLogoType || (channelProfile.channelLogoGifUrl ? 'gif' : 'png'),
           district: finalDistrict,
+          city: (channelProfile.city || '').trim(),
           location: finalDistrict,
           state: reporterState || channelProfile.state || '',
           address: channelProfile.address || '',
@@ -2027,6 +2026,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             ...p,
             ...savedProf,
             district: savedProf.district || savedProf.location || p.district,
+            city: savedProf.city || p.city || '',
             location: savedProf.location || savedProf.district || p.location,
             socialIcons: savedProf.socialIcons || p.socialIcons,
             socialLinks: savedProf.socialLinks || p.socialLinks,
@@ -3266,8 +3266,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
               </div>
 
-              {/* State, District & Username (Cascading Dropdowns per Part 17) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+              {/* State, District, City & Username (Cascading Dropdowns) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1.5">
                     <MapPin className="w-3.5 h-3.5 text-amber-400" />
@@ -3283,6 +3283,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                         ...p,
                         state: newState,
                         district: '',
+                        city: '',
                         location: '',
                         defaultLocation: '',
                       }));
@@ -3335,6 +3336,26 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
 
                 <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-amber-400" />
+                    <span>शहर / कस्बा / तहसील (City)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={channelProfile.city || ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setChannelProfile((p) => ({
+                        ...p,
+                        city: val,
+                      }));
+                    }}
+                    placeholder="उदा. भोपाल, जबलपुर या तहसील"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center justify-between">
                     <span>सोशल यूज़रनेम (@username)</span>
                     {isLockedForUser && (
@@ -3352,7 +3373,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                       !isLockedForUser &&
                       setChannelProfile((p) => ({
                         ...p,
-                        username: e.target.value.replace(/[^a-zA-Z0-9._]/g, ''),
+                        username: e.target.value.replace(/\s+/g, '').replace(/[^a-zA-Z0-9._]/g, ''),
                       }))
                     }
                     placeholder="ainewsmaker"

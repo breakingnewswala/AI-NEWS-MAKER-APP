@@ -13170,7 +13170,7 @@ app.use((req, res, next) => {
   res.setHeader("Content-Security-Policy", "frame-ancestors 'self' https://*.ainewsmaker.online https://ainewsmaker.online;");
   res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, x-auth-token, x-admin-key, x-user-email, x-admin-email, x-user-id, x-admin-id");
@@ -15334,6 +15334,15 @@ function isArticleDeletedByTombstone(article, tombstones) {
   }
   return false;
 }
+function isDummyWirePost(p) {
+  if (!p) return true;
+  const channel = String(p.channelName || p.source || "").toLowerCase();
+  const id = String(p.id || "").toLowerCase();
+  if (channel.includes("wire") || channel.includes("e2e") || id.includes("wire") || id.startsWith("test_")) {
+    return true;
+  }
+  return false;
+}
 function loadNewsDatabase() {
   let diskPosts = [];
   try {
@@ -15343,7 +15352,7 @@ function loadNewsDatabase() {
         const raw = import_fs2.default.readFileSync(loc, "utf-8");
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const cleaned = parsed.filter((p) => p && p.id && p.id !== "[object Object]" && p.title && !String(p.id).startsWith("live-post-"));
+          const cleaned = parsed.filter((p) => p && p.id && p.id !== "[object Object]" && p.title && !String(p.id).startsWith("live-post-") && !isDummyWirePost(p));
           if (cleaned.length > 0) {
             diskPosts = cleaned;
             break;
@@ -15361,11 +15370,11 @@ function loadNewsDatabase() {
     }
     const deletedIds2 = loadDeletedNewsIds();
     const list = Array.from(centralDb.cache.news.values());
-    const cleaned = list.filter((p) => p && p.id && p.id !== "[object Object]" && p.title && !String(p.id).startsWith("live-post-") && p.id !== "news_1793391037097" && p.id !== "post-1794408875881" && !deletedIds2.has(p.id));
+    const cleaned = list.filter((p) => p && p.id && p.id !== "[object Object]" && p.title && !String(p.id).startsWith("live-post-") && p.id !== "news_1793391037097" && p.id !== "post-1794408875881" && !deletedIds2.has(p.id) && !isDummyWirePost(p));
     return cleaned;
   }
   const deletedIds = loadDeletedNewsIds();
-  return diskPosts.filter((p) => p && p.id && p.id !== "news_1793391037097" && p.id !== "post-1794408875881" && !deletedIds.has(p.id));
+  return diskPosts.filter((p) => p && p.id && p.id !== "news_1793391037097" && p.id !== "post-1794408875881" && !deletedIds.has(p.id) && !isDummyWirePost(p));
 }
 function saveNewsDatabase(posts) {
   const cleaned = posts.filter((p) => p && p.id);
@@ -20370,6 +20379,43 @@ function saveAdminReadNotificationIds(ids) {
   } catch {
   }
 }
+var ADMIN_NOTIFS_DISMISSED_FILE = import_path2.default.join(process.cwd(), "admin_notifications_dismissed_db.json");
+function loadAdminDismissedNotificationIds() {
+  if (centralDb && centralDb.useFirestore) {
+    if (centralDb.cache.systemConfig.has("admin_notifs_dismissed")) {
+      const list = centralDb.cache.systemConfig.get("admin_notifs_dismissed");
+      if (Array.isArray(list)) return new Set(list);
+    }
+  }
+  try {
+    if (import_fs2.default.existsSync(ADMIN_NOTIFS_DISMISSED_FILE)) {
+      const raw = import_fs2.default.readFileSync(ADMIN_NOTIFS_DISMISSED_FILE, "utf-8");
+      const list = JSON.parse(raw);
+      if (Array.isArray(list)) return new Set(list);
+    }
+  } catch {
+  }
+  return /* @__PURE__ */ new Set();
+}
+function saveAdminDismissedNotificationIds(ids) {
+  const arr = Array.from(ids);
+  if (centralDb && centralDb.useFirestore) {
+    centralDb.cache.systemConfig.set("admin_notifs_dismissed", arr);
+  }
+  try {
+    const locs = resolveAllDatabaseLocations("admin_notifications_dismissed_db.json");
+    const jsonStr = JSON.stringify(arr, null, 2);
+    for (const loc of locs) {
+      try {
+        const dir = import_path2.default.dirname(loc);
+        if (!import_fs2.default.existsSync(dir)) import_fs2.default.mkdirSync(dir, { recursive: true });
+        import_fs2.default.writeFileSync(loc, jsonStr, "utf-8");
+      } catch {
+      }
+    }
+  } catch {
+  }
+}
 var USER_FAVORITES_FILE = import_path2.default.join(process.cwd(), "user_favorites_db.json");
 var USER_REMINDERS_FILE = import_path2.default.join(process.cwd(), "user_reminders_db.json");
 function loadUserFavoritesDatabase() {
@@ -20616,15 +20662,18 @@ app.get("/api/admin/notifications", requireAdminMiddleware, (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
     const readIds = loadAdminReadNotificationIds();
+    const dismissedIds = loadAdminDismissedNotificationIds();
     const newsDb = loadNewsDatabase();
     const rssItems = [];
     const oneWeekAgo = Date.now() - 7 * 864e5;
     for (const p of newsDb) {
+      if (isDummyWirePost(p)) continue;
       const isStrictRss = p.source === "rss" || p.category === "RSS" || p.id.startsWith("rss_") || p.sourceUrl?.includes("rss");
       const isBreakingOrUserPublished = Boolean(p.breaking || p.type === "breaking" || p.isPublishedByUser);
       const timeVal = typeof p.timestamp === "number" ? p.timestamp : new Date(p.timestamp || 0).getTime();
       if (isStrictRss && !isBreakingOrUserPublished && timeVal >= oneWeekAgo) {
         const eventId = `admin_rss_${p.id}`;
+        if (dismissedIds.has(eventId)) continue;
         rssItems.push({
           id: eventId,
           rawId: p.id,
@@ -20650,6 +20699,7 @@ app.get("/api/admin/notifications", requireAdminMiddleware, (req, res) => {
     const supportItems = [];
     for (const s of supportDb) {
       const eventId = `admin_support_${s.id}`;
+      if (dismissedIds.has(eventId)) continue;
       const timeVal = s.timestamp || (s.createdAt ? new Date(s.createdAt).getTime() : Date.now());
       supportItems.push({
         id: eventId,
@@ -20677,6 +20727,7 @@ app.get("/api/admin/notifications", requireAdminMiddleware, (req, res) => {
     const logoItems = [];
     for (const l of logoDb) {
       const eventId = `admin_logo_${l.id}`;
+      if (dismissedIds.has(eventId)) continue;
       const timeVal = l.timestamp || (l.createdAt ? new Date(l.createdAt).getTime() : Date.now());
       logoItems.push({
         id: eventId,
@@ -20705,6 +20756,7 @@ app.get("/api/admin/notifications", requireAdminMiddleware, (req, res) => {
     const reqItems = [];
     for (const r of limitDb) {
       const eventId = `admin_req_${r.id || `${r.email}_${r.timestamp}`}`;
+      if (dismissedIds.has(eventId)) continue;
       const timeVal = r.timestamp || (r.createdAt ? new Date(r.createdAt).getTime() : Date.now());
       reqItems.push({
         id: eventId,
@@ -20838,42 +20890,64 @@ app.post("/api/admin/news/publish-rss", requireAdminMiddleware, (req, res) => {
 app.post("/api/admin/notifications/mark-read", requireAdminMiddleware, (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
-    const { id, all, ids, category } = req.body || {};
+    const { id, all, ids, category, clear } = req.body || {};
     const readIds = loadAdminReadNotificationIds();
+    const dismissedIds = loadAdminDismissedNotificationIds();
     if (id) {
       readIds.add(String(id));
+      if (clear) dismissedIds.add(String(id));
       if (String(id).startsWith("admin_sys_")) {
         const rawId = String(id).replace("admin_sys_", "");
         readIds.add(rawId);
+        if (clear) dismissedIds.add(rawId);
       }
     }
     if (Array.isArray(ids)) {
       ids.forEach((i) => {
         readIds.add(String(i));
+        if (clear) dismissedIds.add(String(i));
         if (String(i).startsWith("admin_sys_")) {
-          readIds.add(String(i).replace("admin_sys_", ""));
+          const rawId = String(i).replace("admin_sys_", "");
+          readIds.add(rawId);
+          if (clear) dismissedIds.add(rawId);
         }
       });
     }
     if (all) {
       const matchCat = (targetCat) => !category || category === "all" || category === targetCat;
       if (matchCat("rss")) {
-        loadNewsDatabase().forEach((p) => readIds.add(`admin_rss_${p.id}`));
+        loadNewsDatabase().forEach((p) => {
+          readIds.add(`admin_rss_${p.id}`);
+          if (clear) dismissedIds.add(`admin_rss_${p.id}`);
+        });
       }
       if (matchCat("support")) {
-        loadSupportRequestsDatabase().forEach((s) => readIds.add(`admin_support_${s.id}`));
+        loadSupportRequestsDatabase().forEach((s) => {
+          readIds.add(`admin_support_${s.id}`);
+          if (clear) dismissedIds.add(`admin_support_${s.id}`);
+        });
       }
       if (matchCat("logo")) {
-        loadLogoRequestsDatabase().forEach((l) => readIds.add(`admin_logo_${l.id}`));
+        loadLogoRequestsDatabase().forEach((l) => {
+          readIds.add(`admin_logo_${l.id}`);
+          if (clear) dismissedIds.add(`admin_logo_${l.id}`);
+        });
       }
       if (matchCat("requests")) {
-        loadLimitIncreaseRequests().forEach((r) => readIds.add(`admin_req_${r.id || `${r.email}_${r.timestamp}`}`));
+        loadLimitIncreaseRequests().forEach((r) => {
+          readIds.add(`admin_req_${r.id || `${r.email}_${r.timestamp}`}`);
+          if (clear) dismissedIds.add(`admin_req_${r.id || `${r.email}_${r.timestamp}`}`);
+        });
       }
       try {
         const notifs = loadNotificationsDatabase();
         notifs.forEach((n) => {
           readIds.add(String(n.id));
           readIds.add(`admin_sys_${n.id}`);
+          if (clear) {
+            dismissedIds.add(String(n.id));
+            dismissedIds.add(`admin_sys_${n.id}`);
+          }
           n.unread = false;
         });
         saveNotificationsDatabase(notifs);
@@ -20881,7 +20955,10 @@ app.post("/api/admin/notifications/mark-read", requireAdminMiddleware, (req, res
       }
     }
     saveAdminReadNotificationIds(readIds);
-    return res.json({ success: true, totalRead: readIds.size, message: "\u0938\u092D\u0940 \u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u092A\u0922\u093C\u0947 \u0917\u090F \u092E\u093E\u0930\u094D\u0915 \u0915\u0930 \u0926\u093F\u090F \u0917\u090F\u0964" });
+    if (clear) {
+      saveAdminDismissedNotificationIds(dismissedIds);
+    }
+    return res.json({ success: true, totalRead: readIds.size, totalDismissed: dismissedIds.size, message: clear ? "\u0938\u092D\u0940 \u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u092A\u0942\u0930\u0940 \u0924\u0930\u0939 \u0938\u0947 \u0915\u094D\u0932\u0940\u0928 \u0915\u0930 \u0926\u093F\u090F \u0917\u090F\u0964" : "\u0938\u092D\u0940 \u0928\u094B\u091F\u093F\u092B\u093F\u0915\u0947\u0936\u0928 \u092A\u0922\u093C\u0947 \u0917\u090F \u092E\u093E\u0930\u094D\u0915 \u0915\u0930 \u0926\u093F\u090F \u0917\u090F\u0964" });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
@@ -22329,31 +22406,29 @@ app.delete(["/api/admin/delete-rss-source/:id", "/api/admin/rss-sources/:id"], r
     sources = sources.filter((s) => s.id !== id);
     recordDeletedRssSourceId(id);
     saveRssSourcesDatabase(sources);
-    if (targetSource) {
-      let posts = loadNewsDatabase();
-      posts = posts.filter((p) => {
-        if (p.id.startsWith(`rss-${id}`) || p.id.startsWith(`web-${id}`)) return false;
-        if (targetSource.url && p.sourceUrl === targetSource.url) return false;
-        return true;
-      });
-      saveNewsDatabase(posts);
-      if (centralDb) {
-        try {
-          await centralDb.deleteRssSource(id).catch(() => {
-          });
-          if (centralDb.cache?.rssSources) centralDb.cache.rssSources.delete(id);
-        } catch {
-        }
-      }
+    if (centralDb) {
       try {
-        const adapter = require_server_firestore_adapter();
-        if (adapter && typeof adapter.firestoreDeleteDoc === "function") {
-          await adapter.firestoreDeleteDoc("rss_sources", id).catch(() => {
-          });
-        }
+        await centralDb.deleteRssSource(id).catch(() => {
+        });
+        if (centralDb.cache?.rssSources) centralDb.cache.rssSources.delete(id);
       } catch {
       }
     }
+    try {
+      const adapter = require_server_firestore_adapter();
+      if (adapter && typeof adapter.firestoreDeleteDoc === "function") {
+        await adapter.firestoreDeleteDoc("rss_sources", id).catch(() => {
+        });
+      }
+    } catch {
+    }
+    let posts = loadNewsDatabase();
+    posts = posts.filter((p) => {
+      if (p.id.startsWith(`rss-${id}`) || p.id.startsWith(`web-${id}`)) return false;
+      if (targetSource?.url && p.sourceUrl === targetSource.url) return false;
+      return true;
+    });
+    saveNewsDatabase(posts);
     return res.json({ success: true, sources });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -23948,6 +24023,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       email: profile.email || existing.email || "",
       state: profile.state !== void 0 && profile.state !== null && String(profile.state).trim() !== "" ? String(profile.state).trim() : existing.state || "",
       district: profile.district !== void 0 && profile.district !== null && String(profile.district).trim() !== "" ? String(profile.district).trim() : existing.district || "",
+      city: profile.city !== void 0 && profile.city !== null && String(profile.city).trim() !== "" ? String(profile.city).trim() : existing.city || "",
       location: profile.location !== void 0 && profile.location !== null && String(profile.location).trim() !== "" ? String(profile.location).trim() : existing.location || "",
       channelNameHi: (() => {
         const raw = profile.channelNameHi || profile.channelName || existing.channelNameHi || "";
@@ -23957,8 +24033,8 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
         return raw;
       })(),
       channelNameEn: profile.channelNameEn || existing.channelNameEn || "",
-      channelLogoUrl: isMasterAdminEmail2 ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : profile.channelLogoUrl || existing.channelLogoUrl || "",
-      channelLogoPngUrl: isMasterAdminEmail2 ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : profile.channelLogoPngUrl || profile.channelLogoUrl || existing.channelLogoPngUrl || existing.channelLogoUrl || "",
+      channelLogoUrl: profile.channelLogoUrl || existing.channelLogoUrl || (isMasterAdminEmail2 ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : ""),
+      channelLogoPngUrl: profile.channelLogoPngUrl || profile.channelLogoUrl || existing.channelLogoPngUrl || existing.channelLogoUrl || (isMasterAdminEmail2 ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : ""),
       channelLogoGifUrl: profile.channelLogoGifUrl || existing.channelLogoGifUrl,
       channelLogoType: profile.channelLogoType || existing.channelLogoType || "png",
       mobileNumber: finalMobile || existing.mobileNumber || "",
@@ -29176,7 +29252,7 @@ app.post("/api/admin/api-keys/free", requireAdminMiddleware, async (req, res) =>
     }
   });
 });
-app.delete("/api/admin/api-keys/free/:id", requireMasterAdminMiddleware, async (req, res) => {
+app.delete("/api/admin/api-keys/free/:id", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924" });
   }
@@ -29249,7 +29325,7 @@ app.delete("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req,
   logAdminAudit(adminEmail, "DELETE_PAID_API_KEY", "paid_key");
   return res.json({ success: true, message: "\u092A\u0947\u0921 VIP API Key \u0939\u091F\u093E \u0926\u0940 \u0917\u0908\u0964" });
 });
-app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, res) => {
+app.post("/api/admin/api-keys/test", requireAdminMiddleware, async (req, res) => {
   if (!isAuthorizedAdmin(req)) {
     return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924" });
   }
@@ -29319,7 +29395,7 @@ async function probeGeminiKeyZeroQuota(apiKey) {
           httpOptions: { headers: { "User-Agent": "ai-news-maker-health-probe-1token" } }
         });
         const timeoutCall = new Promise(
-          (_, reject) => setTimeout(() => reject(new Error("Probe token timeout after 5s")), 5e3)
+          (_, reject) => setTimeout(() => reject(new Error("Probe token timeout after 12s")), 12e3)
         );
         let probeCall = testAiProbe.models.generateContent({
           model: "gemini-3.1-flash-lite",

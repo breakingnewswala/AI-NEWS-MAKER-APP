@@ -166,7 +166,24 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
   const [templateSendError, setTemplateSendError] = useState<string | null>(null);
 
   const getApprovedTemplatesList = () => {
-    return templates.filter((t) => (t.status || '').toUpperCase() === 'APPROVED');
+    const list = templates.filter((t) => (t.status || '').toUpperCase() === 'APPROVED');
+    if (list.length > 0) return list;
+    return [
+      {
+        name: 'ai_news_update',
+        language: 'hi',
+        category: 'MARKETING',
+        status: 'APPROVED',
+        bodyText: '🚨 *{{1}}*\n\n{{2}}\n\n✨ AI News Maker अपडेट',
+      },
+      {
+        name: 'ai_news_breaking',
+        language: 'hi',
+        category: 'MARKETING',
+        status: 'APPROVED',
+        bodyText: '⚡ *ब्रेकिंग न्यूज़*: {{1}}\n\n{{2}}\n\n📲 अधिक जानकारी के लिए विजिट करें: {{3}}',
+      },
+    ];
   };
 
   const extractTemplateParamIndices = (): number[] => {
@@ -214,7 +231,7 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
 
     try {
       const tplList = getApprovedTemplatesList();
-      const activeTpl = tplList.find((t) => t.name === activeTemplateName) || tplList[0];
+      const activeTpl = tplList.find((t) => t.name === activeTemplateName) || tplList[0] || { name: activeTemplateName || 'ai_news_update', language: 'hi', category: 'MARKETING' };
       const paramsArray = Object.keys(templateParamValues)
         .sort((a, b) => Number(a) - Number(b))
         .map((k) => templateParamValues[Number(k)] || '');
@@ -226,8 +243,8 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
           ...getAuthHeaders(),
         },
         body: JSON.stringify({
-          templateName: activeTemplateName,
-          templateLang: activeTpl.language || 'hi',
+          templateName: activeTemplateName || activeTpl?.name || 'ai_news_update',
+          templateLang: activeTpl?.language || 'hi',
           parameters: paramsArray,
           customPreviewText: renderTemplateLivePreview(),
         }),
@@ -922,6 +939,11 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
       setIsSubmittingTemplate(false);
     }
   };
+
+  // Initial templates preload
+  useEffect(() => {
+    fetchTemplates();
+  }, []);
 
   // Switch tabs loader
   useEffect(() => {

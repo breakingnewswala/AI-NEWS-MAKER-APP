@@ -1404,10 +1404,20 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               >
                 {card.customLogoUrl ? (
                   <img
-                    src={card.customLogoUrl}
+                    src={getProxiedImageUrl(card.customLogoUrl)}
                     alt="Channel Logo"
                     className="w-full h-full object-contain filter drop-shadow-[0_2px_8px_rgba(0,0,0,0.7)] pointer-events-none"
                     crossOrigin="anonymous"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      const fallback = (card.channelNameEn?.includes('AI News Maker') || card.brandName?.includes('एआई न्यूज़'))
+                        ? '/assets/ai_news_maker_logo.png'
+                        : '/assets/breaking_news_wala_logo.png';
+                      if (!target.src.includes(fallback)) {
+                        target.crossOrigin = null as any;
+                        target.src = fallback;
+                      }
+                    }}
                   />
                 ) : (
                   <span className="text-white font-black text-lg sm:text-xl md:text-2xl tracking-tighter drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] font-['Poppins'] pointer-events-none">
@@ -1557,9 +1567,18 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 >
                   {card.customLogoUrl ? (
                     <img
-                      src={card.customLogoUrl}
+                      src={getProxiedImageUrl(card.customLogoUrl)}
                       alt="Channel Logo"
                       className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)] bg-transparent"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        const fallback = (card.channelNameEn?.includes('AI News Maker') || card.brandName?.includes('एआई न्यूज़'))
+                          ? '/assets/ai_news_maker_logo.png'
+                          : '/assets/breaking_news_wala_logo.png';
+                        if (!target.src.includes(fallback)) {
+                          target.src = fallback;
+                        }
+                      }}
                     />
                   ) : (
                     <div className="border border-[#EA580C] rounded-lg px-2.5 sm:px-3 py-0.5 sm:py-1 bg-black/40 backdrop-blur-xs flex items-center justify-center shadow-md">
@@ -1681,9 +1700,18 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               >
                 {card.customLogoUrl ? (
                   <img
-                    src={card.customLogoUrl}
+                    src={getProxiedImageUrl(card.customLogoUrl)}
                     alt="Channel Logo"
                     className="max-h-12 sm:max-h-16 w-auto object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)] bg-transparent"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      const fallback = (card.channelNameEn?.includes('AI News Maker') || card.brandName?.includes('एआई न्यूज़'))
+                        ? '/assets/ai_news_maker_logo.png'
+                        : '/assets/breaking_news_wala_logo.png';
+                      if (!target.src.includes(fallback)) {
+                        target.src = fallback;
+                      }
+                    }}
                   />
                 ) : (
                   <div className="border border-amber-400 rounded-lg px-2.5 sm:px-3 py-0.5 sm:py-1 bg-black/40 backdrop-blur-xs flex items-center justify-center shadow-lg">
@@ -1769,8 +1797,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 >
                   {card.customLogoUrl ? (
                     <img
-                      src={card.customLogoUrl}
+                      src={getProxiedImageUrl(card.customLogoUrl)}
                       alt="Channel Logo"
+                      onError={(e) => {
+                        const target = e.currentTarget as HTMLImageElement;
+                        if (!target.src.includes('/assets/ai_news_maker_logo.png') && !target.src.includes('/assets/breaking_news_wala_logo.png')) {
+                          target.src = '/assets/ai_news_maker_logo.png';
+                        }
+                      }}
                       className="max-h-6 sm:max-h-8 w-auto object-contain drop-shadow-xs bg-transparent"
                     />
                   ) : (
@@ -1896,8 +1930,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               >
                 {card.customLogoUrl ? (
                   <img
-                    src={card.customLogoUrl}
+                    src={getProxiedImageUrl(card.customLogoUrl)}
                     alt="Logo"
+                    onError={(e) => {
+                      const target = e.currentTarget as HTMLImageElement;
+                      if (!target.src.includes('/assets/ai_news_maker_logo.png') && !target.src.includes('/assets/breaking_news_wala_logo.png')) {
+                        target.src = '/assets/ai_news_maker_logo.png';
+                      }
+                    }}
                     className="h-12 sm:h-16 w-auto object-contain max-w-[150px] bg-transparent"
                   />
                 ) : (
@@ -3476,8 +3516,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   }}
                 >
                   <img
-                    src={card.testLogoUrl || card.customLogoUrl || (card as any).channelLogo || '/assets/breaking_news_wala_logo.png'}
+                    src={getProxiedImageUrl(card.testLogoUrl || card.customLogoUrl || (card as any).channelLogo || '/assets/ai_news_maker_logo.png')}
                     alt="Channel Logo"
+                    onError={(e) => {
+                      const target = e.currentTarget as HTMLImageElement;
+                      if (!target.src.includes('/assets/ai_news_maker_logo.png') && !target.src.includes('/assets/breaking_news_wala_logo.png')) {
+                        target.src = '/assets/ai_news_maker_logo.png';
+                      }
+                    }}
                     className="max-w-full max-h-full object-contain"
                   />
                 </div>

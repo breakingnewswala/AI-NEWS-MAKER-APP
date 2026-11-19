@@ -459,6 +459,7 @@ export interface ChannelProfile {
   location?: string;
   defaultLocation?: string;
   state?: string;
+  city?: string;
   accountType?: 'channel' | 'reporter';
   address?: string;
   pincode?: string;

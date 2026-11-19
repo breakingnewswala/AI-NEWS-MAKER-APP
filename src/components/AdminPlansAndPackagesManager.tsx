@@ -490,28 +490,29 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
           id,
           all: markAll,
           category,
+          clear: markAll,
           adminEmail,
         }),
       });
       if (res.ok) {
         if (markAll) {
           if (category && category !== 'all') {
-            setAdminNotifications((prev) => prev.map((n) => (n.category === category ? { ...n, unread: false } : n)));
+            setAdminNotifications((prev) => prev.filter((n) => n.category !== category));
             setAdminNotifCounts((prev) => ({
               ...prev,
               [category]: 0,
               all: Math.max(0, prev.all - (prev[category as keyof typeof prev] || 0)),
             }));
           } else {
-            setAdminNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
+            setAdminNotifications([]);
             setAdminNotifCounts({ all: 0, rss: 0, support: 0, logo: 0, requests: 0 });
           }
-          setAdminNotifActionMsg('✅ सभी नोटिफिकेशन पढ़े गए मार्क कर दिए गए');
+          setAdminNotifActionMsg('✅ सभी नोटिफिकेशन क्लीन कर दिए गए');
           try {
             window.dispatchEvent(new Event('admin_notifications_cleared'));
           } catch {}
         } else if (id) {
-          setAdminNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)));
+          setAdminNotifications((prev) => prev.filter((n) => n.id !== id));
           const target = adminNotifications.find((n) => n.id === id);
           if (target && target.unread) {
             setAdminNotifCounts((prev) => ({
@@ -1293,6 +1294,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     const handlePlansUpdated = () => setPlans(getPlansCatalog());
     const handlePromoUpdated = () => setPromoCodes(getPromoCodes());
     const handleUsersUpdated = () => setPlanUsers(getPlanUsers());
+    const handleRssUpdated = (e: any) => {
+      if (Array.isArray(e.detail)) {
+        setRssSources(e.detail);
+      }
+    };
     const handleAuthSuccess = () => {
       setRssMsg((prev) => {
         if (prev?.type === 'error' && (prev.text.includes('401') || prev.text.includes('प्रमाणीकरण'))) {
@@ -1302,7 +1308,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       });
       handleSyncUsers();
       fetchAdminRssSourcesFromBackend().then((sources) => {
-        if (Array.isArray(sources) && sources.length > 0) {
+        if (Array.isArray(sources)) {
           setRssSources(sources);
         }
       }).catch(() => {});
@@ -1310,10 +1316,16 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     window.addEventListener('ai_news_plans_updated', handlePlansUpdated);
     window.addEventListener('ai_news_promo_codes_changed', handlePromoUpdated);
     window.addEventListener('ai_news_plan_users_changed', handleUsersUpdated);
+    window.addEventListener('ai_news_admin_rss_sources_updated', handleRssUpdated);
     window.addEventListener('ai_news_admin_auth_success', handleAuthSuccess);
 
     // Initial background sync
     handleSyncUsers();
+    fetchAdminRssSourcesFromBackend().then((sources) => {
+      if (Array.isArray(sources)) {
+        setRssSources(sources);
+      }
+    }).catch(() => {});
 
     // 10-second real-time synchronization interval
     const interval = setInterval(() => {
@@ -1332,6 +1344,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       window.removeEventListener('ai_news_plans_updated', handlePlansUpdated);
       window.removeEventListener('ai_news_promo_codes_changed', handlePromoUpdated);
       window.removeEventListener('ai_news_plan_users_changed', handleUsersUpdated);
+      window.removeEventListener('ai_news_admin_rss_sources_updated', handleRssUpdated);
       window.removeEventListener('ai_news_admin_auth_success', handleAuthSuccess);
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
@@ -2520,10 +2533,10 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                     type="button"
                     onClick={() => handleMarkAdminNotifRead(undefined, true, adminNotifFilter)}
                     className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold rounded-lg border border-slate-700 transition cursor-pointer flex items-center gap-1.5"
-                    title="सभी को पढ़ा हुआ मार्क करें"
+                    title="सभी अलर्ट को पूरी तरह क्लीन करें"
                   >
                     <Check className="w-3.5 h-3.5" />
-                    <span>सभी पढ़े मार्क करें</span>
+                    <span>पूरे अलर्ट क्लीन करें</span>
                   </button>
                   <button
                     type="button"
@@ -5711,10 +5724,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       <td className="p-3 text-right">
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             if (confirm(`क्या आप RSS स्रोत "${s.name}" हटाना चाहते हैं?`)) {
-                              deleteAdminRssSource(s.id);
-                              setRssSources(getAdminRssSources());
+                              await deleteAdminRssSourceAsync(s.id);
+                              const updated = await fetchAdminRssSourcesFromBackend();
+                              setRssSources(updated);
                             }
                           }}
                           className="p-1 text-slate-500 hover:text-rose-400 transition cursor-pointer"
@@ -6237,10 +6251,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       <td className="p-3 text-right">
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={async () => {
                             if (confirm(`क्या आप वेब लिंक "${s.name}" हटाना चाहते हैं?`)) {
-                              deleteAdminRssSource(s.id);
-                              setRssSources(getAdminRssSources());
+                              await deleteAdminRssSourceAsync(s.id);
+                              const updated = await fetchAdminRssSourcesFromBackend();
+                              setRssSources(updated);
                             }
                           }}
                           className="px-2 py-1 text-red-400 hover:bg-red-950/50 rounded cursor-pointer"
