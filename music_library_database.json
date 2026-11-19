@@ -1,0 +1,1170 @@
+[
+  {
+    "id": "s1_track_1795049518265",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795049518269,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795049510597",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795049510601,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795048588225",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795048588229,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795048579937",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795048579942,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795048530193",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795048530198,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795048522775",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795048522782,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795048320756",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795048320761,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795048313017",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795048313022,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795047825235",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795047825240,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795047817449",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795047817454,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795047545675",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795047545679,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795047537635",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795047537639,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795047328229",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795047328234,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795047320660",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795047320665,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795047014068",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795047014072,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795047004614",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795047004620,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795045714016",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795045714019,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795045706465",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795045706469,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795045507871",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795045507875,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795045500520",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795045500523,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795045478130",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795045478133,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795045470300",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795045470305,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795045426466",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795045426471,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795045418866",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795045418873,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795045352170",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795045352174,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795045344909",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795045344914,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795044867435",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795044867439,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795044859922",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795044859925,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795044568893",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795044568897,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795044560473",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795044560477,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "track-1795031599124-p4g5",
+    "name": "Adversarial Test Track",
+    "category": "Challenger",
+    "url": "/uploads/music/track_1795031599122_b870418a.mp3",
+    "duration": 30,
+    "uploadedAt": 1795031599124,
+    "uploadedBy": "admin.ainewsmaker@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "both",
+    "allowedTiers": [
+      "pro",
+      "vip"
+    ]
+  },
+  {
+    "id": "s1_track_1795031396901",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795031396904,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795031389276",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795031389281,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795031311278",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795031311283,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795031303424",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795031303429,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795031192217",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795031192221,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795031182743",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795031182747,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795031176402",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795031176406,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795031168335",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795031168340,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795031148697",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795031148701,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795031141098",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795031141102,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795030896178",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795030896182,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795030887777",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795030887783,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795030842819",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795030842823,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795030834934",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795030834940,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795030826442",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795030826445,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795030818745",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795030818749,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795030753658",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795030753663,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795030745913",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795030745917,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795030738426",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795030738431,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795030730978",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795030730982,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795030662906",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795030662910,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795030655304",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795030655308,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795030426926",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795030426929,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795030419180",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795030419184,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795030246663",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795030246666,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795030239002",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795030239007,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795030219808",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795030219812,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795030213379",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795030213384,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795030153702",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795030153705,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795030145796",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795030145801,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795030065580",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795030065584,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795030058120",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795030058124,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795029672776",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795029672782,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795029665317",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795029665323,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795029510906",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795029510909,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795029503341",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795029503345,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795029486171",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795029486174,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795029478555",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795029478560,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795029297980",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795029297984,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795029289625",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795029289629,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795029275211",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795029275214,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795029267825",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795029267830,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795029108032",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795029108036,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795029100478",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795029100482,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "s1_track_1795028904594",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795028904597,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795028897814",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795028897817,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
+    "id": "track_breaking_pulse",
+    "name": "🔴 सुपर ब्रेकिंग बीट (Urgent Beat)",
+    "category": "Breaking",
+    "url": "https://assets.mixkit.co/music/preview/mixkit-urgent-news-broadcast-693.mp3",
+    "duration": 30,
+    "uploadedAt": 1740000000000,
+    "uploadedBy": "admin.ainewsmaker@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "both",
+    "allowedTiers": [
+      "basic",
+      "advance",
+      "pro",
+      "vip"
+    ]
+  },
+  {
+    "id": "track_news_headlines",
+    "name": "📰 न्यूज़रूम हेडलाइंस (News Pulse)",
+    "category": "Headlines",
+    "url": "https://assets.mixkit.co/music/preview/mixkit-news-bulletin-966.mp3",
+    "duration": 45,
+    "uploadedAt": 1740000000000,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "both",
+    "allowedTiers": [
+      "basic",
+      "advance",
+      "pro",
+      "vip"
+    ]
+  },
+  {
+    "id": "track_ambient_editorial",
+    "name": "📻 शांत संपादकीय (Ambient Broadcast)",
+    "category": "Ambient",
+    "url": "https://assets.mixkit.co/music/preview/mixkit-investigation-suspense-691.mp3",
+    "duration": 60,
+    "uploadedAt": 1740000000000,
+    "uploadedBy": "admin.ainewsmaker@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "both",
+    "allowedTiers": [
+      "basic",
+      "advance",
+      "pro",
+      "vip"
+    ]
+  }
+]

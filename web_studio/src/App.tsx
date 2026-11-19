@@ -459,6 +459,8 @@ function getSavedChannelProfile(): ChannelProfile | null {
 
 export type FeedStatus = 'loading' | 'verified' | 'empty' | 'error';
 
+let globalLastAdminAuthToastTime = 0;
+
 export default function App() {
   // Only true in native Android APK WebView (via AndroidBridge, file:///android_asset or appassets domain)
   const isAndroidEnvironment = typeof window !== 'undefined' && (
@@ -2043,7 +2045,6 @@ export default function App() {
       setIsLoginModalOpen(true);
     };
 
-    let lastAdminAuthToastTime = 0;
     const handleAdminAuthRequired = () => {
       // Priority 5: Strictly ignore if user is unauthenticated or not an admin
       if (currentUser && !isUserAdmin(currentUser)) return;
@@ -2052,8 +2053,8 @@ export default function App() {
       const activeTab = currentTab;
       if (activeTab !== 'admin' || ['home', 'studio', 'videos', 'newsroom'].includes(activeTab)) return;
       const now = Date.now();
-      if (now - lastAdminAuthToastTime > 10000) {
-        lastAdminAuthToastTime = now;
+      if (now - globalLastAdminAuthToastTime > 10000) {
+        globalLastAdminAuthToastTime = now;
         showToast('⚠️ व्यवस्थापक प्रमाणीकरण आवश्यक है।');
       }
     };

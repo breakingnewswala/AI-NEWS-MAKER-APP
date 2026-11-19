@@ -181,7 +181,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         headers,
       });
 
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = { 'Authorization': `Bearer ${freshToken}`, 'x-admin-email': adminEmail };
@@ -213,7 +213,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     try {
       let headers = await getAuthHeaders();
       let res = await fetch(getApiUrl('/api/admin/api-health/status'), { headers });
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = { 'Authorization': `Bearer ${freshToken}`, 'x-admin-email': adminEmail };
@@ -315,7 +315,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         method: 'POST',
         headers,
       });
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = {
@@ -354,7 +354,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         headers,
         body: JSON.stringify({ enabled: nextState }),
       });
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = {
@@ -392,7 +392,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         method: 'POST',
         headers,
       });
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = {
@@ -448,7 +448,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         }),
       });
 
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = {
@@ -474,8 +474,10 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         setNewFreeLabel('');
         fetchKeysData(true);
       } else {
-        if (res.status === 401 || res.status === 403) {
-          showToast('❌ प्रमाणीकरण त्रुटि (401/403): कृपया एडमिन सत्र की जांच करें।');
+        if (res.status === 401) {
+          showToast('❌ प्रमाणीकरण आवश्यक (401 Unauthorized): कृपया एडमिन सत्र की जांच करें।');
+        } else if (res.status === 403) {
+          showToast('❌ अनधिकृत (403 Forbidden): इस कार्य के लिए मास्टर एडमिन अधिकार आवश्यक हैं।');
         } else {
           showToast(`❌ ${resData.error || 'की जोड़ने में विफलता'}`);
         }
@@ -498,7 +500,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         headers,
       });
 
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = { 'Authorization': `Bearer ${freshToken}`, 'x-admin-email': adminEmail };
@@ -536,7 +538,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         }),
       });
 
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = {
@@ -562,8 +564,10 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         setPaidKeyInput('');
         fetchKeysData(true);
       } else {
-        if (res.status === 401 || res.status === 403) {
-          showToast('❌ प्रमाणीकरण त्रुटि (401/403): कृपया एडमिन सत्र की जांच करें।');
+        if (res.status === 401) {
+          showToast('❌ प्रमाणीकरण आवश्यक (401 Unauthorized): कृपया एडमिन सत्र की जांच करें।');
+        } else if (res.status === 403) {
+          showToast('❌ अनधिकृत (403 Forbidden): इस कार्य के लिए मास्टर एडमिन अधिकार आवश्यक हैं।');
         } else {
           showToast(`❌ ${resData.error || 'सेव करने में विफलता'}`);
         }
@@ -586,7 +590,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         headers,
       });
 
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = { 'Authorization': `Bearer ${freshToken}`, 'x-admin-email': adminEmail };
@@ -621,7 +625,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         body: JSON.stringify({ keyId, type }),
       });
 
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = {
@@ -677,7 +681,7 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
         }),
       });
 
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         const freshToken = await ensureAuthToken(true);
         if (freshToken) {
           headers = {

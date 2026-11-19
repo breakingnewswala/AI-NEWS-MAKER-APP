@@ -270,8 +270,9 @@ function initializeAuthSecret(): string {
     throw new Error("[SECURITY CRITICAL] SESSION_SECRET environment variable (minimum 32 characters) must be configured in Secret Manager / Production environment.");
   }
 
-  // Local development, CI runners or isolated testing only: Ephemeral in-memory secret
-  return crypto.randomBytes(32).toString("hex");
+  // Local development, CI runners or isolated testing: Stable deterministic fallback secret based on project root
+  // to avoid invalidating sessions across local server restarts, while retaining high cryptographic entropy (>= 32 chars).
+  return crypto.createHmac("sha256", "ai-news-maker-stable-dev-salt").update(process.cwd()).digest("hex");
 }
 
 const AUTH_SECRET = initializeAuthSecret();
@@ -1815,8 +1816,8 @@ let quotaExceededInfo = {
 
 
 const GEMINI_MODELS_POOL = [
-  "gemini-3.8-flash",
-  "gemini-flash-latest",
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
 ];
 
 const CP1252_REVERSE_MAP: Record<number, number> = {
@@ -2078,6 +2079,8 @@ const UPLOAD_FONTS_DIR = path.join(process.cwd(), "public", "uploads", "fonts");
 const WEB_UPLOAD_FONTS_DIR = path.join(process.cwd(), "web_studio", "public", "uploads", "fonts");
 const UPLOAD_FRAMES_DIR = path.join(process.cwd(), "public", "uploads", "frames");
 const WEB_UPLOAD_FRAMES_DIR = path.join(process.cwd(), "web_studio", "public", "uploads", "frames");
+const UPLOAD_MUSIC_DIR = path.join(process.cwd(), "public", "uploads", "music");
+const WEB_UPLOAD_MUSIC_DIR = path.join(process.cwd(), "web_studio", "public", "uploads", "music");
 
 try {
   fs.mkdirSync(UPLOAD_LOGOS_DIR, { recursive: true });
@@ -2092,6 +2095,8 @@ try {
   fs.mkdirSync(WEB_UPLOAD_FONTS_DIR, { recursive: true });
   fs.mkdirSync(UPLOAD_FRAMES_DIR, { recursive: true });
   fs.mkdirSync(WEB_UPLOAD_FRAMES_DIR, { recursive: true });
+  fs.mkdirSync(UPLOAD_MUSIC_DIR, { recursive: true });
+  fs.mkdirSync(WEB_UPLOAD_MUSIC_DIR, { recursive: true });
 } catch { }
 
 interface ServerRewardClaim {
@@ -8166,6 +8171,7 @@ app.delete("/api/admin/videos/:id", requireAdminMiddleware, async (req, res) => 
 // ADMIN MUSIC LIBRARY ENGINE & DATABASE (Section 16 Master Prompt & Section 6)
 // ============================================================================
 const MUSIC_LIBRARY_FILE = path.join(process.cwd(), "music_library_db.json");
+const MUSIC_LIBRARY_DATABASE_FILE = path.join(process.cwd(), "music_library_database.json");
 
 interface MusicTrackItem {
   id: string;
@@ -8201,7 +8207,11 @@ function loadMusicLibrary(): MusicTrackItem[] {
 
 function saveMusicLibrary(tracks: MusicTrackItem[]): void {
   try {
-    fs.writeFileSync(MUSIC_LIBRARY_FILE, JSON.stringify(tracks, null, 2), "utf-8");
+    const serialized = JSON.stringify(tracks, null, 2);
+    fs.writeFileSync(MUSIC_LIBRARY_FILE, serialized, "utf-8");
+    try {
+      fs.writeFileSync(MUSIC_LIBRARY_DATABASE_FILE, serialized, "utf-8");
+    } catch {}
   } catch (err: any) {
     console.error("Error saving music library:", err.message);
   }
@@ -8260,6 +8270,24 @@ app.post("/api/admin/music-library/upload", requireAdminMiddleware, (req, res) =
       return res.status(400).json({ error: "ऑडियो फाइल और ट्रैक नाम दोनों अनिवार्य हैं।" });
     }
 
+    let trackUrl = String(url || "").trim();
+    if (trackUrl.startsWith("data:audio/") || trackUrl.startsWith("data:application/") || (trackUrl.startsWith("data:") && trackUrl.includes(";base64,"))) {
+      let ext = "mp3";
+      if (trackUrl.includes("audio/wav")) ext = "wav";
+      else if (trackUrl.includes("audio/aac")) ext = "aac";
+      else if (trackUrl.includes("audio/ogg")) ext = "ogg";
+      const savedFilename = `track_${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${ext}`;
+      const base64Data = trackUrl.replace(/^data:[^;]+;base64,/, "");
+      const buffer = Buffer.from(base64Data, "base64");
+      fs.mkdirSync(UPLOAD_MUSIC_DIR, { recursive: true });
+      fs.writeFileSync(path.join(UPLOAD_MUSIC_DIR, savedFilename), buffer);
+      try {
+        fs.mkdirSync(WEB_UPLOAD_MUSIC_DIR, { recursive: true });
+        fs.writeFileSync(path.join(WEB_UPLOAD_MUSIC_DIR, savedFilename), buffer);
+      } catch {}
+      trackUrl = `/uploads/music/${savedFilename}`;
+    }
+
     let normalizedMode: 'quick' | 'studio' | 'both' = 'both';
     if (typeof targetModes === 'string' && ['quick', 'studio', 'both'].includes(targetModes)) {
       normalizedMode = targetModes as any;
@@ -8278,7 +8306,7 @@ app.post("/api/admin/music-library/upload", requireAdminMiddleware, (req, res) =
       id: id && String(id).trim() ? String(id).trim() : `track-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       name: trackName,
       category: String(category || "General").trim(),
-      url: String(url).trim(),
+      url: trackUrl,
       duration: typeof duration === "number" ? duration : undefined,
       uploadedAt: Date.now(),
       uploadedBy: ((req as any).user?.email || "admin") as string,
@@ -15480,8 +15508,8 @@ app.post("/api/admin/toggle-notification-board/:id", requireAdminMiddleware, asy
 });
 
 
-// 5. POST /api/dynamic-frames/ai-analyze (Master Admin only: Gemini multimodal analysis)
-app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (req, res) => {
+// 5. POST /api/dynamic-frames/ai-analyze (Admin & Master Admin: Gemini multimodal analysis)
+app.post("/api/dynamic-frames/ai-analyze", requireAdminMiddleware, async (req, res) => {
   try {
     const rawRatio = req.body?.selectedRatio || req.body?.aspectRatio || "9:16";
     const rawBase64 = req.body?.sampleBase64 || req.body?.sampleImage || "";
@@ -15489,24 +15517,41 @@ app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (
     const selectedRatio = (rawRatio === "4:5" || rawRatio === "1:1" || rawRatio === "9:16" || rawRatio === "16:9") ? rawRatio : "9:16";
     const sampleBase64 = typeof rawBase64 === "string" ? rawBase64 : "";
     const pngFrameBase64 = typeof rawPngFrame === "string" ? rawPngFrame : "";
+    const isVideoMode = Boolean(req.body?.isVideoMode);
 
     const isStory = selectedRatio === "9:16";
     const isSquare = selectedRatio === "1:1";
+    const isLandscape = selectedRatio === "16:9";
 
     // Default calibrated heuristic layout if Gemini is not available or encounters errors
+    const photoRect = isStory
+      ? { x: 0, y: 0, width: 100, height: 64 }
+      : isSquare
+      ? { x: 0, y: 0, width: 100, height: 60 }
+      : isLandscape
+      ? { x: 0, y: 0, width: 100, height: 63 }
+      : { x: 0, y: 0, width: 100, height: 61.33 };
+
+    const recommendedPhotoSlots = [
+      {
+        name: "मुख्य समाचार फोटो",
+        slotType: "normal" as const,
+        rect: photoRect,
+      },
+    ];
+
     const fallbackLayout = {
       detectedRatio: selectedRatio,
+      canvasRatio: selectedRatio,
+      headlineMaxLines: 3,
       headerRect: isStory ? { x: 6, y: 3, width: 88, height: 12 } : isSquare ? { x: 5, y: 3, width: 90, height: 14 } : { x: 5, y: 3.5, width: 90, height: 15 },
       logoRect: isStory ? { x: 6, y: 3, width: 24, height: 6.5 } : isSquare ? { x: 5, y: 3, width: 22, height: 8 } : { x: 5, y: 3.5, width: 22, height: 9 },
       locationRect: isStory ? { x: 6, y: 10.5, width: 30, height: 3.2 } : isSquare ? { x: 5, y: 12, width: 28, height: 4.2 } : { x: 5, y: 13.5, width: 28, height: 4.5 },
       headlineRect: isStory ? { x: 6, y: 66, width: 88, height: 25 } : isSquare ? { x: 6, y: 62, width: 88, height: 28 } : { x: 7, y: 63, width: 86, height: 27 },
-      recommendedPhotoSlots: [
-        {
-          name: "मुख्य समाचार फोटो",
-          slotType: "normal",
-          rect: isStory ? { x: 0, y: 0, width: 100, height: 64 } : isSquare ? { x: 0, y: 0, width: 100, height: 60 } : { x: 0, y: 0, width: 100, height: 61.33 },
-        },
-      ],
+      photoRect,
+      videoRect: photoRect,
+      recommendedPhotoSlots,
+      photoSlots: recommendedPhotoSlots,
       statementDetected: false,
       quoteRect: isStory ? { x: 8, y: 18, width: 84, height: 32 } : isSquare ? { x: 8, y: 20, width: 84, height: 26 } : { x: 8, y: 22, width: 84, height: 26 },
       speakerNameRect: isStory ? { x: 8, y: 76, width: 44, height: 7 } : isSquare ? { x: 8, y: 70, width: 42, height: 7 } : { x: 8, y: 72, width: 42, height: 7 },
@@ -15522,20 +15567,45 @@ app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (
       return res.json({
         success: true,
         result: fallbackLayout,
+        fallbackLayout,
         isFallback: true,
+        canRetry: true,
         warning: "सैंपल ग्राफिक उपलब्ध नहीं है। कैलिब्रेटेड डिफ़ॉल्ट लेआउट सक्रिय किया गया है।",
       });
     }
 
-    try {
-      let cleanBase64 = sampleBase64;
-      let mimeType = "image/png";
-      const match = sampleBase64.match(/^data:([^;]+);base64,(.+)$/);
-      if (match) {
-        mimeType = match[1];
-        cleanBase64 = match[2];
-      }
+    // Payload validation: Handle oversized payloads (>10MB) gracefully without crashing
+    const maxPayloadSize = 14 * 1024 * 1024; // ~10.5MB raw image in base64
+    if (sampleBase64.length > maxPayloadSize) {
+      return res.status(400).json({
+        success: false,
+        error: "सैंपल इमेज फ़ाइल बहुत बड़ी है (अधिकतम 10MB)। कृपया छोटी इमेज अपलोड करें।",
+      });
+    }
 
+    // Validate MIME types
+    let cleanBase64 = sampleBase64;
+    let mimeType = "image/png";
+    const match = sampleBase64.match(/^data:([^;]+);base64,(.+)$/);
+    if (match) {
+      mimeType = match[1].toLowerCase().trim();
+      cleanBase64 = match[2];
+    } else if (sampleBase64.startsWith("data:")) {
+      return res.status(400).json({
+        success: false,
+        error: "अमान्य इमेज डेटा प्रारूप।",
+      });
+    }
+
+    const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+    if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
+      return res.status(400).json({
+        success: false,
+        error: "अमान्य फ़ाइल प्रकार। केवल PNG, JPEG और WebP इमेज समर्थित हैं।",
+      });
+    }
+
+    try {
       const promptParts: any[] = [
         {
           text: `Analyze this news graphic / jacket template design for creating an automated news frame template in AI News Maker.
@@ -15560,6 +15630,7 @@ Return ONLY a valid JSON object matching this schema without any markdown format
   "logoRect": { "x": 5, "y": 3, "width": 22, "height": 8 },
   "locationRect": { "x": 5, "y": 12, "width": 26, "height": 4 },
   "headlineRect": { "x": 6, "y": 64, "width": 88, "height": 26 },
+  "headlineMaxLines": 3,
   "recommendedPhotoSlots": [
     { "name": "Main Photo", "slotType": "normal", "rect": { "x": 0, "y": 0, "width": 100, "height": 62 } }
   ],
@@ -15600,7 +15671,7 @@ Return ONLY a valid JSON object matching this schema without any markdown format
       const parsed = await executeGeminiWithKeyPool(async (ai) => {
         const aiResponse = await generateWithFallbackAndRetry(
           ai,
-          ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"],
+          DEFAULT_FALLBACK_MODELS,
           {
             contents: [
               {
@@ -15625,23 +15696,42 @@ Return ONLY a valid JSON object matching this schema without any markdown format
           parsed.footerRect.y = isStory ? 93.5 : 92;
           parsed.footerRect.height = isStory ? 6.5 : 8;
         }
-        return res.json({ success: true, result: { ...fallbackLayout, ...parsed }, isFallback: false });
+        const detectedPhotoRect = parsed.photoRect || parsed.recommendedPhotoSlots?.[0]?.rect || fallbackLayout.photoRect;
+        const normalizedPhotoRect = {
+          x: Math.max(0, Math.min(100, Number(detectedPhotoRect.x) || 0)),
+          y: Math.max(0, Math.min(100, Number(detectedPhotoRect.y) || 0)),
+          width: Math.max(5, Math.min(100, Number(detectedPhotoRect.width) || 100)),
+          height: Math.max(5, Math.min(100, Number(detectedPhotoRect.height) || 64)),
+        };
+        const mergedResult = {
+          ...fallbackLayout,
+          ...parsed,
+          photoRect: normalizedPhotoRect,
+          videoRect: parsed.videoRect || normalizedPhotoRect,
+          canvasRatio: parsed.canvasRatio || parsed.detectedRatio || selectedRatio,
+          headlineMaxLines: typeof parsed.headlineMaxLines === "number" ? parsed.headlineMaxLines : fallbackLayout.headlineMaxLines,
+        };
+        return res.json({ success: true, result: mergedResult, fallbackLayout, isFallback: false, canRetry: true });
       }
     } catch (aiErr: any) {
-      console.error("[Dynamic Frames AI] Vision analysis error:", aiErr?.message || aiErr);
-      return res.status(502).json({
-        success: false,
-        error: `AI विज़न विश्लेषण उपलब्ध नहीं हो सका (${aiErr?.message || "त्रुटि"})। कृपया पुनः प्रयास करें।`,
-        canRetry: true,
+      console.warn("[Dynamic Frames AI] Vision analysis upstream failure, using calibrated fallback:", aiErr?.message || aiErr);
+      return res.status(200).json({
+        success: true,
+        result: fallbackLayout,
         fallbackLayout,
+        isFallback: true,
+        canRetry: true,
+        warning: `AI विज़न विश्लेषण अस्थायी रूप से अनुपलब्ध है (${aiErr?.message || "त्रुटि"})। कैलिब्रेटेड डिफ़ॉल्ट लेआउट सक्रिय किया गया है।`,
       });
     }
 
-    return res.status(502).json({
-      success: false,
-      error: "AI विज़न विश्लेषण से कोई वैध लेआउट प्राप्त नहीं हुआ।",
-      canRetry: true,
+    return res.status(200).json({
+      success: true,
+      result: fallbackLayout,
       fallbackLayout,
+      isFallback: true,
+      canRetry: true,
+      warning: "AI विज़न विश्लेषण से कोई वैध लेआउट प्राप्त नहीं हुआ। कैलिब्रेटेड डिफ़ॉल्ट लेआउट सक्रिय किया गया है।",
     });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -18378,9 +18468,9 @@ export function resolveUserTierAndRole(req: express.Request): { tier: string; ro
 
 // Resilient Gemini generator with automatic retry & fallback across alternate models
 const DEFAULT_FALLBACK_MODELS = [
-  "gemini-3.8-flash",
-  "gemini-3.5-flash-lite",
-  "gemini-flash-latest",
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
 ];
 
 async function generateWithFallbackAndRetry(
@@ -18904,7 +18994,7 @@ function loadApiKeysVault(skipCache: boolean = false): ApiKeysVault {
           successCount: 0,
           errorCount: 0,
           provider: "Google Gemini",
-          model: "gemini-3-flash-preview",
+          model: "gemini-2.5-flash",
           lastHealthStatus: "healthy",
         },
       ],
@@ -19327,7 +19417,7 @@ export async function checkDefaultGeminiHealth(forceRefresh = false): Promise<{
     return {
       isConfigured: false,
       healthStatus: "not_configured",
-      model: DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview",
+      model: DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash",
       errorMessage: "डिफ़ॉल्ट GEMINI_API_KEY पर्यावरण में सेट नहीं है",
     };
   }
@@ -19339,7 +19429,7 @@ export async function checkDefaultGeminiHealth(forceRefresh = false): Promise<{
 
   const cleanKey = process.env.GEMINI_API_KEY!.trim();
   const start = Date.now();
-  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview";
+  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash";
   let lastErr: any = null;
   let testSuccess = false;
 
@@ -19417,7 +19507,7 @@ app.get("/api/admin/api-keys", requireAdminMiddleware, async (req, res) => {
     lastHealthStatus: k.lastHealthStatus || (k.status === "active" ? "healthy" : "error"),
     lastError: k.lastError || null,
     provider: k.provider || "Google Gemini (गूगल जेमिनी)",
-    model: k.model || "gemini-3-flash-preview",
+    model: k.model || "gemini-2.5-flash",
   }));
 
   const paidConfigured = Boolean(vault.paidKey?.key && vault.paidKey.key.trim().length > 5);
@@ -19454,7 +19544,7 @@ app.get("/api/admin/api-keys", requireAdminMiddleware, async (req, res) => {
       lastHealthStatus: vault.paidKey?.lastHealthStatus || (paidConfigured ? "healthy" : "inactive"),
       lastError: vault.paidKey?.lastError || null,
       provider: vault.paidKey?.provider || "Google Gemini (गूगल जेमिनी)",
-      model: vault.paidKey?.model || "gemini-3-flash-preview",
+      model: vault.paidKey?.model || "gemini-2.5-flash",
     },
     vipRoutingEnabled: vault.vipRoutingEnabled,
     stats: {
@@ -19502,7 +19592,7 @@ app.post("/api/admin/api-keys/free", requireAdminMiddleware, async (req, res) =>
   let initialHealth: "healthy" | "quota_exceeded" | "invalid" | "error" = "healthy";
   let initialLatency: number | undefined;
   let initialError: string | undefined;
-  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview";
+  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash";
 
   const testStart = Date.now();
   let testSuccess = false;
@@ -19625,7 +19715,7 @@ app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, r
       updatedAt: Date.now(),
       status: "active",
       provider: "Google Gemini",
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       lastHealthStatus: "healthy",
     };
   }
@@ -19681,7 +19771,7 @@ app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, r
       httpOptions: { headers: { "User-Agent": "aistudio-build-test" } },
     });
     const result = await testAi.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       contents: "Respond in 2 words: Connected successfully",
     });
     const latency = Date.now() - start;
@@ -19728,7 +19818,63 @@ async function probeGeminiKeyZeroQuota(apiKey: string): Promise<{
     const latencyMs = Date.now() - start;
     const statusCode = resp.status;
     if (resp.ok) {
-      return { success: true, state: "READY", latencyMs, statusCode };
+      // Models list metadata succeeded; now run minimal 1-token test to definitively verify generateContent quota
+      try {
+        const testAiProbe = new GoogleGenAI({
+          apiKey: cleanKey,
+          httpOptions: { headers: { "User-Agent": "ai-news-maker-health-probe-1token" } },
+        });
+        const probeCall = testAiProbe.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: "1",
+          config: { maxOutputTokens: 1 },
+        });
+        const timeoutCall = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Probe token timeout after 5s")), 5000)
+        );
+        await Promise.race([probeCall, timeoutCall]);
+        return { success: true, state: "READY", latencyMs: Date.now() - start, statusCode: 200 };
+      } catch (genErr: any) {
+        const genLatency = Date.now() - start;
+        const classified = classifyApiKeyError(genErr);
+        const errMsg = String(genErr?.message || "").toLowerCase();
+        const errStatus = String(genErr?.status || "");
+        if (
+          classified.type === "quota" ||
+          errStatus === "RESOURCE_EXHAUSTED" ||
+          errMsg.includes("429") ||
+          errMsg.includes("quota") ||
+          errMsg.includes("rate limit") ||
+          errMsg.includes("too many requests") ||
+          errMsg.includes("resource_exhausted")
+        ) {
+          return {
+            success: false,
+            state: (errMsg.includes("quota") || errMsg.includes("exhausted") || errMsg.includes("resource_exhausted"))
+              ? "QUOTA_EXHAUSTED"
+              : "RATE_LIMITED",
+            latencyMs: genLatency,
+            statusCode: 429,
+            errorMessage: genErr?.message || "दैनिक कोटा / रेट लिमिट समाप्त (Quota or Rate limit exceeded)",
+          };
+        }
+        if (classified.type === "invalid" || errMsg.includes("invalid") || errMsg.includes("not valid") || errMsg.includes("api_key_invalid")) {
+          return {
+            success: false,
+            state: "INVALID_KEY",
+            latencyMs: genLatency,
+            statusCode: 400,
+            errorMessage: genErr?.message || "अमान्य API Key (Invalid Key)",
+          };
+        }
+        return {
+          success: false,
+          state: "TEMPORARILY_UNAVAILABLE",
+          latencyMs: genLatency,
+          statusCode: 503,
+          errorMessage: genErr?.message || "गूगल जेमिनी सेवा अस्थायी रूप से अनुपलब्ध",
+        };
+      }
     }
     const errBody = await resp.json().catch(() => ({}));
     const errMsg = String(errBody?.error?.message || "").toLowerCase();

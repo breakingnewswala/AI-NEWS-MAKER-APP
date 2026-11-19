@@ -216,13 +216,15 @@ if (fs.existsSync(buildGradlePath)) {
     "Android applicationId was altered"
   );
 } else {
-  console.log("ℹ️ android/app/build.gradle not found in root, checking app/build.gradle");
   const altGradle = path.resolve('app/build.gradle');
-  if (fs.existsSync(altGradle)) {
-    const gradleContent = fs.readFileSync(altGradle, 'utf8');
+  const ktsGradle = path.resolve('app/build.gradle.kts');
+  const targetGradle = fs.existsSync(altGradle) ? altGradle : (fs.existsSync(ktsGradle) ? ktsGradle : null);
+  if (targetGradle) {
+    console.log(`ℹ️ Checking Android configuration at ${path.basename(targetGradle)}`);
+    const gradleContent = fs.readFileSync(targetGradle, 'utf8');
     check(
       "Invariant: Android applicationId preserved as com.aistudio.ainewsmaker.hzwptx",
-      gradleContent.includes('applicationId "com.aistudio.ainewsmaker.hzwptx"'),
+      gradleContent.includes('applicationId = "com.aistudio.ainewsmaker.hzwptx"') || gradleContent.includes('applicationId "com.aistudio.ainewsmaker.hzwptx"'),
       "Android applicationId was altered"
     );
   }

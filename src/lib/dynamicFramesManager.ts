@@ -660,11 +660,20 @@ export async function savePrimaryStoryPreferenceApi(frameId: string, userId: str
 
 export interface AiFrameAnalysisResult {
   detectedRatio: DynamicAspectRatio;
+  canvasRatio?: string;
+  headlineMaxLines?: number;
   headerRect: { x: number; y: number; width: number; height: number };
   logoRect: { x: number; y: number; width: number; height: number };
   locationRect: { x: number; y: number; width: number; height: number };
   headlineRect: { x: number; y: number; width: number; height: number };
+  photoRect?: { x: number; y: number; width: number; height: number };
+  videoRect?: { x: number; y: number; width: number; height: number };
   recommendedPhotoSlots: Array<{
+    name: string;
+    slotType: 'normal' | 'cutout' | 'supporting';
+    rect: { x: number; y: number; width: number; height: number };
+  }>;
+  photoSlots?: Array<{
     name: string;
     slotType: 'normal' | 'cutout' | 'supporting';
     rect: { x: number; y: number; width: number; height: number };
@@ -684,7 +693,8 @@ export async function requestAiFrameAnalysis(
   sampleBase64: string,
   selectedRatio: DynamicAspectRatio,
   authToken?: string,
-  pngFrameBase64?: string
+  pngFrameBase64?: string,
+  isVideoMode?: boolean
 ): Promise<{ success: boolean; result?: AiFrameAnalysisResult; error?: string; isFallback?: boolean; warning?: string }> {
   try {
     const baseUrl = getApiBaseUrl();
@@ -703,17 +713,17 @@ export async function requestAiFrameAnalysis(
     let res = await fetch(`${baseUrl}/api/dynamic-frames/ai-analyze`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ sampleBase64, selectedRatio, pngFrameBase64 }),
+      body: JSON.stringify({ sampleBase64, selectedRatio, pngFrameBase64, isVideoMode }),
     });
 
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
       const freshToken = await ensureAuthToken(true).catch(() => '');
       if (freshToken) {
         headers['Authorization'] = `Bearer ${freshToken}`;
         res = await fetch(`${baseUrl}/api/dynamic-frames/ai-analyze`, {
           method: 'POST',
           headers,
-          body: JSON.stringify({ sampleBase64, selectedRatio, pngFrameBase64 }),
+          body: JSON.stringify({ sampleBase64, selectedRatio, pngFrameBase64, isVideoMode }),
         });
       }
     }
@@ -1450,7 +1460,7 @@ export async function saveAssetLibraryItem(
       body: JSON.stringify(item),
     });
 
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
       const freshToken = await ensureAuthToken(true).catch(() => '');
       if (freshToken) {
         headers['Authorization'] = `Bearer ${freshToken}`;
@@ -1497,7 +1507,7 @@ export async function updateAssetLibraryItem(
       body: JSON.stringify(updates),
     });
 
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
       const freshToken = await ensureAuthToken(true).catch(() => '');
       if (freshToken) {
         headers['Authorization'] = `Bearer ${freshToken}`;
@@ -1541,7 +1551,7 @@ export async function deleteAssetLibraryItem(
       headers,
     });
 
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
       const freshToken = await ensureAuthToken(true).catch(() => '');
       if (freshToken) {
         headers['Authorization'] = `Bearer ${freshToken}`;

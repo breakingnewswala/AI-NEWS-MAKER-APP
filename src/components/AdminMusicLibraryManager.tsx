@@ -13,7 +13,7 @@ import {
   Loader2,
   Tag,
 } from 'lucide-react';
-import { getApiUrl, getAdminAuthHeadersAsync } from '../lib/apiConfig';
+import { getApiUrl, getAdminAuthHeadersAsync, ensureAuthToken, isAuthReady } from '../lib/apiConfig';
 
 export interface MusicTrackItem {
   id: string;
@@ -63,14 +63,28 @@ export const AdminMusicLibraryManager: React.FC<AdminMusicLibraryManagerProps> =
     setIsLoading(true);
     setError(null);
     try {
-      const authHeaders = await getAdminAuthHeadersAsync();
-      const res = await fetch(getApiUrl('/api/admin/music-library'), {
+      await isAuthReady().catch(() => false);
+      let authHeaders = await getAdminAuthHeadersAsync();
+      let res = await fetch(getApiUrl('/api/admin/music-library'), {
         headers: {
           ...authHeaders,
           'x-user-email': currentUser?.email || '',
           'x-admin-email': currentUser?.email || 'breakingnewswala.com@gmail.com',
         },
       });
+      if (res.status === 401) {
+        const freshToken = await ensureAuthToken(true).catch(() => '');
+        if (freshToken) {
+          authHeaders = await getAdminAuthHeadersAsync();
+          res = await fetch(getApiUrl('/api/admin/music-library'), {
+            headers: {
+              ...authHeaders,
+              'x-user-email': currentUser?.email || '',
+              'x-admin-email': currentUser?.email || 'breakingnewswala.com@gmail.com',
+            },
+          });
+        }
+      }
       const data = await res.json();
       if (res.ok && data.success && Array.isArray(data.tracks)) {
         setTracks(data.tracks);

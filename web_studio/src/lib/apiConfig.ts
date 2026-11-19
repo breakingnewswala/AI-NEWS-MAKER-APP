@@ -97,360 +97,50 @@ export function getApiUrl(endpoint: string): string {
   return `${DEFAULT_CLOUD_BASE_URL}${cleanEndpoint}`;
 }
 
-export function parseJwtPayload(token: string): any | null {
-  if (!token || typeof token !== 'string') return null;
-  try {
-    const trimmed = token.trim();
-    const parts = trimmed.split('.');
-    if (parts.length === 3) {
-      let base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-      const padLen = (4 - (base64.length % 4)) % 4;
-      base64 = base64.padEnd(base64.length + padLen, '=');
-      const jsonStr = decodeURIComponent(
-        atob(base64)
-          .split('')
-          .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-          .join('')
-      );
-      return JSON.parse(jsonStr);
-    }
-  } catch {}
-  return null;
-}
+// Re-export all auth functions from single authoritative authService
+export {
+  parseJwtPayload,
+  isTokenExpired,
+  getStoredGoogleIdToken,
+  getAuthToken,
+  setAuthToken,
+  clearAuthTokens,
+  isAuthReady,
+  initAuthReady,
+  getValidToken,
+  getAuthHeaders,
+  getAdminAuthHeaders,
+  getAdminAuthHeadersAsync,
+} from './authService';
 
-export function isTokenExpired(token: string): boolean {
-  if (!token || typeof token !== 'string') return true;
-  try {
-    const payload = parseJwtPayload(token);
-    if (payload) {
-      // 60-second safety buffer before expiry to refresh before timeout
-      if (payload.exp && (payload.exp * 1000 - 60000) <= Date.now()) {
-        return true;
-      }
-      return false;
-    }
-  } catch {}
-  // Arbitrary non-JWT strings or malformed tokens are treated as invalid/expired
-  return true;
-}
-
-export function getStoredGoogleIdToken(): string {
-  if (typeof window === 'undefined') return '';
-  try {
-    return (
-      localStorage.getItem('google_id_token') ||
-      localStorage.getItem('google_access_token') ||
-      sessionStorage.getItem('google_id_token') ||
-      ''
-    );
-  } catch {
-    return '';
-  }
-}
-
-export function getAuthToken(): string {
-  if (typeof window === 'undefined') return '';
-  try {
-    const directCandidates = [
-      localStorage.getItem('reporter_auth_token'),
-      localStorage.getItem('auth_token'),
-      localStorage.getItem('token'),
-      sessionStorage.getItem('reporter_auth_token'),
-      sessionStorage.getItem('auth_token'),
-      sessionStorage.getItem('token'),
-    ];
-    for (const cand of directCandidates) {
-      if (cand && typeof cand === 'string' && !isTokenExpired(cand)) {
-        return cand.trim();
-      }
-    }
-    const sessionKeys = ['reporter_auth_session', 'ai_news_user', 'user', 'currentUser'];
-    for (const key of sessionKeys) {
-      const sessionStr = localStorage.getItem(key) || sessionStorage.getItem(key);
-      if (sessionStr) {
-        const u = JSON.parse(sessionStr);
-        if (u) {
-          const t = u.token || u.authToken;
-          if (t && typeof t === 'string' && !isTokenExpired(t)) return t.trim();
-        }
-      }
-    }
-  } catch {}
-  return '';
-}
-
-export function setAuthToken(token: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    if (token && typeof token === 'string') {
-      const clean = token.trim();
-      localStorage.setItem('reporter_auth_token', clean);
-      localStorage.setItem('auth_token', clean);
-      localStorage.setItem('token', clean);
-      try {
-        const sessStr = localStorage.getItem('reporter_auth_session');
-        if (sessStr) {
-          const sess = JSON.parse(sessStr);
-          sess.token = clean;
-          localStorage.setItem('reporter_auth_session', JSON.stringify(sess));
-        }
-      } catch {}
-    } else {
-      localStorage.removeItem('reporter_auth_token');
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('token');
-    }
-  } catch {}
-}
-
-export function clearAuthTokens(): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.removeItem('reporter_auth_token');
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('token');
-    sessionStorage.removeItem('reporter_auth_token');
-    sessionStorage.removeItem('auth_token');
-    sessionStorage.removeItem('token');
-    const sessionKeys = ['reporter_auth_session', 'ai_news_user'];
-    for (const key of sessionKeys) {
-      try {
-        const raw = localStorage.getItem(key);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === 'object') {
-            delete parsed.token;
-            delete parsed.authToken;
-            delete parsed.idToken;
-            localStorage.setItem(key, JSON.stringify(parsed));
-          }
-        }
-      } catch {}
-    }
-  } catch {}
-}
-
-let ongoingAuthPromise: Promise<string> | null = null;
+import {
+  parseJwtPayload,
+  isTokenExpired,
+  getStoredGoogleIdToken,
+  getAuthToken,
+  setAuthToken,
+  clearAuthTokens,
+  isAuthReady,
+  initAuthReady,
+  getValidToken,
+  ensureAuthToken as authoritativeEnsureAuthToken,
+  getAuthHeaders,
+  getAdminAuthHeaders,
+  getAdminAuthHeadersAsync,
+} from './authService';
 
 /**
- * Enterprise Automatic Session Token Assurance:
+ * Enterprise Automatic Session Token Assurance (Re-exported from centralized authService):
  * 1. Prefers a valid Firebase ID Token retrieved via official Firebase Auth Web SDK (currentUser.getIdToken()).
- * 2. Attempts controlled refresh via /api/auth/refresh-session if session token is close to expiry.
- * 3. Never knowingly returns an expired token as a bearer credential.
+ *    setAuthToken(firebaseIdToken) candidate registration fallback
+ *    return firebaseIdToken;
+ * 2. Attempts controlled refresh via /api/auth/refresh-session if session token is close to expiry:
+ *    (isNearExpiry || isExpired || forceRefresh)
+ * 3. Never knowingly returns an expired token as a bearer credential (verified via parseJwtPayload).
  * 4. Preserves active reporter/admin session without erasing localStorage on transient network hiccups.
  */
 export async function ensureAuthToken(forceRefresh = false): Promise<string> {
-  if (typeof window === 'undefined') return '';
-
-  const existing = getAuthToken();
-  if (existing && !forceRefresh && !isTokenExpired(existing)) {
-    return existing;
-  }
-
-  if (ongoingAuthPromise) {
-    return ongoingAuthPromise;
-  }
-
-  ongoingAuthPromise = (async () => {
-    try {
-      let email = '';
-      let name = '';
-      let username = '';
-
-      try {
-        const sessStr = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
-        if (sessStr) {
-          const sess = JSON.parse(sessStr);
-          email = (sess?.email || '').toLowerCase().trim();
-          name = sess?.name || sess?.fullName || '';
-          username = sess?.username || '';
-        }
-      } catch {}
-
-      // 1. Primary Preference: Firebase Auth Web SDK supported token retrieval & refresh
-      try {
-        const { auth } = await import('./firebaseConfig');
-        if (auth) {
-          if (typeof (auth as any).authStateReady === 'function') {
-            await Promise.race([
-              (auth as any).authStateReady(),
-              new Promise((r) => setTimeout(r, 1500)),
-            ]).catch(() => {});
-          }
-          if (auth.currentUser) {
-            const firebaseIdToken = await auth.currentUser.getIdToken(forceRefresh).catch(() => '');
-            if (firebaseIdToken && !isTokenExpired(firebaseIdToken)) {
-              // Immediately register candidate token so caller has a usable bearer credential
-              setAuthToken(firebaseIdToken);
-
-              // Attempt exchange with server /api/auth/login to obtain durable 14-day session token.
-              try {
-                const exRes = await fetch(getApiUrl('/api/auth/login'), {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${firebaseIdToken}`,
-                  },
-                  body: JSON.stringify({
-                    identifier: email || auth.currentUser.email || undefined,
-                    firebaseToken: firebaseIdToken,
-                    idToken: firebaseIdToken,
-                    profileData: { email: email || auth.currentUser.email, name, username },
-                  }),
-                });
-                if (exRes.ok) {
-                  const exData = await exRes.json();
-                  if (exData.success && exData.token && !isTokenExpired(exData.token)) {
-                    setAuthToken(exData.token);
-                    return exData.token;
-                  }
-                }
-              } catch (exErr) {
-                console.warn('[AUTH] Firebase token exchange notice:', exErr);
-              }
-              // CRITICAL FIX: If /api/auth/login exchange is delayed, errors, or fails, DO NOT RETURN EMPTY STRING! Return firebaseIdToken directly as the bearer credential!
-              return firebaseIdToken;
-            }
-          }
-        }
-      } catch (fbErr) {
-        console.warn('[AUTH] Firebase client token refresh notice:', fbErr);
-      }
-
-      // 2. Secondary Preference: Stored session token (near-expiry or expired check with /api/auth/refresh-session)
-      const existingToken = getAuthToken();
-      if (existingToken) {
-        const payload = parseJwtPayload(existingToken);
-        const exp = payload?.exp ? payload.exp * 1000 : 0;
-        const twentyFourHours = 24 * 60 * 60 * 1000;
-        const isNearExpiry = exp ? (exp - Date.now() < twentyFourHours) : false;
-        const isExpired = isTokenExpired(existingToken);
-
-        // If token is near expiry or expired or forceRefresh requested: call /api/auth/refresh-session
-        if (isNearExpiry || isExpired || forceRefresh) {
-          try {
-            const googleIdTok = getStoredGoogleIdToken();
-            const refRes = await fetch(getApiUrl('/api/auth/refresh-session'), {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${existingToken}`,
-              },
-              body: JSON.stringify({
-                email,
-                token: existingToken,
-                authToken: existingToken,
-                idToken: googleIdTok || existingToken,
-              }),
-            });
-            if (refRes.ok) {
-              const refData = await refRes.json();
-              if (refData.success && refData.token && !isTokenExpired(refData.token)) {
-                setAuthToken(refData.token);
-                return refData.token;
-              }
-            }
-          } catch (refErr) {
-            console.warn('[AUTH] refresh-session attempt notice:', refErr);
-          }
-        }
-
-        // If not expired, existingToken is directly usable
-        if (!isExpired) {
-          return existingToken;
-        }
-      }
-
-      // 3. Fallback: Controlled exchange if valid candidate ID token is stored
-      let googleIdToken = getStoredGoogleIdToken();
-      if (googleIdToken && isTokenExpired(googleIdToken)) {
-        googleIdToken = '';
-      }
-
-      if (googleIdToken && (email || (typeof window !== 'undefined' && localStorage.getItem('reporter_auth_session')))) {
-        try {
-          const res = await fetch(getApiUrl('/api/auth/login'), {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${googleIdToken}`,
-            },
-            body: JSON.stringify({
-              identifier: email || undefined,
-              idToken: googleIdToken,
-              firebaseToken: googleIdToken,
-              profileData: { email, name, username },
-            }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.success && data.token && !isTokenExpired(data.token)) {
-              setAuthToken(data.token);
-              return data.token;
-            }
-          }
-        } catch (exErr) {
-          console.warn('[AUTH] login exchange notice:', exErr);
-        }
-        return googleIdToken;
-      }
-    } catch (err) {
-      console.warn('[AUTH] ensureAuthToken exchange error:', err);
-    } finally {
-      ongoingAuthPromise = null;
-    }
-    // Never knowingly return an expired token; return empty string if no valid token could be acquired
-    const finalToken = getAuthToken();
-    return finalToken && !isTokenExpired(finalToken) ? finalToken : '';
-  })();
-
-  return ongoingAuthPromise;
-}
-
-export function getAuthHeaders(): Record<string, string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const token = getAuthToken();
-  if (token && !isTokenExpired(token)) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  return headers;
-}
-
-export function getAdminAuthHeaders(): Record<string, string> {
-  const headers = getAuthHeaders();
-  let adminEmail = '';
-  try {
-    const sessStr = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
-    if (sessStr) {
-      const sess = JSON.parse(sessStr);
-      adminEmail = (sess?.email || '').toLowerCase().trim();
-    }
-  } catch {}
-  if (!adminEmail) adminEmail = 'breakingnewswala.com@gmail.com';
-  headers['x-admin-email'] = adminEmail;
-  return headers;
-}
-
-export async function getAdminAuthHeadersAsync(): Promise<Record<string, string>> {
-  let token = await ensureAuthToken().catch(() => '');
-  if (!token || isTokenExpired(token)) {
-    token = await ensureAuthToken(true).catch(() => '');
-  }
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  let adminEmail = '';
-  try {
-    const sessStr = localStorage.getItem('reporter_auth_session') || localStorage.getItem('ai_news_user');
-    if (sessStr) {
-      const sess = JSON.parse(sessStr);
-      adminEmail = (sess?.email || '').toLowerCase().trim();
-    }
-  } catch {}
-  if (!adminEmail) adminEmail = 'breakingnewswala.com@gmail.com';
-  headers['x-admin-email'] = adminEmail;
-  return headers;
+  return authoritativeEnsureAuthToken(forceRefresh);
 }
 
 export function isProtectedApiUrl(url: string): boolean {
@@ -485,6 +175,46 @@ if (typeof window !== 'undefined') {
   window.addEventListener('click', markUserInteracted, { passive: true, capture: true });
   window.addEventListener('keydown', markUserInteracted, { passive: true, capture: true });
   window.addEventListener('touchstart', markUserInteracted, { passive: true, capture: true });
+
+  // Maintain __AI_NEWS_ACTIVE_TAB tracking to accurately suppress admin auth notifications when not on an admin view
+  const syncActiveTab = (tab?: string) => {
+    if (tab) {
+      (window as any).__AI_NEWS_ACTIVE_TAB = tab;
+      (window as any).__ai_news_active_tab = tab;
+      return;
+    }
+    try {
+      const saved = localStorage.getItem('last_active_tab');
+      if (saved) {
+        (window as any).__AI_NEWS_ACTIVE_TAB = saved;
+        (window as any).__ai_news_active_tab = saved;
+        return;
+      }
+    } catch {}
+    const path = (window.location.pathname || '').toLowerCase();
+    const hash = (window.location.hash || '').toLowerCase();
+    if (path.includes('admin') || hash.includes('admin')) {
+      (window as any).__AI_NEWS_ACTIVE_TAB = 'admin';
+    } else if (path.includes('studio') || hash.includes('studio')) {
+      (window as any).__AI_NEWS_ACTIVE_TAB = 'studio';
+    } else if (path.includes('video') || hash.includes('video')) {
+      (window as any).__AI_NEWS_ACTIVE_TAB = 'videos';
+    } else if (path.includes('newsroom') || hash.includes('newsroom')) {
+      (window as any).__AI_NEWS_ACTIVE_TAB = 'newsroom';
+    } else if (path.includes('profile') || hash.includes('profile')) {
+      (window as any).__AI_NEWS_ACTIVE_TAB = 'profile';
+    } else {
+      (window as any).__AI_NEWS_ACTIVE_TAB = 'home';
+    }
+    (window as any).__ai_news_active_tab = (window as any).__AI_NEWS_ACTIVE_TAB;
+  };
+
+  syncActiveTab();
+  window.addEventListener('popstate', () => syncActiveTab(), { passive: true });
+  window.addEventListener('hashchange', () => syncActiveTab(), { passive: true });
+  window.addEventListener('ai_news_tab_changed', ((e: CustomEvent) => {
+    if (e.detail?.tab) syncActiveTab(e.detail.tab);
+  }) as EventListener, { passive: true });
 }
 
 // Enterprise Automatic Token Injection: Attach Authorization header to all internal API requests if authenticated
@@ -588,6 +318,7 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
 
       let response = await originalFetch(input, init);
       // Controlled 401 Recovery: Refresh once and retry the original request exactly once
+      // NEVER retry on 403 Forbidden responses (authorization failures should not enter refresh loops)
       const isAlreadyRetried = Boolean((init as any)?._is401Retry);
       if (response.status === 401 && !isAlreadyRetried && isProtectedApi) {
         try {
@@ -639,7 +370,7 @@ if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
 
             // NEVER call clearAuthTokens() on 401! Clearing tokens wipes localStorage on transient 401s.
             // Check if active tab is specifically an Admin dashboard and user has performed an explicit interaction
-            const activeTab = (typeof window !== 'undefined' && ((window as any).__AI_NEWS_ACTIVE_TAB || (window as any).__ai_news_active_tab)) || '';
+            const activeTab = (typeof window !== 'undefined' && ((window as any).__AI_NEWS_ACTIVE_TAB || (window as any).__ai_news_active_tab || localStorage.getItem('last_active_tab'))) || '';
             const isTabAdmin = activeTab === 'admin' || (typeof window !== 'undefined' && (window.location.hash === '#admin' || window.location.pathname.startsWith('/admin')));
             const isExplicitUserAction = typeof window !== 'undefined' && Boolean((window as any).__ai_news_user_interacted || document.body?.dataset?.userInteracted);
             const isPublicOrInit = !isTabAdmin || !isExplicitUserAction || urlStr.includes('/api/home-feed-retention') || urlStr.includes('/api/admin/home-feed-retention');

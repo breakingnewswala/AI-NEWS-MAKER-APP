@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { registerOrUpdateUser } from '../lib/userPlanManager';
 import { safeLocalStorageSet } from '../lib/storageUtils';
-import { getApiUrl, setAuthToken, isTokenExpired } from '../lib/apiConfig';
+import { getApiUrl, getAuthHeaders, setAuthToken, isTokenExpired } from '../lib/apiConfig';
 import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { auth, FIREBASE_CONFIG } from '../lib/firebaseConfig';
 import {

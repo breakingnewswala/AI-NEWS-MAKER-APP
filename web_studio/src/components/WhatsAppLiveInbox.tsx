@@ -44,6 +44,7 @@ import {
   CheckCircle,
   FileText,
 } from 'lucide-react';
+import { getAuthHeaders } from '../lib/apiConfig';
 
 interface WhatsAppLiveInboxProps {
   currentUser?: any;

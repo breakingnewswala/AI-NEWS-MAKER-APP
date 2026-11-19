@@ -1565,9 +1565,21 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
 
       const captureFrame = () => {
         try {
+          const maxDim = 1280;
+          let targetW = video.videoWidth || 1080;
+          let targetH = video.videoHeight || 1920;
+          if (targetW > maxDim || targetH > maxDim) {
+            if (targetW > targetH) {
+              targetH = Math.round((targetH * maxDim) / targetW);
+              targetW = maxDim;
+            } else {
+              targetW = Math.round((targetW * maxDim) / targetH);
+              targetH = maxDim;
+            }
+          }
           const canvas = document.createElement('canvas');
-          canvas.width = video.videoWidth || 1080;
-          canvas.height = video.videoHeight || 1920;
+          canvas.width = targetW;
+          canvas.height = targetH;
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -1770,6 +1782,15 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         footerWidthPct: layout.footerRect.width || 100,
       }));
     }
+
+    if (generatorMode === 'video') {
+      if (pRect) setVideoRect(pRect);
+      if (hRect) setVideoHeadlineRect(hRect);
+      if (lRect) setVideoLogoRect(lRect);
+      if (locRect) setVideoLocationRect(locRect);
+      if (layout.dateRect) setVideoDateRect(layout.dateRect);
+      if (layout.watermarkRect) setVideoWatermarkRect(layout.watermarkRect);
+    }
   };
 
   // Stage 2: AI Gemini Multimodal Analysis
@@ -1784,7 +1805,13 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
     try {
       let token = await ensureAuthToken().catch(() => '');
       if (!token) token = getAuthToken();
-      const res = await requestAiFrameAnalysis(sampleImage, selectedRatio, token, primaryBackgroundAsset || undefined);
+      const res = await requestAiFrameAnalysis(
+        sampleImage,
+        selectedRatio,
+        token,
+        primaryBackgroundAsset || undefined,
+        generatorMode === 'video'
+      );
       if (res.success && res.result) {
         setAnalysisResult(res.result);
         applyAiAnalysisLayout(res.result);
@@ -3697,12 +3724,12 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                 <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mx-auto">
                   <Sparkles className="w-6 h-6" />
                 </div>
-                <h4 className="font-black text-base text-white">Gemini AI विज़न एनालिसिस</h4>
-                <p className="text-xs text-slate-300 leading-relaxed">
+                <h4 className="font-black text-base text-white text-center mx-auto">Gemini AI विज़न एनालिसिस</h4>
+                <p className="text-xs text-slate-300 leading-relaxed text-center mx-auto">
                   सैंपल ग्राफिक को स्कैन करके हेडलाइन स्थिति, फोटो स्लॉट अनुपात, लोगो व लोकेशन बैज के निर्देशांक स्वतः पहचाने जाएंगे।
                 </p>
 
-                <div className="pt-2 flex items-center gap-2 flex-wrap">
+                <div className="pt-2 flex items-center justify-center gap-3 flex-wrap">
                   <button
                     type="button"
                     disabled={isAnalyzing || !sampleImage}
@@ -3724,21 +3751,21 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                 </div>
 
                 {analysisStatusText && (
-                  <div className={`text-xs font-bold pt-2 ${analysisStatusText.startsWith('❌') ? 'text-rose-400' : analysisStatusText.startsWith('✅') ? 'text-emerald-400' : 'text-amber-300'}`}>
+                  <div className={`text-xs font-bold pt-2 text-center mx-auto ${analysisStatusText.startsWith('❌') ? 'text-rose-400' : analysisStatusText.startsWith('✅') ? 'text-emerald-400' : 'text-amber-300'}`}>
                     {analysisStatusText}
                   </div>
                 )}
               </div>
 
               {analysisResult && (
-                <div className="p-5 bg-emerald-950/30 border border-emerald-500/40 rounded-2xl space-y-3">
-                  <div className="flex items-center gap-2 text-emerald-400 font-black text-sm">
+                <div className="p-5 bg-emerald-950/30 border border-emerald-500/40 rounded-2xl space-y-3 text-center mx-auto">
+                  <div className="flex items-center justify-center gap-2 text-emerald-400 font-black text-sm text-center mx-auto">
                     <Check className="w-4 h-4" />
                     <span>सफलतापूर्वक पहचाने गए तत्व:</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 text-xs text-slate-300">
+                  <div className="grid grid-cols-2 gap-3 text-xs text-slate-300 text-center mx-auto">
                     <div>• हेडलाइन लाइन: {analysisResult.headlineMaxLines || 3} लाइन्स</div>
-                    <div>• फोटो स्लॉट: 1 मुख्य स्लॉट</div>
+                    <div>• {generatorMode === 'video' ? 'वीडियो स्लॉट' : 'फोटो स्लॉट'}: 1 मुख्य स्लॉट</div>
                     <div>• लोगो स्थिति: टॉप-लेफ्ट</div>
                     <div>• लोकेशन बैज: पिल स्टाइल</div>
                   </div>

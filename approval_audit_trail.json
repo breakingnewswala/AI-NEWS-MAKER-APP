@@ -1,0 +1,742 @@
+[
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795049519255,
+    "publicationTimestamp": 1795049519255,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795049510551,
+    "publicationTimestamp": 1795049510551,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795048589263,
+    "publicationTimestamp": 1795048589263,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795048579895,
+    "publicationTimestamp": 1795048579895,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795048531262,
+    "publicationTimestamp": 1795048531262,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795048522730,
+    "publicationTimestamp": 1795048522730,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795048321984,
+    "publicationTimestamp": 1795048321984,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795048312981,
+    "publicationTimestamp": 1795048312981,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795047826388,
+    "publicationTimestamp": 1795047826388,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795047817394,
+    "publicationTimestamp": 1795047817394,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795047546926,
+    "publicationTimestamp": 1795047546926,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795047537598,
+    "publicationTimestamp": 1795047537598,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795047329282,
+    "publicationTimestamp": 1795047329282,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795047320622,
+    "publicationTimestamp": 1795047320622,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795047015105,
+    "publicationTimestamp": 1795047015105,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795047004568,
+    "publicationTimestamp": 1795047004568,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795045715037,
+    "publicationTimestamp": 1795045715037,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795045706428,
+    "publicationTimestamp": 1795045706428,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795045509056,
+    "publicationTimestamp": 1795045509056,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795045500481,
+    "publicationTimestamp": 1795045500481,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795045479319,
+    "publicationTimestamp": 1795045479319,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795045470265,
+    "publicationTimestamp": 1795045470265,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795045427643,
+    "publicationTimestamp": 1795045427643,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795045418822,
+    "publicationTimestamp": 1795045418822,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795045353386,
+    "publicationTimestamp": 1795045353386,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795045344875,
+    "publicationTimestamp": 1795045344875,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795044868745,
+    "publicationTimestamp": 1795044868745,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795044859887,
+    "publicationTimestamp": 1795044859887,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795044570124,
+    "publicationTimestamp": 1795044570124,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795044560436,
+    "publicationTimestamp": 1795044560436,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795031397996,
+    "publicationTimestamp": 1795031397996,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795031389240,
+    "publicationTimestamp": 1795031389240,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795031312233,
+    "publicationTimestamp": 1795031312233,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795031303380,
+    "publicationTimestamp": 1795031303380,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795031193364,
+    "publicationTimestamp": 1795031193364,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795031182714,
+    "publicationTimestamp": 1795031182714,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795031177451,
+    "publicationTimestamp": 1795031177451,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795031168297,
+    "publicationTimestamp": 1795031168297,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795031149855,
+    "publicationTimestamp": 1795031149855,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795031141061,
+    "publicationTimestamp": 1795031141061,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030897182,
+    "publicationTimestamp": 1795030897182,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030887728,
+    "publicationTimestamp": 1795030887728,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030843839,
+    "publicationTimestamp": 1795030843839,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030834892,
+    "publicationTimestamp": 1795030834893,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030827421,
+    "publicationTimestamp": 1795030827422,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030818716,
+    "publicationTimestamp": 1795030818716,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030754693,
+    "publicationTimestamp": 1795030754693,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030745885,
+    "publicationTimestamp": 1795030745885,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030739410,
+    "publicationTimestamp": 1795030739410,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030730952,
+    "publicationTimestamp": 1795030730952,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030664128,
+    "publicationTimestamp": 1795030664128,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030655278,
+    "publicationTimestamp": 1795030655278,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030427945,
+    "publicationTimestamp": 1795030427945,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030419153,
+    "publicationTimestamp": 1795030419153,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030247611,
+    "publicationTimestamp": 1795030247611,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030238973,
+    "publicationTimestamp": 1795030238973,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030220814,
+    "publicationTimestamp": 1795030220814,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030213353,
+    "publicationTimestamp": 1795030213353,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030155024,
+    "publicationTimestamp": 1795030155024,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030145772,
+    "publicationTimestamp": 1795030145772,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030066756,
+    "publicationTimestamp": 1795030066756,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795030058094,
+    "publicationTimestamp": 1795030058094,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795029678651,
+    "publicationTimestamp": 1795029678651,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795029665274,
+    "publicationTimestamp": 1795029665274,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795029512107,
+    "publicationTimestamp": 1795029512107,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795029503317,
+    "publicationTimestamp": 1795029503317,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795029487356,
+    "publicationTimestamp": 1795029487356,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795029478529,
+    "publicationTimestamp": 1795029478529,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795029299179,
+    "publicationTimestamp": 1795029299179,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795029289595,
+    "publicationTimestamp": 1795029289595,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795029276277,
+    "publicationTimestamp": 1795029276277,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795029267800,
+    "publicationTimestamp": 1795029267800,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795029100453,
+    "publicationTimestamp": 1795029100453,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795028897791,
+    "publicationTimestamp": 1795028897791,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  }
+]

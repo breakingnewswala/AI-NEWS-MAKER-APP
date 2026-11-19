@@ -13294,7 +13294,7 @@ function initializeAuthSecret() {
     console.error("[SECURITY CRITICAL] SESSION_SECRET is missing or invalid in production! Refusing to start with insecure session secret.");
     throw new Error("[SECURITY CRITICAL] SESSION_SECRET environment variable (minimum 32 characters) must be configured in Secret Manager / Production environment.");
   }
-  return import_crypto2.default.randomBytes(32).toString("hex");
+  return import_crypto2.default.createHmac("sha256", "ai-news-maker-stable-dev-salt").update(process.cwd()).digest("hex");
 }
 var AUTH_SECRET = initializeAuthSecret();
 function generateAuthToken(user) {
@@ -14459,8 +14459,8 @@ var quotaExceededInfo = {
   message: "Google Gemini AI \u092E\u0949\u0921\u0932 \u0938\u0947\u0935\u093E \u0938\u0915\u094D\u0930\u093F\u092F \u0914\u0930 \u0924\u0948\u092F\u093E\u0930 \u0939\u0948\u0964"
 };
 var GEMINI_MODELS_POOL = [
-  "gemini-3.8-flash",
-  "gemini-flash-latest"
+  "gemini-2.5-flash",
+  "gemini-2.0-flash"
 ];
 var CP1252_REVERSE_MAP = {
   8364: 128,
@@ -14643,6 +14643,8 @@ var UPLOAD_FONTS_DIR = import_path2.default.join(process.cwd(), "public", "uploa
 var WEB_UPLOAD_FONTS_DIR = import_path2.default.join(process.cwd(), "web_studio", "public", "uploads", "fonts");
 var UPLOAD_FRAMES_DIR = import_path2.default.join(process.cwd(), "public", "uploads", "frames");
 var WEB_UPLOAD_FRAMES_DIR = import_path2.default.join(process.cwd(), "web_studio", "public", "uploads", "frames");
+var UPLOAD_MUSIC_DIR = import_path2.default.join(process.cwd(), "public", "uploads", "music");
+var WEB_UPLOAD_MUSIC_DIR = import_path2.default.join(process.cwd(), "web_studio", "public", "uploads", "music");
 try {
   import_fs2.default.mkdirSync(UPLOAD_LOGOS_DIR, { recursive: true });
   import_fs2.default.mkdirSync(WEB_UPLOAD_LOGOS_DIR, { recursive: true });
@@ -14656,6 +14658,8 @@ try {
   import_fs2.default.mkdirSync(WEB_UPLOAD_FONTS_DIR, { recursive: true });
   import_fs2.default.mkdirSync(UPLOAD_FRAMES_DIR, { recursive: true });
   import_fs2.default.mkdirSync(WEB_UPLOAD_FRAMES_DIR, { recursive: true });
+  import_fs2.default.mkdirSync(UPLOAD_MUSIC_DIR, { recursive: true });
+  import_fs2.default.mkdirSync(WEB_UPLOAD_MUSIC_DIR, { recursive: true });
 } catch {
 }
 function loadRewardsDatabase() {
@@ -19554,6 +19558,7 @@ app.delete("/api/admin/videos/:id", requireAdminMiddleware, async (req, res) => 
   }
 });
 var MUSIC_LIBRARY_FILE = import_path2.default.join(process.cwd(), "music_library_db.json");
+var MUSIC_LIBRARY_DATABASE_FILE = import_path2.default.join(process.cwd(), "music_library_database.json");
 function loadMusicLibrary() {
   try {
     if (import_fs2.default.existsSync(MUSIC_LIBRARY_FILE)) {
@@ -19574,7 +19579,12 @@ function loadMusicLibrary() {
 }
 function saveMusicLibrary(tracks) {
   try {
-    import_fs2.default.writeFileSync(MUSIC_LIBRARY_FILE, JSON.stringify(tracks, null, 2), "utf-8");
+    const serialized = JSON.stringify(tracks, null, 2);
+    import_fs2.default.writeFileSync(MUSIC_LIBRARY_FILE, serialized, "utf-8");
+    try {
+      import_fs2.default.writeFileSync(MUSIC_LIBRARY_DATABASE_FILE, serialized, "utf-8");
+    } catch {
+    }
   } catch (err) {
     console.error("Error saving music library:", err.message);
   }
@@ -19621,6 +19631,24 @@ app.post("/api/admin/music-library/upload", requireAdminMiddleware, (req, res) =
     if (!trackName || !url) {
       return res.status(400).json({ error: "\u0911\u0921\u093F\u092F\u094B \u092B\u093E\u0907\u0932 \u0914\u0930 \u091F\u094D\u0930\u0948\u0915 \u0928\u093E\u092E \u0926\u094B\u0928\u094B\u0902 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0939\u0948\u0902\u0964" });
     }
+    let trackUrl = String(url || "").trim();
+    if (trackUrl.startsWith("data:audio/") || trackUrl.startsWith("data:application/") || trackUrl.startsWith("data:") && trackUrl.includes(";base64,")) {
+      let ext = "mp3";
+      if (trackUrl.includes("audio/wav")) ext = "wav";
+      else if (trackUrl.includes("audio/aac")) ext = "aac";
+      else if (trackUrl.includes("audio/ogg")) ext = "ogg";
+      const savedFilename = `track_${Date.now()}_${import_crypto2.default.randomBytes(4).toString("hex")}.${ext}`;
+      const base64Data = trackUrl.replace(/^data:[^;]+;base64,/, "");
+      const buffer = Buffer.from(base64Data, "base64");
+      import_fs2.default.mkdirSync(UPLOAD_MUSIC_DIR, { recursive: true });
+      import_fs2.default.writeFileSync(import_path2.default.join(UPLOAD_MUSIC_DIR, savedFilename), buffer);
+      try {
+        import_fs2.default.mkdirSync(WEB_UPLOAD_MUSIC_DIR, { recursive: true });
+        import_fs2.default.writeFileSync(import_path2.default.join(WEB_UPLOAD_MUSIC_DIR, savedFilename), buffer);
+      } catch {
+      }
+      trackUrl = `/uploads/music/${savedFilename}`;
+    }
     let normalizedMode = "both";
     if (typeof targetModes === "string" && ["quick", "studio", "both"].includes(targetModes)) {
       normalizedMode = targetModes;
@@ -19638,7 +19666,7 @@ app.post("/api/admin/music-library/upload", requireAdminMiddleware, (req, res) =
       id: id && String(id).trim() ? String(id).trim() : `track-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       name: trackName,
       category: String(category || "General").trim(),
-      url: String(url).trim(),
+      url: trackUrl,
       duration: typeof duration === "number" ? duration : void 0,
       uploadedAt: Date.now(),
       uploadedBy: req.user?.email || "admin",
@@ -25766,7 +25794,7 @@ app.post("/api/admin/toggle-notification-board/:id", requireAdminMiddleware, asy
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
-app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (req, res) => {
+app.post("/api/dynamic-frames/ai-analyze", requireAdminMiddleware, async (req, res) => {
   try {
     const rawRatio = req.body?.selectedRatio || req.body?.aspectRatio || "9:16";
     const rawBase64 = req.body?.sampleBase64 || req.body?.sampleImage || "";
@@ -25774,21 +25802,30 @@ app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (
     const selectedRatio = rawRatio === "4:5" || rawRatio === "1:1" || rawRatio === "9:16" || rawRatio === "16:9" ? rawRatio : "9:16";
     const sampleBase64 = typeof rawBase64 === "string" ? rawBase64 : "";
     const pngFrameBase64 = typeof rawPngFrame === "string" ? rawPngFrame : "";
+    const isVideoMode = Boolean(req.body?.isVideoMode);
     const isStory = selectedRatio === "9:16";
     const isSquare = selectedRatio === "1:1";
+    const isLandscape = selectedRatio === "16:9";
+    const photoRect = isStory ? { x: 0, y: 0, width: 100, height: 64 } : isSquare ? { x: 0, y: 0, width: 100, height: 60 } : isLandscape ? { x: 0, y: 0, width: 100, height: 63 } : { x: 0, y: 0, width: 100, height: 61.33 };
+    const recommendedPhotoSlots = [
+      {
+        name: "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u092B\u094B\u091F\u094B",
+        slotType: "normal",
+        rect: photoRect
+      }
+    ];
     const fallbackLayout = {
       detectedRatio: selectedRatio,
+      canvasRatio: selectedRatio,
+      headlineMaxLines: 3,
       headerRect: isStory ? { x: 6, y: 3, width: 88, height: 12 } : isSquare ? { x: 5, y: 3, width: 90, height: 14 } : { x: 5, y: 3.5, width: 90, height: 15 },
       logoRect: isStory ? { x: 6, y: 3, width: 24, height: 6.5 } : isSquare ? { x: 5, y: 3, width: 22, height: 8 } : { x: 5, y: 3.5, width: 22, height: 9 },
       locationRect: isStory ? { x: 6, y: 10.5, width: 30, height: 3.2 } : isSquare ? { x: 5, y: 12, width: 28, height: 4.2 } : { x: 5, y: 13.5, width: 28, height: 4.5 },
       headlineRect: isStory ? { x: 6, y: 66, width: 88, height: 25 } : isSquare ? { x: 6, y: 62, width: 88, height: 28 } : { x: 7, y: 63, width: 86, height: 27 },
-      recommendedPhotoSlots: [
-        {
-          name: "\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 \u092B\u094B\u091F\u094B",
-          slotType: "normal",
-          rect: isStory ? { x: 0, y: 0, width: 100, height: 64 } : isSquare ? { x: 0, y: 0, width: 100, height: 60 } : { x: 0, y: 0, width: 100, height: 61.33 }
-        }
-      ],
+      photoRect,
+      videoRect: photoRect,
+      recommendedPhotoSlots,
+      photoSlots: recommendedPhotoSlots,
       statementDetected: false,
       quoteRect: isStory ? { x: 8, y: 18, width: 84, height: 32 } : isSquare ? { x: 8, y: 20, width: 84, height: 26 } : { x: 8, y: 22, width: 84, height: 26 },
       speakerNameRect: isStory ? { x: 8, y: 76, width: 44, height: 7 } : isSquare ? { x: 8, y: 70, width: 42, height: 7 } : { x: 8, y: 72, width: 42, height: 7 },
@@ -25803,18 +25840,39 @@ app.post("/api/dynamic-frames/ai-analyze", requireMasterAdminMiddleware, async (
       return res.json({
         success: true,
         result: fallbackLayout,
+        fallbackLayout,
         isFallback: true,
+        canRetry: true,
         warning: "\u0938\u0948\u0902\u092A\u0932 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u0948\u0964 \u0915\u0948\u0932\u093F\u092C\u094D\u0930\u0947\u091F\u0947\u0921 \u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F \u0932\u0947\u0906\u0909\u091F \u0938\u0915\u094D\u0930\u093F\u092F \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964"
       });
     }
+    const maxPayloadSize = 14 * 1024 * 1024;
+    if (sampleBase64.length > maxPayloadSize) {
+      return res.status(400).json({
+        success: false,
+        error: "\u0938\u0948\u0902\u092A\u0932 \u0907\u092E\u0947\u091C \u092B\u093C\u093E\u0907\u0932 \u092C\u0939\u0941\u0924 \u092C\u0921\u093C\u0940 \u0939\u0948 (\u0905\u0927\u093F\u0915\u0924\u092E 10MB)\u0964 \u0915\u0943\u092A\u092F\u093E \u091B\u094B\u091F\u0940 \u0907\u092E\u0947\u091C \u0905\u092A\u0932\u094B\u0921 \u0915\u0930\u0947\u0902\u0964"
+      });
+    }
+    let cleanBase64 = sampleBase64;
+    let mimeType = "image/png";
+    const match = sampleBase64.match(/^data:([^;]+);base64,(.+)$/);
+    if (match) {
+      mimeType = match[1].toLowerCase().trim();
+      cleanBase64 = match[2];
+    } else if (sampleBase64.startsWith("data:")) {
+      return res.status(400).json({
+        success: false,
+        error: "\u0905\u092E\u093E\u0928\u094D\u092F \u0907\u092E\u0947\u091C \u0921\u0947\u091F\u093E \u092A\u094D\u0930\u093E\u0930\u0942\u092A\u0964"
+      });
+    }
+    const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+    if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
+      return res.status(400).json({
+        success: false,
+        error: "\u0905\u092E\u093E\u0928\u094D\u092F \u092B\u093C\u093E\u0907\u0932 \u092A\u094D\u0930\u0915\u093E\u0930\u0964 \u0915\u0947\u0935\u0932 PNG, JPEG \u0914\u0930 WebP \u0907\u092E\u0947\u091C \u0938\u092E\u0930\u094D\u0925\u093F\u0924 \u0939\u0948\u0902\u0964"
+      });
+    }
     try {
-      let cleanBase64 = sampleBase64;
-      let mimeType = "image/png";
-      const match = sampleBase64.match(/^data:([^;]+);base64,(.+)$/);
-      if (match) {
-        mimeType = match[1];
-        cleanBase64 = match[2];
-      }
       const promptParts = [
         {
           text: `Analyze this news graphic / jacket template design for creating an automated news frame template in AI News Maker.
@@ -25839,6 +25897,7 @@ Return ONLY a valid JSON object matching this schema without any markdown format
   "logoRect": { "x": 5, "y": 3, "width": 22, "height": 8 },
   "locationRect": { "x": 5, "y": 12, "width": 26, "height": 4 },
   "headlineRect": { "x": 6, "y": 64, "width": 88, "height": 26 },
+  "headlineMaxLines": 3,
   "recommendedPhotoSlots": [
     { "name": "Main Photo", "slotType": "normal", "rect": { "x": 0, "y": 0, "width": 100, "height": 62 } }
   ],
@@ -25876,7 +25935,7 @@ Return ONLY a valid JSON object matching this schema without any markdown format
       const parsed = await executeGeminiWithKeyPool(async (ai) => {
         const aiResponse = await generateWithFallbackAndRetry(
           ai,
-          ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-flash-latest"],
+          DEFAULT_FALLBACK_MODELS,
           {
             contents: [
               {
@@ -25898,22 +25957,41 @@ Return ONLY a valid JSON object matching this schema without any markdown format
           parsed.footerRect.y = isStory ? 93.5 : 92;
           parsed.footerRect.height = isStory ? 6.5 : 8;
         }
-        return res.json({ success: true, result: { ...fallbackLayout, ...parsed }, isFallback: false });
+        const detectedPhotoRect = parsed.photoRect || parsed.recommendedPhotoSlots?.[0]?.rect || fallbackLayout.photoRect;
+        const normalizedPhotoRect = {
+          x: Math.max(0, Math.min(100, Number(detectedPhotoRect.x) || 0)),
+          y: Math.max(0, Math.min(100, Number(detectedPhotoRect.y) || 0)),
+          width: Math.max(5, Math.min(100, Number(detectedPhotoRect.width) || 100)),
+          height: Math.max(5, Math.min(100, Number(detectedPhotoRect.height) || 64))
+        };
+        const mergedResult = {
+          ...fallbackLayout,
+          ...parsed,
+          photoRect: normalizedPhotoRect,
+          videoRect: parsed.videoRect || normalizedPhotoRect,
+          canvasRatio: parsed.canvasRatio || parsed.detectedRatio || selectedRatio,
+          headlineMaxLines: typeof parsed.headlineMaxLines === "number" ? parsed.headlineMaxLines : fallbackLayout.headlineMaxLines
+        };
+        return res.json({ success: true, result: mergedResult, fallbackLayout, isFallback: false, canRetry: true });
       }
     } catch (aiErr) {
-      console.error("[Dynamic Frames AI] Vision analysis error:", aiErr?.message || aiErr);
-      return res.status(502).json({
-        success: false,
-        error: `AI \u0935\u093F\u091C\u093C\u0928 \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0909\u092A\u0932\u092C\u094D\u0927 \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u093E (${aiErr?.message || "\u0924\u094D\u0930\u0941\u091F\u093F"})\u0964 \u0915\u0943\u092A\u092F\u093E \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964`,
+      console.warn("[Dynamic Frames AI] Vision analysis upstream failure, using calibrated fallback:", aiErr?.message || aiErr);
+      return res.status(200).json({
+        success: true,
+        result: fallbackLayout,
+        fallbackLayout,
+        isFallback: true,
         canRetry: true,
-        fallbackLayout
+        warning: `AI \u0935\u093F\u091C\u093C\u0928 \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927 \u0939\u0948 (${aiErr?.message || "\u0924\u094D\u0930\u0941\u091F\u093F"})\u0964 \u0915\u0948\u0932\u093F\u092C\u094D\u0930\u0947\u091F\u0947\u0921 \u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F \u0932\u0947\u0906\u0909\u091F \u0938\u0915\u094D\u0930\u093F\u092F \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964`
       });
     }
-    return res.status(502).json({
-      success: false,
-      error: "AI \u0935\u093F\u091C\u093C\u0928 \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0938\u0947 \u0915\u094B\u0908 \u0935\u0948\u0927 \u0932\u0947\u0906\u0909\u091F \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0928\u0939\u0940\u0902 \u0939\u0941\u0906\u0964",
+    return res.status(200).json({
+      success: true,
+      result: fallbackLayout,
+      fallbackLayout,
+      isFallback: true,
       canRetry: true,
-      fallbackLayout
+      warning: "AI \u0935\u093F\u091C\u093C\u0928 \u0935\u093F\u0936\u094D\u0932\u0947\u0937\u0923 \u0938\u0947 \u0915\u094B\u0908 \u0935\u0948\u0927 \u0932\u0947\u0906\u0909\u091F \u092A\u094D\u0930\u093E\u092A\u094D\u0924 \u0928\u0939\u0940\u0902 \u0939\u0941\u0906\u0964 \u0915\u0948\u0932\u093F\u092C\u094D\u0930\u0947\u091F\u0947\u0921 \u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F \u0932\u0947\u0906\u0909\u091F \u0938\u0915\u094D\u0930\u093F\u092F \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964"
     });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
@@ -28184,9 +28262,9 @@ function resolveUserTierAndRole(req) {
   return { tier: explicitTier || "basic", role: explicitRole || "reporter" };
 }
 var DEFAULT_FALLBACK_MODELS = [
-  "gemini-3.8-flash",
-  "gemini-3.5-flash-lite",
-  "gemini-flash-latest"
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash"
 ];
 async function generateWithFallbackAndRetry(ai, models, reqOptions, maxRetriesPerModel = 2) {
   let lastError = null;
@@ -28482,7 +28560,7 @@ function loadApiKeysVault(skipCache = false) {
           successCount: 0,
           errorCount: 0,
           provider: "Google Gemini",
-          model: "gemini-3-flash-preview",
+          model: "gemini-2.5-flash",
           lastHealthStatus: "healthy"
         }
       ],
@@ -28788,7 +28866,7 @@ async function checkDefaultGeminiHealth(forceRefresh = false) {
     return {
       isConfigured: false,
       healthStatus: "not_configured",
-      model: DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview",
+      model: DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash",
       errorMessage: "\u0921\u093F\u092B\u093C\u0949\u0932\u094D\u091F GEMINI_API_KEY \u092A\u0930\u094D\u092F\u093E\u0935\u0930\u0923 \u092E\u0947\u0902 \u0938\u0947\u091F \u0928\u0939\u0940\u0902 \u0939\u0948"
     };
   }
@@ -28798,7 +28876,7 @@ async function checkDefaultGeminiHealth(forceRefresh = false) {
   }
   const cleanKey = process.env.GEMINI_API_KEY.trim();
   const start = Date.now();
-  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview";
+  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash";
   let lastErr = null;
   let testSuccess = false;
   for (const candidateModel of DEFAULT_FALLBACK_MODELS) {
@@ -28869,7 +28947,7 @@ app.get("/api/admin/api-keys", requireAdminMiddleware, async (req, res) => {
     lastHealthStatus: k.lastHealthStatus || (k.status === "active" ? "healthy" : "error"),
     lastError: k.lastError || null,
     provider: k.provider || "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
-    model: k.model || "gemini-3-flash-preview"
+    model: k.model || "gemini-2.5-flash"
   }));
   const paidConfigured = Boolean(vault.paidKey?.key && vault.paidKey.key.trim().length > 5);
   const maskedPaidKey = paidConfigured ? maskApiKey(vault.paidKey.key) : null;
@@ -28903,7 +28981,7 @@ app.get("/api/admin/api-keys", requireAdminMiddleware, async (req, res) => {
       lastHealthStatus: vault.paidKey?.lastHealthStatus || (paidConfigured ? "healthy" : "inactive"),
       lastError: vault.paidKey?.lastError || null,
       provider: vault.paidKey?.provider || "Google Gemini (\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940)",
-      model: vault.paidKey?.model || "gemini-3-flash-preview"
+      model: vault.paidKey?.model || "gemini-2.5-flash"
     },
     vipRoutingEnabled: vault.vipRoutingEnabled,
     stats: {
@@ -28947,7 +29025,7 @@ app.post("/api/admin/api-keys/free", requireAdminMiddleware, async (req, res) =>
   let initialHealth = "healthy";
   let initialLatency;
   let initialError;
-  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-3-flash-preview";
+  let successfulModel = DEFAULT_FALLBACK_MODELS[0] || "gemini-2.5-flash";
   const testStart = Date.now();
   let testSuccess = false;
   let lastTestErr = null;
@@ -29056,7 +29134,7 @@ app.post("/api/admin/api-keys/paid", requireMasterAdminMiddleware, async (req, r
       updatedAt: Date.now(),
       status: "active",
       provider: "Google Gemini",
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       lastHealthStatus: "healthy"
     };
   }
@@ -29105,7 +29183,7 @@ app.post("/api/admin/api-keys/test", requireMasterAdminMiddleware, async (req, r
       httpOptions: { headers: { "User-Agent": "aistudio-build-test" } }
     });
     const result = await testAi.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-2.5-flash",
       contents: "Respond in 2 words: Connected successfully"
     });
     const latency = Date.now() - start;
@@ -29139,7 +29217,52 @@ async function probeGeminiKeyZeroQuota(apiKey) {
     const latencyMs = Date.now() - start;
     const statusCode = resp.status;
     if (resp.ok) {
-      return { success: true, state: "READY", latencyMs, statusCode };
+      try {
+        const testAiProbe = new import_genai2.GoogleGenAI({
+          apiKey: cleanKey,
+          httpOptions: { headers: { "User-Agent": "ai-news-maker-health-probe-1token" } }
+        });
+        const probeCall = testAiProbe.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: "1",
+          config: { maxOutputTokens: 1 }
+        });
+        const timeoutCall = new Promise(
+          (_, reject) => setTimeout(() => reject(new Error("Probe token timeout after 5s")), 5e3)
+        );
+        await Promise.race([probeCall, timeoutCall]);
+        return { success: true, state: "READY", latencyMs: Date.now() - start, statusCode: 200 };
+      } catch (genErr) {
+        const genLatency = Date.now() - start;
+        const classified = classifyApiKeyError(genErr);
+        const errMsg2 = String(genErr?.message || "").toLowerCase();
+        const errStatus2 = String(genErr?.status || "");
+        if (classified.type === "quota" || errStatus2 === "RESOURCE_EXHAUSTED" || errMsg2.includes("429") || errMsg2.includes("quota") || errMsg2.includes("rate limit") || errMsg2.includes("too many requests") || errMsg2.includes("resource_exhausted")) {
+          return {
+            success: false,
+            state: errMsg2.includes("quota") || errMsg2.includes("exhausted") || errMsg2.includes("resource_exhausted") ? "QUOTA_EXHAUSTED" : "RATE_LIMITED",
+            latencyMs: genLatency,
+            statusCode: 429,
+            errorMessage: genErr?.message || "\u0926\u0948\u0928\u093F\u0915 \u0915\u094B\u091F\u093E / \u0930\u0947\u091F \u0932\u093F\u092E\u093F\u091F \u0938\u092E\u093E\u092A\u094D\u0924 (Quota or Rate limit exceeded)"
+          };
+        }
+        if (classified.type === "invalid" || errMsg2.includes("invalid") || errMsg2.includes("not valid") || errMsg2.includes("api_key_invalid")) {
+          return {
+            success: false,
+            state: "INVALID_KEY",
+            latencyMs: genLatency,
+            statusCode: 400,
+            errorMessage: genErr?.message || "\u0905\u092E\u093E\u0928\u094D\u092F API Key (Invalid Key)"
+          };
+        }
+        return {
+          success: false,
+          state: "TEMPORARILY_UNAVAILABLE",
+          latencyMs: genLatency,
+          statusCode: 503,
+          errorMessage: genErr?.message || "\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940 \u0938\u0947\u0935\u093E \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927"
+        };
+      }
     }
     const errBody = await resp.json().catch(() => ({}));
     const errMsg = String(errBody?.error?.message || "").toLowerCase();

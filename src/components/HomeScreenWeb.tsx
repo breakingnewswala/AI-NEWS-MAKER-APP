@@ -87,8 +87,6 @@ import {
   getSavedNewsChannels,
   approveRssPost,
   isRssPostApproved,
-  fetchAdminRssSourcesFromBackend,
-  syncAllSourcesLive,
   syncAndMigrateLocalApprovals,
 } from '../lib/rssSourceManager';
 import { fetchRemoteRestrictedChannels, RestrictedChannel } from '../lib/restrictedChannelsManager';
@@ -1621,13 +1619,6 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   }, [posts]);
 
   useEffect(() => {
-    // Automatically load backend RSS & Web link sources and perform live sync on mount (admin only)
-    if (canModerate) {
-      fetchAdminRssSourcesFromBackend().then(() => {
-        syncAllSourcesLive().catch(() => {});
-      }).catch(() => {});
-    }
-
     const handleRssUpdate = () => {
       setActiveRssPosts(getActiveRssNewsPosts());
       syncAndMigrateLocalApprovals().then((serverSet) => {

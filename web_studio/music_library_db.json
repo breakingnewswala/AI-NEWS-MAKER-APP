@@ -1,5 +1,34 @@
 [
   {
+    "id": "s1_track_1795028904594",
+    "name": "S1 Headline Theme",
+    "category": "breaking",
+    "url": "https://example.com/audio/s1.mp3",
+    "duration": 45,
+    "uploadedAt": 1795028904597,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free",
+      "pro"
+    ]
+  },
+  {
+    "id": "e2e_track_1795028897814",
+    "name": "E2E Audio Track",
+    "category": "breaking",
+    "url": "https://example.com/audio/test.mp3",
+    "duration": 30,
+    "uploadedAt": 1795028897817,
+    "uploadedBy": "breakingnewswala.com@gmail.com",
+    "isCopyrightSafe": true,
+    "targetModes": "quick",
+    "allowedTiers": [
+      "free"
+    ]
+  },
+  {
     "id": "track_breaking_pulse",
     "name": "🔴 सुपर ब्रेकिंग बीट (Urgent Beat)",
     "category": "Breaking",
@@ -7,7 +36,14 @@
     "duration": 30,
     "uploadedAt": 1740000000000,
     "uploadedBy": "admin.ainewsmaker@gmail.com",
-    "isCopyrightSafe": true
+    "isCopyrightSafe": true,
+    "targetModes": "both",
+    "allowedTiers": [
+      "basic",
+      "advance",
+      "pro",
+      "vip"
+    ]
   },
   {
     "id": "track_news_headlines",
@@ -17,7 +53,14 @@
     "duration": 45,
     "uploadedAt": 1740000000000,
     "uploadedBy": "breakingnewswala.com@gmail.com",
-    "isCopyrightSafe": true
+    "isCopyrightSafe": true,
+    "targetModes": "both",
+    "allowedTiers": [
+      "basic",
+      "advance",
+      "pro",
+      "vip"
+    ]
   },
   {
     "id": "track_ambient_editorial",
@@ -27,6 +70,13 @@
     "duration": 60,
     "uploadedAt": 1740000000000,
     "uploadedBy": "admin.ainewsmaker@gmail.com",
-    "isCopyrightSafe": true
+    "isCopyrightSafe": true,
+    "targetModes": "both",
+    "allowedTiers": [
+      "basic",
+      "advance",
+      "pro",
+      "vip"
+    ]
   }
 ]

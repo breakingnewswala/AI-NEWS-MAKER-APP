@@ -1,7 +1,7 @@
 // AI News Maker - Admin RSS & Web Link Source Management
 // Flow: ADMIN -> Add Source -> Active -> News Fetch -> Home Feed -> Users
 
-import { getApiUrl, getAuthHeaders, ensureAuthToken, getAdminAuthHeaders as getBaseAdminAuthHeaders, getAdminAuthHeadersAsync, isTokenExpired } from './apiConfig';
+import { getApiUrl, getAuthHeaders, getAuthToken, ensureAuthToken, getAdminAuthHeaders as getBaseAdminAuthHeaders, getAdminAuthHeadersAsync, isTokenExpired } from './apiConfig';
 import type { NewsFeedPost } from '../data/newsFeedData';
 
 export interface AdminRssSource {
@@ -93,7 +93,7 @@ export async function fetchAdminRssSourcesFromBackend(): Promise<AdminRssSource[
     const headers: Record<string, string> = { ...getAdminAuthHeaders() };
     if (token) headers['Authorization'] = `Bearer ${token}`;
     let res = await fetch(getApiUrl('/api/admin/rss-sources'), { headers });
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
       const freshToken = await ensureAuthToken(true).catch(() => '');
       if (freshToken) {
         headers['Authorization'] = `Bearer ${freshToken}`;
@@ -151,7 +151,7 @@ export function saveAdminRssSources(sources: AdminRssSource[]) {
       body: JSON.stringify({ sources: cleaned, replace: true, userRole: 'admin' }),
     });
 
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
       const freshToken = await ensureAuthToken(true).catch(() => '');
       if (freshToken) {
         headers['Authorization'] = `Bearer ${freshToken}`;
@@ -498,7 +498,7 @@ export async function approveRssPost(postId: string, postData?: any): Promise<bo
       body: JSON.stringify(target || {}),
     });
 
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
       token = await ensureAuthToken(true).catch(() => '');
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
@@ -568,7 +568,7 @@ export async function rejectRssPost(postId: string): Promise<boolean> {
       headers,
     });
 
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
       token = await ensureAuthToken(true).catch(() => '');
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
@@ -725,7 +725,10 @@ export interface RssSyncResult {
 export async function syncAllSourcesLive(): Promise<RssSyncResult> {
   try {
     const authHeaders = await getAdminAuthHeadersAsync();
-    let token = getAuthToken();
+    let token = await ensureAuthToken().catch(() => '');
+    if (!token || isTokenExpired(token)) {
+      token = getAuthToken();
+    }
     if (!token || isTokenExpired(token)) {
       token = await ensureAuthToken(true);
     }
@@ -829,7 +832,10 @@ export async function syncAllSourcesLive(): Promise<RssSyncResult> {
 export async function scrapeAllWebSourcesLive(): Promise<RssSyncResult> {
   try {
     const authHeaders = await getAdminAuthHeadersAsync();
-    let token = getAuthToken();
+    let token = await ensureAuthToken().catch(() => '');
+    if (!token || isTokenExpired(token)) {
+      token = getAuthToken();
+    }
     if (!token || isTokenExpired(token)) {
       token = await ensureAuthToken(true);
     }
