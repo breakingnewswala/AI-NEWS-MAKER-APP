@@ -166,3 +166,38 @@ export function calculateDynamicLocationMetrics(options: DynamicLocationOptions)
     finalCenterW,
   };
 }
+
+/**
+ * Safely converts any SVG string or data URL to a robust Base64 data URL.
+ * Resolves XML fragment '#' and URL '%23' discrepancies, ensuring browser <img>
+ * and Canvas loadImage() never fail due to malformed gradient IDs or hex colors.
+ */
+export function toSafeSvgDataUrl(rawUrl?: string | null): string {
+  if (!rawUrl || typeof rawUrl !== 'string') return '';
+  if (!rawUrl.startsWith('data:image/svg+xml')) return rawUrl;
+  if (rawUrl.includes(';base64,')) return rawUrl;
+
+  try {
+    let rawContent = rawUrl.replace(/^data:image\/svg\+xml(?:;[a-zA-Z0-9_\-]+)?,/, '');
+    // If it was percent-encoded (e.g. starts with %3Csvg)
+    if (rawContent.startsWith('%3C') || rawContent.startsWith('%3c')) {
+      try {
+        rawContent = decodeURIComponent(rawContent);
+      } catch {}
+    }
+    // Replace %23 with # because in XML/SVG colors and gradient hrefs are #hex / #id
+    rawContent = rawContent.replace(/%23/g, '#');
+
+    let base64 = '';
+    if (typeof Buffer !== 'undefined') {
+      base64 = Buffer.from(rawContent, 'utf8').toString('base64');
+    } else if (typeof btoa !== 'undefined') {
+      base64 = btoa(unescape(encodeURIComponent(rawContent)));
+    }
+    if (base64) {
+      return `data:image/svg+xml;base64,${base64}`;
+    }
+  } catch (err) {}
+  return rawUrl;
+}
+

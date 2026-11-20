@@ -99,33 +99,35 @@ import { drawThemeFooterBar } from '../lib/CanvasExporter';
 import { BUILTIN_RIBBONS } from '../lib/ribbonPresets';
 import { STATEMENT_BACKGROUND_PRESETS } from '../lib/statementBackgroundPresets';
 import { getAuthToken, ensureAuthToken, isTokenExpired, reauthenticateAdmin } from '../lib/apiConfig';
+import { toSafeSvgDataUrl } from '../lib/locationUtils';
 
 /**
  * Robust image loader that avoids setting crossOrigin on data: and blob: URLs
  * to eliminate CORS/security failures in modern web engines.
  */
 function loadImageSafe(src: string): Promise<HTMLImageElement> {
+  const effectiveSrc = toSafeSvgDataUrl(src) || src;
   return new Promise((resolve, reject) => {
-    if (!src) return reject(new Error('Empty src'));
+    if (!effectiveSrc) return reject(new Error('Empty src'));
     const img = new Image();
-    if (!src.startsWith('data:') && !src.startsWith('blob:')) {
+    if (!effectiveSrc.startsWith('data:') && !effectiveSrc.startsWith('blob:')) {
       img.crossOrigin = 'anonymous';
     }
     img.onload = () => resolve(img);
     img.onerror = () => {
       // If external image fails with CORS, route through /api/proxy-image to guarantee clean canvas without tainting
-      if (src.startsWith('http://') || src.startsWith('https://')) {
-        const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(src)}`;
+      if (effectiveSrc.startsWith('http://') || effectiveSrc.startsWith('https://')) {
+        const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(effectiveSrc)}`;
         const proxyImg = new Image();
         proxyImg.crossOrigin = 'anonymous';
         proxyImg.onload = () => resolve(proxyImg);
-        proxyImg.onerror = () => reject(new Error(`Failed to load image via proxy: ${src.substring(0, 50)}`));
+        proxyImg.onerror = () => reject(new Error(`Failed to load image via proxy: ${effectiveSrc.substring(0, 50)}`));
         proxyImg.src = proxyUrl;
       } else {
-        reject(new Error(`Failed to load image: ${src.substring(0, 50)}`));
+        reject(new Error(`Failed to load image: ${effectiveSrc.substring(0, 50)}`));
       }
     };
-    img.src = src;
+    img.src = effectiveSrc;
   });
 }
 
@@ -3142,6 +3144,19 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       calloutAssetUrl: isVideo ? undefined : (manualCalloutAssetUrl || fullStoryCalloutConfig.manualCalloutAsset),
       locationBadgeAssetId: headerConfig.locationBadgeAssetId,
       manualLocationAsset: videoLocationBadgeUrl || headerConfig.manualLocationAsset,
+      defaultLocationBadgeId: headerConfig.locationBadgeAssetId,
+      allowedLocationBadgeIds: (initialFrame as any)?.allowedLocationBadgeIds || locationBadgeLibrary.map(b => b.id),
+      locationBadgeEnabled: headerConfig.showLocation !== false,
+      locationBadgeAsset: videoLocationBadgeUrl || headerConfig.manualLocationAsset || (headerConfig.locationBadgeAssetId ? locationBadgeLibrary.find(b => b.id === headerConfig.locationBadgeAssetId)?.url : undefined),
+      locationBadgePosition: headerConfig.locationRect || { x: 5, y: 13.5, width: 28, height: 4.5 },
+      locationBadgeDimensions: headerConfig.locationRect ? { width: headerConfig.locationRect.width, height: headerConfig.locationRect.height } : { width: 28, height: 4.5 },
+      locationTextStyle: headerConfig.typographyConfig,
+      footerBrandingConfig: {
+        footerBgColor: primaryFooterColor || footerConfig.footerBgColor || '#FFFFFF',
+        footerTextColor: footerConfig.footerTextColor || '#000000',
+        primaryFooterColor,
+        bannedFooterColor,
+      },
       calloutAssetId: isVideo ? undefined : fullStoryCalloutConfig.calloutAssetId,
       sliceConfig: headerConfig.sliceConfig || (headerConfig.locationBadgeAssetId ? locationBadgeLibrary.find(b => b.id === headerConfig.locationBadgeAssetId)?.sliceConfig : undefined) || { leftWidthPct: 0.28, rightWidthPct: 0.15, centerMinPct: 0.57 },
       poweredByConfig,

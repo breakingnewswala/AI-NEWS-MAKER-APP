@@ -518,10 +518,7 @@ export default function App() {
       if (path === '/admin' || hash === 'admin' || fullUrl.includes('tab=admin') || path === '/admin/' || path.startsWith('/admin')) {
         return 'admin';
       }
-      const lastTab = localStorage.getItem('last_active_tab');
-      if (isAdmin && (lastTab === 'admin' || lastTab === 'profile')) {
-        return 'admin';
-      }
+
 
       // 3. Standard application tabs
       if (hash === 'profile' || path === '/profile' || path === '/profile/' || path.startsWith('/profile') || fullUrl.includes('tab=profile')) {
@@ -2798,7 +2795,13 @@ export default function App() {
       setCurrentUser(user);
       setIsLoginModalOpen(false);
       showToast(`👋 मास्टर एडमिन स्वागत है!`);
-      navigateToTab('admin');
+      const preRequested = typeof window !== 'undefined' ? (sessionStorage.getItem('pre_login_requested_tab') || localStorage.getItem('pre_login_requested_tab')) : null;
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('pre_login_requested_tab');
+        localStorage.removeItem('pre_login_requested_tab');
+      }
+      const targetTab = (preRequested && preRequested !== 'profile') ? preRequested : 'home';
+      navigateToTab(targetTab as AppTab);
       return;
     }
 
@@ -2808,6 +2811,13 @@ export default function App() {
     }
     setIsLoginModalOpen(false);
     showToast(`👋 स्वागत है, ${user.name}!`);
+    const preRequested = typeof window !== 'undefined' ? (sessionStorage.getItem('pre_login_requested_tab') || localStorage.getItem('pre_login_requested_tab')) : null;
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('pre_login_requested_tab');
+      localStorage.removeItem('pre_login_requested_tab');
+    }
+    const targetTab = (preRequested && preRequested !== 'profile') ? preRequested : 'home';
+    navigateToTab(targetTab as AppTab);
 
     // Auto-open guide modal on login if not opted out
     try {
@@ -3985,12 +3995,17 @@ export default function App() {
             if (isAdmin) {
               setAdminSystemMode('admin');
               try {
-                localStorage.setItem('last_active_tab', 'admin');
                 localStorage.setItem('is_onboarding_completed', 'true');
               } catch {}
-              navigateToTab('admin');
               setIsOnboardingCompleted(true);
               showToast('👑 एडमिन कंट्रोल पैनल में आपका स्वागत है!');
+              const preRequested = typeof window !== 'undefined' ? (sessionStorage.getItem('pre_login_requested_tab') || localStorage.getItem('pre_login_requested_tab')) : null;
+              if (typeof window !== 'undefined') {
+                sessionStorage.removeItem('pre_login_requested_tab');
+                localStorage.removeItem('pre_login_requested_tab');
+              }
+              const targetTab = (preRequested && preRequested !== 'profile') ? preRequested : 'home';
+              navigateToTab(targetTab as AppTab);
               return;
             }
             let isVerifiedAndComplete = false;
@@ -4062,10 +4077,16 @@ export default function App() {
             const isAdmin = isUserAdmin(userToSet);
             if (isAdmin) {
               setAdminSystemMode('admin');
-              navigateToTab('profile');
               localStorage.setItem('is_onboarding_completed', 'true');
               setIsOnboardingCompleted(true);
               showToast('👑 मुख्य एडमिन कंट्रोल पैनल में आपका स्वागत है!');
+              const preRequested = typeof window !== 'undefined' ? (sessionStorage.getItem('pre_login_requested_tab') || localStorage.getItem('pre_login_requested_tab')) : null;
+              if (typeof window !== 'undefined') {
+                sessionStorage.removeItem('pre_login_requested_tab');
+                localStorage.removeItem('pre_login_requested_tab');
+              }
+              const targetTab = (preRequested && preRequested !== 'profile') ? preRequested : 'home';
+              navigateToTab(targetTab as AppTab);
             } else {
               localStorage.setItem('is_onboarding_completed', 'true');
               setIsOnboardingCompleted(true);

@@ -23,7 +23,7 @@ import {
 import { getSocialIconSrc, SOCIAL_ICONS_DATA } from './socialIconsData';
 import { getApiUrl } from './apiConfig';
 import { getDynamicFrameById, normalizeDynamicFrame, getAssetLibraryItemById } from './dynamicFramesManager';
-import { formatCleanLocationText } from './locationUtils';
+import { formatCleanLocationText, toSafeSvgDataUrl } from './locationUtils';
 import { DynamicFrame, resolveEffectivePhotoSlots } from '../types/dynamicFrame';
 
 const FALLBACK_NEWS_BG = '/assets/preview_placeholder.jpg';
@@ -1821,7 +1821,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
   const isImageWatermarkActive = Boolean(card.watermarkMode === 'image' || (card.watermarkType === 'image' && card.watermarkImage));
   const isTextWatermarkActive = (card.showTextWatermark === true || card.showSuperBreakingWatermark === true || card.watermarkMode === 'text') && !isImageWatermarkActive;
 
-  if (isTextWatermarkActive) {
+  if (isTextWatermarkActive || isImageWatermarkActive) {
     ctx.save();
     // Clip strictly to photo slot bounds so watermark NEVER bleeds onto headline, footer or frame borders
     ctx.beginPath();
@@ -1838,32 +1838,59 @@ async function drawAuthoritativeDynamicFrameCanvas(
     }
     ctx.clip();
 
-    const textContent = (card.textWatermarkContent || card.channelNameEn || card.brandName || card.watermarkText || 'BREAKING NEWS WALA').trim();
-    const textOpacity = card.textWatermarkOpacity ?? card.watermarkOpacity ?? 0.18;
-    const textColor = card.textWatermarkColor || 'white';
-    ctx.globalAlpha = Math.max(0.05, Math.min(0.65, textOpacity));
-
-    const colorHex = textColor === 'black' ? '#000000' : textColor === 'red' ? '#DC2626' : '#FFFFFF';
-    ctx.fillStyle = colorHex;
-    ctx.font = '900 24px "Arial", "Noto Sans Devanagari", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    ctx.save();
-    ctx.translate(width / 2, height * 0.28);
-    const wmRotDeg = card.watermarkRotation ?? -20;
-    ctx.rotate((wmRotDeg * Math.PI) / 180);
-    const textMetrics = ctx.measureText(textContent.toUpperCase());
-    const measuredW = textMetrics ? textMetrics.width : (textContent.length * 16);
-    const stepX = Math.max(340, Math.round(measuredW + 120));
-    const stepY = 110;
-    for (let row = -5; row <= 5; row++) {
-      const offsetX = (row % 2) * (stepX / 2);
-      for (let col = -3; col <= 3; col++) {
-        ctx.fillText(textContent.toUpperCase(), col * stepX + offsetX, row * stepY);
+    if (isImageWatermarkActive && card.watermarkImage) {
+      try {
+        const wmImg = await loadImage(card.watermarkImage);
+        if (wmImg) {
+          const imgOpacity = card.textWatermarkOpacity ?? card.watermarkOpacity ?? 0.15;
+          ctx.globalAlpha = Math.max(0.05, Math.min(0.65, imgOpacity));
+          const logoW = Math.round((card.watermarkScale || 90) * (width / 1080));
+          const logoH = Math.round(logoW * (wmImg.height / wmImg.width));
+          ctx.save();
+          ctx.translate(width / 2, height * 0.28);
+          const wmRotDeg = card.watermarkRotation ?? -20;
+          ctx.rotate((wmRotDeg * Math.PI) / 180);
+          const stepX = Math.max(280, logoW + 80);
+          const stepY = Math.max(100, logoH + 60);
+          for (let row = -5; row <= 5; row++) {
+            const offsetX = (row % 2) * (stepX / 2);
+            for (let col = -3; col <= 3; col++) {
+              ctx.drawImage(wmImg, col * stepX + offsetX - logoW / 2, row * stepY - logoH / 2, logoW, logoH);
+            }
+          }
+          ctx.restore();
+        }
+      } catch (err) {
+        console.warn('Image watermark load error in photo viewport:', err);
       }
+    } else if (isTextWatermarkActive) {
+      const textContent = (card.textWatermarkContent || card.channelNameEn || card.brandName || card.watermarkText || 'BREAKING NEWS WALA').trim();
+      const textOpacity = card.textWatermarkOpacity ?? card.watermarkOpacity ?? 0.18;
+      const textColor = card.textWatermarkColor || 'white';
+      ctx.globalAlpha = Math.max(0.05, Math.min(0.65, textOpacity));
+
+      const colorHex = textColor === 'black' ? '#000000' : textColor === 'red' ? '#DC2626' : '#FFFFFF';
+      ctx.fillStyle = colorHex;
+      ctx.font = '900 24px "Arial", "Noto Sans Devanagari", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      ctx.save();
+      ctx.translate(width / 2, height * 0.28);
+      const wmRotDeg = card.watermarkRotation ?? -20;
+      ctx.rotate((wmRotDeg * Math.PI) / 180);
+      const textMetrics = ctx.measureText(textContent.toUpperCase());
+      const measuredW = textMetrics ? textMetrics.width : (textContent.length * 16);
+      const stepX = Math.max(340, Math.round(measuredW + 120));
+      const stepY = 110;
+      for (let row = -5; row <= 5; row++) {
+        const offsetX = (row % 2) * (stepX / 2);
+        for (let col = -3; col <= 3; col++) {
+          ctx.fillText(textContent.toUpperCase(), col * stepX + offsetX, row * stepY);
+        }
+      }
+      ctx.restore();
     }
-    ctx.restore();
     ctx.restore();
   }
 
@@ -1950,17 +1977,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
     let badgeDrawn = false;
     if (locAsset) {
       try {
-        let safeLocAsset = locAsset;
-        if (locAsset.startsWith('data:image/svg+xml')) {
-          try {
-            if (!locAsset.includes('%3Csvg') && !locAsset.includes(';base64,')) {
-              const svgContent = locAsset.replace(/^data:image\/svg\+xml(?:;utf8)?,/, '');
-              safeLocAsset = `data:image/svg+xml;utf8,${encodeURIComponent(svgContent)}`;
-            }
-          } catch {
-            safeLocAsset = locAsset;
-          }
-        }
+        const safeLocAsset = toSafeSvgDataUrl(locAsset);
         const badgeImg = await loadImage(safeLocAsset);
         if (badgeImg && badgeImg.naturalWidth > 1 && badgeImg.naturalHeight > 1) {
           const nw = badgeImg.naturalWidth || badgeImg.width || 400;
@@ -2162,7 +2179,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
       let cImg: HTMLImageElement | null = null;
       if (calloutAsset) {
         try {
-          cImg = await loadImage(calloutAsset);
+          cImg = await loadImage(toSafeSvgDataUrl(calloutAsset));
         } catch (e) {
           console.warn('Callout asset load warning, falling back to vector banner if configured:', e);
         }
@@ -2412,8 +2429,8 @@ async function drawAuthoritativeDynamicFrameCanvas(
       card.websiteUrl,
       card.activeSocialIcons,
       card.showMobileNumber,
-      df.footerConfig?.footerBgColor || card.footerBgColor || '#FFFFFF',
-      df.footerConfig?.footerTextColor || card.footerTextColor || '#000000',
+      (df as any).footerBrandingConfig?.footerBgColor || df.footerConfig?.footerBgColor || card.footerBgColor || '#FFFFFF',
+      (df as any).footerBrandingConfig?.footerTextColor || df.footerConfig?.footerTextColor || card.footerTextColor || '#000000',
       card.footerIconStyle || 'color',
       card.showWebsite
     );

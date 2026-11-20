@@ -63,11 +63,16 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   footerConfig,
   previewScale,
 }) => {
+  const [footerImgError, setFooterImgError] = React.useState(false);
+  React.useEffect(() => {
+    setFooterImgError(false);
+  }, [customFooterPng]);
+
   const effectiveBgColor = footerConfig?.footerBgColor || footerBgColor || '#FFFFFF';
   const effectiveCustomTextColor = footerConfig?.footerTextColor || footerTextColor;
 
-  // If user provided custom Footer.png file, render it directly
-  if (customFooterPng) {
+  // If user provided custom Footer.png file, render it directly (with fallback to branding layout if image is broken)
+  if (customFooterPng && !footerImgError) {
     return (
       <div
         className="h-full w-full select-none overflow-hidden flex items-center justify-center"
@@ -75,8 +80,9 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
       >
         <img
           src={customFooterPng}
-          alt="News Card Footer"
+          alt=""
           className="w-full h-full object-contain block"
+          onError={() => setFooterImgError(true)}
         />
       </div>
     );

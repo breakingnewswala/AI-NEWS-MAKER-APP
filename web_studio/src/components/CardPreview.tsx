@@ -12,7 +12,7 @@ import { shouldShowAppWatermark } from '../lib/userPlanManager';
 import { getApiUrl } from '../lib/apiConfig';
 import { getDynamicFrameById, normalizeDynamicFrame, getAssetLibraryItemById } from '../lib/dynamicFramesManager';
 import { resolveEffectivePhotoSlots } from '../types/dynamicFrame';
-import { formatCleanLocationText, calculateDynamicLocationMetrics } from '../lib/locationUtils';
+import { formatCleanLocationText, calculateDynamicLocationMetrics, toSafeSvgDataUrl } from '../lib/locationUtils';
 import {
   computeCanonicalHeadlineLayout,
   getTemplateLayoutSpec,
@@ -702,13 +702,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         );
       })()}
 
-      {/* 0B2. DYNAMIC FRAME TEXT WATERMARK (Covers 100% of photo area including behind logo, strictly clipped above headline) */}
-      {df && (card.showTextWatermark === true || card.showSuperBreakingWatermark === true || card.watermarkMode === 'text') && card.watermarkMode !== 'image' && !card.watermarkImage && (() => {
-        const topPct = 0;
-        const leftPct = 0;
-        const widthPct = 100;
+      {/* 0B2. DYNAMIC FRAME TEXT WATERMARK (Layer 3: Strictly clipped to Photo Slots, drawn underneath PNG Artwork) */}
+      {df && (card.showTextWatermark === true || card.showSuperBreakingWatermark === true || card.watermarkMode === 'text' || card.watermarkMode === 'image') && (() => {
+        const primarySlot = df.photoSlots?.[0]?.rect;
+        const leftPct = primarySlot ? primarySlot.x : 0;
+        const topPct = primarySlot ? primarySlot.y : 0;
+        const widthPct = primarySlot ? primarySlot.width : 100;
         const maxHeadlineY = df.textSlots?.[0]?.rect ? Math.max(30, df.textSlots[0].rect.y) : 60;
-        const heightPct = Math.min(maxHeadlineY, df.photoSlots?.[0]?.rect?.height ? ((df.photoSlots[0].rect.y || 0) + df.photoSlots[0].rect.height) : maxHeadlineY);
+        const heightPct = primarySlot ? primarySlot.height : (df.photoSlots?.[0]?.rect?.height ? ((df.photoSlots[0].rect.y || 0) + df.photoSlots[0].rect.height) : maxHeadlineY);
 
         return (
           <div
@@ -1465,18 +1466,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 const locBorderRadius = isDarkChip || df.headerConfig.locationStyle === 'box' ? '6px' : '9999px';
                 const locBorder = isDarkChip ? '2px solid #FFFFFF' : '1.5px solid rgba(255, 255, 255, 0.4)';
 
-                let safeBadgeUrl = badgeAsset;
-                if (badgeAsset && badgeAsset.startsWith('data:image/svg+xml')) {
-                  try {
-                    // Only encode if not already encoded
-                    if (!badgeAsset.includes('%3Csvg') && !badgeAsset.includes(';base64,')) {
-                      const svgContent = badgeAsset.replace(/^data:image\/svg\+xml(?:;utf8)?,/, '');
-                      safeBadgeUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svgContent)}`;
-                    }
-                  } catch {
-                    safeBadgeUrl = badgeAsset;
-                  }
-                }
+                let safeBadgeUrl = toSafeSvgDataUrl(badgeAsset);
 
                 const dynamicLoc = calculateDynamicLocationMetrics({
                   locationText: cleanLoc,
@@ -1728,7 +1718,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     >
                       {isImageMode ? (
                         <img
-                          src={calloutUrl}
+                          src={toSafeSvgDataUrl(calloutUrl) || calloutUrl}
                           alt="Callout"
                           className="w-full h-full object-contain"
                           onError={() => setCalloutImgError(true)}

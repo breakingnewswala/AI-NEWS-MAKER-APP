@@ -123,6 +123,7 @@ import {
   fitHeadlinesTo5TierRanges,
   cleanHeadlineText,
 } from '../lib/speakerUtils';
+import { toSafeSvgDataUrl } from '../lib/locationUtils';
 import { CardPreview } from './CardPreview';
 import { getUserFirstHashtag, buildHashtags } from './CaptionModal';
 import { VoiceInputButton } from './VoiceInputButton';
@@ -468,7 +469,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     getCustomFrames(currentUser?.email || currentUser?.username)
   );
   const [libraryFooters, setLibraryFooters] = React.useState<any[]>([]);
-  const [libraryCallouts, setLibraryCallouts] = React.useState<any[]>([]);
+  const [libraryCallouts, setLibraryCallouts] = React.useState<any[]>(() => {
+    return getDefaultAssetLibrariesFallback('callout_png') || [];
+  });
   const [libraryLocationBadges, setLibraryLocationBadges] = React.useState<any[]>(() => {
     return getDefaultAssetLibrariesFallback('location_badge') || [];
   });
@@ -482,9 +485,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
     const updates: Partial<NewsCardData> = {};
 
-    // Bug C & D: Footer Background and Text Color inheritance
-    const dfFooterBg = activeDf.footerConfig?.footerBgColor || (activeDf.footerConfig as any)?.primaryFooterBg || (activeDf.footerConfig as any)?.primaryFooterColor;
-    const dfFooterText = activeDf.footerConfig?.footerTextColor;
+    // Section 4: Footer Background and Text Color inheritance from Master Admin frame branding
+    const dfFooterBg = (activeDf as any).footerBrandingConfig?.footerBgColor || activeDf.footerConfig?.footerBgColor || (activeDf.footerConfig as any)?.primaryFooterBg || (activeDf.footerConfig as any)?.primaryFooterColor;
+    const dfFooterText = (activeDf as any).footerBrandingConfig?.footerTextColor || activeDf.footerConfig?.footerTextColor;
     const bannedFooterColor = activeDf.footerConfig?.bannedFooterColor || (activeDf as any)?.bannedFooterColor;
 
     if (dfFooterBg) {
@@ -4941,7 +4944,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     </div>
                     <div className="h-8 w-full bg-neutral-950 rounded border border-neutral-800 flex items-center justify-center p-1 overflow-hidden">
                       {badge.url || badge.assetUrl ? (
-                        <img src={badge.url || badge.assetUrl} alt={badge.name} className="h-full w-full object-contain" />
+                        <img src={toSafeSvgDataUrl(badge.url || badge.assetUrl)} alt={badge.name} className="h-full w-full object-contain" />
                       ) : (
                         <span className="text-[9px] text-neutral-400">स्थान बैज</span>
                       )}
@@ -5661,7 +5664,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       (!card.customCalloutAssetUrl && !card.selectedCalloutId && lc.id === (currentDynamicFrame?.fullStoryCalloutConfig?.calloutAssetId || currentDynamicFrame?.calloutAssetId || 'callout_story_live_update'));
                     const planHierarchy: Record<string, number> = { BASIC: 1, ADVANCED: 2, PRO: 3, PROFESSIONAL: 3, 'VIP DESK': 4, VIP: 4, ULTRA: 4 };
                     const userTierRank = effectiveAdmin ? 99 : (effectiveTier === 'ultra' ? 4 : (effectiveTier === 'professional' ? 3 : (effectiveTier === 'advanced' ? 2 : 1)));
-                    const canChangeCallout = effectiveAdmin || userTierRank >= 3;
+                    const itemAllowedPlans = Array.isArray(lc.allowedPlans) ? lc.allowedPlans.map((p: string) => p.toUpperCase()) : ['BASIC', 'ADVANCED', 'PRO', 'VIP DESK'];
+                    const userPlanUpper = (effectiveTier || 'BASIC').toUpperCase();
+                    const canChangeCallout = effectiveAdmin || userTierRank >= 3 || itemAllowedPlans.includes(userPlanUpper);
 
                     return (
                       <button
@@ -5695,7 +5700,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         </div>
                         <div className="h-6 w-full bg-neutral-950 rounded border border-neutral-800 flex items-center justify-center p-1 overflow-hidden">
                           {lc.url || lc.assetUrl ? (
-                            <img src={lc.url || lc.assetUrl} alt={lc.name} className="h-full w-full object-contain" />
+                            <img src={toSafeSvgDataUrl(lc.url || lc.assetUrl)} alt={lc.name} className="h-full w-full object-contain" />
                           ) : (
                             <span className="text-[9px] text-neutral-400">कॉलआउट</span>
                           )}
