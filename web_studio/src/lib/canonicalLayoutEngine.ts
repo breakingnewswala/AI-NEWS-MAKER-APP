@@ -756,16 +756,18 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
     }
   }
 
-  // Final fallback if headline exceeds available space even at 20px
+  // Final fallback if headline exceeds available space even at 20px:
+  // Step down to minimum readable font size (18px) and strictly clamp to maxLines & maxH
   if (!fitsCleanly) {
-    const spaceW = measureTextWidth(' ', fontFam, endFontSize, '900', options.ctx);
+    const minS = 18;
+    const spaceW = measureTextWidth(' ', fontFam, minS, '900', options.ctx);
     const allTokens = parseHeadlineTokens(rawHeadline, effectiveHighlightWords);
     const lines: WordToken[][] = [];
     let curLine: WordToken[] = [];
     let curWidth = 0;
 
     for (const token of allTokens) {
-      const w = measureTextWidth(token.text, fontFam, endFontSize, '900', options.ctx);
+      const w = measureTextWidth(token.text, fontFam, minS, '900', options.ctx);
       const needed = curLine.length === 0 ? w : curWidth + spaceW + w;
       if (needed > maxW && curLine.length > 0) {
         lines.push(curLine);
@@ -779,11 +781,34 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
     if (curLine.length > 0) {
       lines.push(curLine);
     }
-    bestFontSize = endFontSize;
-    bestLines = lines;
-    bestLineH = Math.round(endFontSize * 1.30);
-    bestTotalH = lines.length * bestLineH;
+
+    const lineH = Math.round(minS * 1.30);
+    const allowedLineCount = Math.max(1, Math.min(maxLines, Math.floor(maxH / lineH)));
+    let clampedLines = lines;
+    if (clampedLines.length > allowedLineCount) {
+      clampedLines = clampedLines.slice(0, allowedLineCount);
+      const lastLine = clampedLines[clampedLines.length - 1];
+      if (lastLine && lastLine.length > 0) {
+        const lastTok = lastLine[lastLine.length - 1];
+        lastLine[lastLine.length - 1] = {
+          ...lastTok,
+          text: lastTok.text.endsWith('…') ? lastTok.text : `${lastTok.text}…`,
+        };
+      }
+    }
+
+    bestFontSize = minS;
+    bestLines = clampedLines;
+    bestLineH = lineH;
+    bestTotalH = clampedLines.length * bestLineH;
     fitsCleanly = false;
+  }
+
+  // Strictest Boundary Guarantee: Never exceed maxH or maxLines
+  const maxAllowedLines = Math.max(1, Math.min(maxLines, Math.floor(maxH / bestLineH)));
+  if (bestLines.length > maxAllowedLines) {
+    bestLines = bestLines.slice(0, maxAllowedLines);
+    bestTotalH = bestLines.length * bestLineH;
   }
 
   // Calculate precise geometric coordinates for every line

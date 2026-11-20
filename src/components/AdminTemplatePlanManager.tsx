@@ -762,9 +762,19 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                   {/* Authentic Dynamic Frame Overlay on Thumbnail */}
                   {item.rawDynamicFrame && (() => {
                     const df = normalizeDynamicFrame(item.rawDynamicFrame);
-                    const rawBadge = df.headerConfig?.manualLocationAsset || (df.headerConfig?.locationBadgeAssetId ? getAssetLibraryItemById(df.headerConfig.locationBadgeAssetId)?.url : undefined);
-                    const badgeAsset = (rawBadge && !rawBadge.includes('location_white_icon.png')) ? rawBadge : getAssetLibraryItemById('asset_1794132101671_u0g9s')?.url;
-                    const calloutAsset = df.fullStoryCalloutConfig?.manualCalloutAsset || (df.fullStoryCalloutConfig?.calloutAssetId ? getAssetLibraryItemById(df.fullStoryCalloutConfig.calloutAssetId)?.url : undefined) || (df as any).calloutAssetUrl || getAssetLibraryItemById('callout_story_details_hindi')?.url;
+                    const rawBadge = df.headerConfig?.manualLocationAsset ||
+                      (df.headerConfig?.locationBadgeAssetId ? getAssetLibraryItemById(df.headerConfig.locationBadgeAssetId)?.url : undefined) ||
+                      (df.locationBadgeAssetId ? getAssetLibraryItemById(df.locationBadgeAssetId)?.url : undefined);
+                    const badgeAsset = (rawBadge && !rawBadge.includes('location_white_icon.png'))
+                      ? rawBadge
+                      : (getAssetLibraryItemById(df.locationBadgeAssetId)?.url || getAssetLibraryItemById(df.headerConfig?.locationBadgeAssetId)?.url || getAssetLibraryItemById('loc_style_classic_ribbon_pin')?.url || getAssetLibraryItemById('asset_1794132101671_u0g9s')?.url);
+                    const calloutAsset = df.fullStoryCalloutConfig?.manualCalloutAsset ||
+                      (df.fullStoryCalloutConfig?.calloutAssetId ? getAssetLibraryItemById(df.fullStoryCalloutConfig.calloutAssetId)?.url : undefined) ||
+                      (df.calloutAssetId ? getAssetLibraryItemById(df.calloutAssetId)?.url : undefined) ||
+                      (df as any).calloutAssetUrl ||
+                      getAssetLibraryItemById('callout_bully_forward_story')?.url ||
+                      getAssetLibraryItemById('callout_breaking_red')?.url ||
+                      getAssetLibraryItemById('callout_story_details_hindi')?.url;
                     const highlightColor = df.primaryHighlightColor || df.quoteHighlightColor || df.textSlots?.[0]?.highlightColor || '#FFE600';
 
                     return (
@@ -1067,9 +1077,19 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                 const widthPx = isStory ? '230px' : isSquare ? '260px' : '260px';
                 const heightPx = isStory ? '408px' : isSquare ? '260px' : '325px';
 
-                const rawBadgeAsset = df.headerConfig?.manualLocationAsset || (df.headerConfig?.locationBadgeAssetId ? getAssetLibraryItemById(df.headerConfig.locationBadgeAssetId)?.url : undefined);
-                const badgeAsset = (rawBadgeAsset && !rawBadgeAsset.includes('location_white_icon.png')) ? rawBadgeAsset : getAssetLibraryItemById('asset_1794132101671_u0g9s')?.url;
-                const calloutAsset = df.fullStoryCalloutConfig?.manualCalloutAsset || (df.fullStoryCalloutConfig?.calloutAssetId ? getAssetLibraryItemById(df.fullStoryCalloutConfig.calloutAssetId)?.url : undefined) || (df as any).calloutAssetUrl || getAssetLibraryItemById('callout_story_details_hindi')?.url;
+                const rawBadgeAsset = df.headerConfig?.manualLocationAsset ||
+                  (df.headerConfig?.locationBadgeAssetId ? getAssetLibraryItemById(df.headerConfig.locationBadgeAssetId)?.url : undefined) ||
+                  (df.locationBadgeAssetId ? getAssetLibraryItemById(df.locationBadgeAssetId)?.url : undefined);
+                const badgeAsset = (rawBadgeAsset && !rawBadgeAsset.includes('location_white_icon.png'))
+                  ? rawBadgeAsset
+                  : (getAssetLibraryItemById(df.locationBadgeAssetId)?.url || getAssetLibraryItemById(df.headerConfig?.locationBadgeAssetId)?.url || getAssetLibraryItemById('loc_style_classic_ribbon_pin')?.url || getAssetLibraryItemById('asset_1794132101671_u0g9s')?.url);
+                const calloutAsset = df.fullStoryCalloutConfig?.manualCalloutAsset ||
+                  (df.fullStoryCalloutConfig?.calloutAssetId ? getAssetLibraryItemById(df.fullStoryCalloutConfig.calloutAssetId)?.url : undefined) ||
+                  (df.calloutAssetId ? getAssetLibraryItemById(df.calloutAssetId)?.url : undefined) ||
+                  (df as any).calloutAssetUrl ||
+                  getAssetLibraryItemById('callout_bully_forward_story')?.url ||
+                  getAssetLibraryItemById('callout_breaking_red')?.url ||
+                  getAssetLibraryItemById('callout_story_details_hindi')?.url;
                 const highlightColor = df.primaryHighlightColor || df.quoteHighlightColor || df.textSlots?.[0]?.highlightColor || '#FFE600';
 
                 return (

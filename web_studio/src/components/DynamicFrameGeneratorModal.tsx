@@ -3095,7 +3095,9 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       supportsLocationBadgeBackgroundColor: headerConfig.supportsLocationBadgeBackgroundColor !== false,
       headerConfig: {
         ...headerConfig,
+        locationBadgeAssetId: headerConfig.locationBadgeAssetId,
         manualLocationAsset: videoLocationBadgeUrl || headerConfig.manualLocationAsset,
+        locationBadgeMode: 'static_image',
         maxLocationWords: headerConfig.maxLocationWords || 3,
         supportsLocationBadgeBackgroundColor: headerConfig.supportsLocationBadgeBackgroundColor !== false,
       },
@@ -3132,10 +3134,14 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
           }
         : {
             ...fullStoryCalloutConfig,
+            enabled: Boolean(fullStoryCalloutConfig.enabled || manualCalloutAssetUrl || fullStoryCalloutConfig.calloutAssetId),
+            calloutAssetId: fullStoryCalloutConfig.calloutAssetId,
             manualCalloutAsset: manualCalloutAssetUrl || fullStoryCalloutConfig.manualCalloutAsset,
+            calloutAssetMode: 'static_image',
           },
-      calloutAssetUrl: isVideo ? undefined : manualCalloutAssetUrl,
+      calloutAssetUrl: isVideo ? undefined : (manualCalloutAssetUrl || fullStoryCalloutConfig.manualCalloutAsset),
       locationBadgeAssetId: headerConfig.locationBadgeAssetId,
+      manualLocationAsset: videoLocationBadgeUrl || headerConfig.manualLocationAsset,
       calloutAssetId: isVideo ? undefined : fullStoryCalloutConfig.calloutAssetId,
       sliceConfig: headerConfig.sliceConfig || (headerConfig.locationBadgeAssetId ? locationBadgeLibrary.find(b => b.id === headerConfig.locationBadgeAssetId)?.sliceConfig : undefined) || { leftWidthPct: 0.28, rightWidthPct: 0.15, centerMinPct: 0.57 },
       poweredByConfig,
@@ -4282,6 +4288,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                                           setManualCalloutAssetUrl(assetUrl);
                                           setFullStoryCalloutConfig({
                                             ...fullStoryCalloutConfig,
+                                            enabled: true,
                                             calloutAssetId: item.id,
                                             manualCalloutAsset: assetUrl,
                                             calloutAssetMode: 'static_image',
@@ -4384,6 +4391,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                                             const chosenColor = item.typographyConfig?.textColor || item.typographyConfig?.color || '#000000';
                                             setHeaderConfig({
                                               ...headerConfig,
+                                              showLocation: true,
                                               locationBadgeAssetId: item.id,
                                               manualLocationAsset: assetUrl,
                                               textRegion: item.textRegion,

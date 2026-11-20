@@ -54,6 +54,7 @@ import {
   Download,
   Copy,
   Check,
+  CheckCircle2,
   Sparkles,
   RefreshCw,
   RotateCcw,
@@ -1741,6 +1742,7 @@ export default function App() {
           customDynamicFrame: undefined,
           frameDesign: 'graphic_001',
           templateId: 'graphic_001',
+          isTestMode: false,
         };
       }
     } catch (e) {
@@ -2600,6 +2602,10 @@ export default function App() {
       showMasterBranding: true,
       extractedArticlePhotos: [],
       templateId: 'graphic_001',
+      isTestMode: false,
+      testChannelName: undefined,
+      testSocialHandle: undefined,
+      testLogoUrl: undefined,
     }));
 
     try {
@@ -3972,10 +3978,11 @@ export default function App() {
   if (!isPublicLegalPage && (!isAllowedInApp || showAuthWelcomeScreen)) {
     return (
       <div className="min-h-screen bg-[#070D1E] text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
+        {/* Toast Notification - Standard Dark Glassmorphic Center Design */}
         {toastMessage && (
-          <div className="fixed inset-0 z-[100] pointer-events-none flex items-center justify-center top-1/2 -translate-y-1/2 p-4">
-            <div className="pointer-events-auto bg-amber-400 text-slate-950 font-black text-xs sm:text-sm px-6 py-4 rounded-2xl shadow-2xl border-2 border-amber-300 ring-4 ring-amber-400/30 flex items-center gap-2.5 animate-in zoom-in-95 max-w-md text-center justify-center">
-              <Sparkles className="w-4 h-4 text-slate-950 shrink-0" />
+          <div className="fixed inset-0 z-[100] pointer-events-none flex items-center justify-center top-1/2 -translate-y-1/2 p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150">
+            <div className="pointer-events-auto bg-slate-900/95 backdrop-blur-xl text-white font-bold text-xs sm:text-sm px-6 py-4 rounded-2xl shadow-2xl border border-emerald-500/80 ring-2 ring-emerald-500/20 flex items-center gap-3 animate-in zoom-in-95 max-w-md text-center justify-center">
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
               <span>{toastMessage}</span>
             </div>
           </div>
@@ -4345,11 +4352,11 @@ export default function App() {
         </div>
       )}
 
-      {/* Toast Notification - 100% Viewport Center Aligned Design */}
+      {/* Toast Notification - Standard Dark Glassmorphic Center Design */}
       {toastMessage && (
-        <div className="fixed inset-0 z-[100] pointer-events-none flex items-center justify-center top-1/2 -translate-y-1/2 p-4">
-          <div className="pointer-events-auto bg-amber-400 text-slate-950 font-black text-xs sm:text-sm px-6 py-4 rounded-2xl shadow-2xl border-2 border-amber-300 ring-4 ring-amber-400/30 flex items-center gap-2.5 animate-in zoom-in-95 max-w-md text-center justify-center">
-            <Sparkles className="w-5 h-5 text-slate-950 shrink-0" />
+        <div className="fixed inset-0 z-[100] pointer-events-none flex items-center justify-center top-1/2 -translate-y-1/2 p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="pointer-events-auto bg-slate-900/95 backdrop-blur-xl text-white font-bold text-xs sm:text-sm px-6 py-4 rounded-2xl shadow-2xl border border-emerald-500/80 ring-2 ring-emerald-500/20 flex items-center gap-3 animate-in zoom-in-95 max-w-md text-center justify-center">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
             <span>{toastMessage}</span>
           </div>
         </div>
@@ -4392,7 +4399,7 @@ export default function App() {
             await syncAllSourcesLive().catch(() => {});
             await fetchLiveNews();
             window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
-            setToastMessage('होम फ़ीड और लाइव खबरें रीफ्रेश हो गईं!');
+            showAppSuccess('होम फ़ीड और लाइव खबरें रीफ़्रेश हो गईं!', 'लाइव अपडेट');
           }}
           onNavigateToTab={navigateToTab}
         />

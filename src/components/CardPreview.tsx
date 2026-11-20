@@ -702,62 +702,69 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         );
       })()}
 
-      {/* 0B2. DYNAMIC FRAME TEXT WATERMARK (Priority 8: Spans entire canvas for universal brand protection, with df.photoSlots?.[0]?.rect?.height fallback) */}
-      {df && (card.showTextWatermark === true || card.showSuperBreakingWatermark === true || card.watermarkMode === 'text') && card.watermarkMode !== 'image' && !card.watermarkImage && (
-        <div
-          className="absolute inset-0 pointer-events-none z-30 overflow-hidden flex flex-col justify-around select-none"
-          style={{
-            left: 0,
-            top: 0,
-            width: '100%',
-            height: '100%',
-            minHeight: df.photoSlots?.[0]?.rect?.height ? '100%' : '100%',
-          }}
-        >
-          <div className="w-[200%] -ml-[50%] flex flex-col gap-8 sm:gap-11 -rotate-20">
-            {[...Array(6)].map((_, rIdx) => (
-              <div key={rIdx} className="flex whitespace-nowrap gap-12 sm:gap-16 shrink-0 font-black tracking-widest">
-                {[...Array(8)].map((_, cIdx) => (
-                  card.watermarkType === 'image' && card.watermarkImage ? (
-                    <img
-                      key={cIdx}
-                      src={card.watermarkImage}
-                      alt=""
-                      className="object-contain"
-                      style={{
-                        width: `${Math.round((card.watermarkScale || 90) * 0.45)}px`,
-                        opacity: card.textWatermarkOpacity ?? card.watermarkOpacity ?? 0.15,
-                      }}
-                    />
-                  ) : (
-                    <span
-                      key={cIdx}
-                      className="flex items-center gap-1.5 shrink-0 uppercase"
-                      style={{
-                        fontFamily: 'Arial, Helvetica, sans-serif',
-                        fontWeight: 900,
-                        color:
-                          (card.textWatermarkColor || card.watermarkColor || card.breakingWatermarkColor) === 'black'
-                            ? `rgba(0, 0, 0, ${card.textWatermarkOpacity ?? card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`
-                            : (card.textWatermarkColor || card.watermarkColor || card.breakingWatermarkColor) === 'red'
-                            ? `rgba(220, 38, 38, ${card.textWatermarkOpacity ?? card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`
-                            : `rgba(255, 255, 255, ${card.textWatermarkOpacity ?? card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`,
-                        textShadow:
-                          (card.textWatermarkColor || card.watermarkColor || card.breakingWatermarkColor) === 'black'
-                            ? '0 1px 2px rgba(255,255,255,0.15)'
-                            : '0 1px 2px rgba(0,0,0,0.45)',
-                        fontSize: '15px',
-                      }}
-                    >
-                      {card.textWatermarkContent || card.channelNameEn || card.watermarkText || card.breakingWatermarkText || (shouldShowAppWatermark() ? 'AI NEWS MAKER APP' : 'BREAKING NEWS WALA')}
-                    </span>
-                  )
-                ))}
-              </div>
-            ))}
+      {/* 0B2. DYNAMIC FRAME TEXT WATERMARK (Strictly restricted to photo area bounds, drawn beneath artwork and headline) */}
+      {df && (card.showTextWatermark === true || card.showSuperBreakingWatermark === true || card.watermarkMode === 'text') && card.watermarkMode !== 'image' && !card.watermarkImage && (() => {
+        const topPct = df.photoSlots?.[0]?.rect?.y ?? 0;
+        const leftPct = df.photoSlots?.[0]?.rect?.x ?? 0;
+        const widthPct = df.photoSlots?.[0]?.rect?.width ?? 100;
+        const heightPct = df.photoSlots?.[0]?.rect?.height ?? (df.textSlots?.[0]?.rect ? Math.max(30, df.textSlots[0].rect.y) : 58);
+
+        return (
+          <div
+            className="absolute pointer-events-none z-10 overflow-hidden flex flex-col justify-around select-none"
+            style={{
+              left: `${leftPct}%`,
+              top: `${topPct}%`,
+              width: `${widthPct}%`,
+              height: `${heightPct}%`,
+              maxHeight: `${heightPct}%`,
+            }}
+          >
+            <div className="w-[200%] -ml-[50%] flex flex-col gap-8 sm:gap-11 -rotate-20">
+              {[...Array(6)].map((_, rIdx) => (
+                <div key={rIdx} className="flex whitespace-nowrap gap-12 sm:gap-16 shrink-0 font-black tracking-widest">
+                  {[...Array(8)].map((_, cIdx) => (
+                    card.watermarkType === 'image' && card.watermarkImage ? (
+                      <img
+                        key={cIdx}
+                        src={card.watermarkImage}
+                        alt=""
+                        className="object-contain"
+                        style={{
+                          width: `${Math.round((card.watermarkScale || 90) * 0.45)}px`,
+                          opacity: card.textWatermarkOpacity ?? card.watermarkOpacity ?? 0.15,
+                        }}
+                      />
+                    ) : (
+                      <span
+                        key={cIdx}
+                        className="flex items-center gap-1.5 shrink-0 uppercase"
+                        style={{
+                          fontFamily: 'Arial, Helvetica, sans-serif',
+                          fontWeight: 900,
+                          color:
+                            (card.textWatermarkColor || card.watermarkColor || card.breakingWatermarkColor) === 'black'
+                              ? `rgba(0, 0, 0, ${card.textWatermarkOpacity ?? card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`
+                              : (card.textWatermarkColor || card.watermarkColor || card.breakingWatermarkColor) === 'red'
+                              ? `rgba(220, 38, 38, ${card.textWatermarkOpacity ?? card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`
+                              : `rgba(255, 255, 255, ${card.textWatermarkOpacity ?? card.watermarkOpacity ?? card.breakingWatermarkOpacity ?? 0.15})`,
+                          textShadow:
+                            (card.textWatermarkColor || card.watermarkColor || card.breakingWatermarkColor) === 'black'
+                              ? '0 1px 2px rgba(255,255,255,0.15)'
+                              : '0 1px 2px rgba(0,0,0,0.45)',
+                          fontSize: '15px',
+                        }}
+                      >
+                        {card.textWatermarkContent || card.channelNameEn || card.watermarkText || card.breakingWatermarkText || (shouldShowAppWatermark() ? 'AI NEWS MAKER APP' : 'BREAKING NEWS WALA')}
+                      </span>
+                    )
+                  ))}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* 0C. DYNAMIC FRAME PANEL B PNG ARTWORK OVERLAY (Layer 2: On top of photo, preserving transparent cutouts & curves) */}
       {(() => {
@@ -3935,12 +3942,13 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 const hbPadding = (slot0?.padding || 0) * previewScale;
                 return (
                   <div
-                    className={`absolute pointer-events-auto flex items-center ${slot0?.alignment === 'left' ? 'justify-start text-left' : slot0?.alignment === 'right' ? 'justify-end text-right' : 'justify-center text-center'}`}
+                    className={`absolute pointer-events-auto flex items-center overflow-hidden max-h-full ${slot0?.alignment === 'left' ? 'justify-start text-left' : slot0?.alignment === 'right' ? 'justify-end text-right' : 'justify-center text-center'}`}
                     style={{
                       left: `${slot0?.rect?.x ?? 7}%`,
                       top: `${slot0?.rect?.y ?? 63}%`,
                       width: `${slot0?.rect?.width ?? 86}%`,
                       height: `${slot0?.rect?.height ?? 27}%`,
+                      maxHeight: `${slot0?.rect?.height ?? 27}%`,
                       backgroundColor: hbBg,
                       opacity: hbOpacity,
                       border: hbBorderWidth > 0 ? `${hbBorderWidth}px solid ${hbBorderColor}` : undefined,
@@ -3949,7 +3957,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     }}
                   >
                     <h1
-                      className="font-black leading-snug drop-shadow-md w-full pb-0.5"
+                      className="font-black leading-snug drop-shadow-md w-full overflow-hidden max-h-full pb-0.5"
                       style={{
                         color: slot0?.textColor || '#FFFFFF',
                         fontFamily: `"${card.headlineFontFamily || df.typographyConfig?.primaryFontFamily || slot0?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`,

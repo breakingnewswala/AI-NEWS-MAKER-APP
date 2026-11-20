@@ -501,13 +501,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     if (!card.selectedCalloutId && defaultCalloutId) {
       updates.selectedCalloutId = defaultCalloutId;
     }
-    const defaultCalloutAsset = activeDf.fullStoryCalloutConfig?.manualCalloutAsset || (activeDf.fullStoryCalloutConfig as any)?.calloutAssetUrl || activeDf.calloutAssetUrl;
+    const defaultCalloutAsset = activeDf.fullStoryCalloutConfig?.manualCalloutAsset || (activeDf.fullStoryCalloutConfig as any)?.calloutAssetUrl || activeDf.calloutAssetUrl || getAssetLibraryItemById(defaultCalloutId)?.url;
     if (!card.customCalloutAssetUrl && defaultCalloutAsset) {
       updates.customCalloutAssetUrl = defaultCalloutAsset;
     }
-    if (activeDf.fullStoryCalloutConfig?.enabled) {
+    if (activeDf.fullStoryCalloutConfig?.enabled !== false || activeDf.calloutAssetId || defaultCalloutAsset) {
       updates.showCallout = true;
-      if (activeDf.fullStoryCalloutConfig.text && (!card.calloutTag || card.calloutTag === 'पूरी खबर विवरण नीचे पढ़ें' || card.calloutTag === 'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें')) {
+      if (activeDf.fullStoryCalloutConfig?.text && (!card.calloutTag || card.calloutTag === 'पूरी खबर विवरण नीचे पढ़ें' || card.calloutTag === 'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें')) {
         updates.calloutTag = activeDf.fullStoryCalloutConfig.text;
       }
     }
@@ -516,7 +516,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
     if (!card.selectedLocationBadgeId && defaultLocationBadgeId) {
       updates.selectedLocationBadgeId = defaultLocationBadgeId;
     }
-    const defaultLocationAsset = activeDf.headerConfig?.manualLocationAsset || (activeDf.headerConfig as any)?.locationBadgeAssetUrl || (activeDf.headerConfig as any)?.locationBadgeUrl;
+    const defaultLocationAsset = activeDf.headerConfig?.manualLocationAsset || (activeDf.headerConfig as any)?.locationBadgeAssetUrl || (activeDf.headerConfig as any)?.locationBadgeUrl || getAssetLibraryItemById(defaultLocationBadgeId)?.url;
     if (!card.customLocationBadgeUrl && defaultLocationAsset) {
       updates.customLocationBadgeUrl = defaultLocationAsset;
     }
@@ -1981,23 +1981,18 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         if (match) {
                           const calloutId = match?.calloutAssetId || match?.fullStoryCalloutConfig?.calloutAssetId || 'callout_story_details_hindi';
                           updates.selectedCalloutId = calloutId;
-                          const calloutAsset = match?.fullStoryCalloutConfig?.manualCalloutAsset || (match?.fullStoryCalloutConfig as any)?.calloutAssetUrl || match?.calloutAssetUrl;
+                          const calloutAsset = match?.fullStoryCalloutConfig?.manualCalloutAsset || (match?.fullStoryCalloutConfig as any)?.calloutAssetUrl || match?.calloutAssetUrl || getAssetLibraryItemById(calloutId)?.url;
                           if (calloutAsset) updates.customCalloutAssetUrl = calloutAsset;
-                          if (match?.fullStoryCalloutConfig?.enabled !== false) {
-                            updates.showCallout = true;
-                            if (match.fullStoryCalloutConfig?.text) {
-                              updates.calloutTag = match.fullStoryCalloutConfig.text;
-                            }
-                          } else if (match?.calloutAssetUrl) {
-                            updates.showCallout = true;
-                            if ((match as any).calloutTag) {
-                              updates.calloutTag = (match as any).calloutTag;
-                            }
+                          updates.showCallout = true;
+                          if (match.fullStoryCalloutConfig?.text) {
+                            updates.calloutTag = match.fullStoryCalloutConfig.text;
+                          } else if ((match as any).calloutTag) {
+                            updates.calloutTag = (match as any).calloutTag;
                           }
 
                           const locBadgeId = match?.locationBadgeAssetId || match?.headerConfig?.locationBadgeAssetId || 'loc_style_split_duotone';
                           updates.selectedLocationBadgeId = locBadgeId;
-                          const locAsset = match?.headerConfig?.manualLocationAsset || (match?.headerConfig as any)?.locationBadgeAssetUrl || (match?.headerConfig as any)?.locationBadgeUrl;
+                          const locAsset = match?.headerConfig?.manualLocationAsset || (match?.headerConfig as any)?.locationBadgeAssetUrl || (match?.headerConfig as any)?.locationBadgeUrl || getAssetLibraryItemById(locBadgeId)?.url;
                           if (locAsset) updates.customLocationBadgeUrl = locAsset;
                           if (match?.headerConfig?.locationTextColor) {
                             updates.locationTextColor = match.headerConfig.locationTextColor;
@@ -2008,12 +2003,14 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           if (match?.headerConfig?.showLocation !== undefined) {
                             updates.showLocation = match.headerConfig.showLocation !== false;
                           }
+                          updates.isTestMode = false;
                         } else {
                           updates.selectedCalloutId = undefined;
                           updates.customCalloutAssetUrl = undefined;
                           updates.selectedLocationBadgeId = undefined;
                           updates.customLocationBadgeUrl = undefined;
                           updates.showLocation = true;
+                          updates.isTestMode = false;
                         }
 
                         if (match?.footerConfig?.footerWidthPct) {
@@ -2276,23 +2273,18 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         if (match) {
                           const calloutId = match?.calloutAssetId || match?.fullStoryCalloutConfig?.calloutAssetId || 'callout_story_details_hindi';
                           updates.selectedCalloutId = calloutId;
-                          const calloutAsset = match?.fullStoryCalloutConfig?.manualCalloutAsset || (match?.fullStoryCalloutConfig as any)?.calloutAssetUrl || match?.calloutAssetUrl;
+                          const calloutAsset = match?.fullStoryCalloutConfig?.manualCalloutAsset || (match?.fullStoryCalloutConfig as any)?.calloutAssetUrl || match?.calloutAssetUrl || getAssetLibraryItemById(calloutId)?.url;
                           if (calloutAsset) updates.customCalloutAssetUrl = calloutAsset;
-                          if (match?.fullStoryCalloutConfig?.enabled !== false) {
-                            updates.showCallout = true;
-                            if (match.fullStoryCalloutConfig?.text) {
-                              updates.calloutTag = match.fullStoryCalloutConfig.text;
-                            }
-                          } else if (match?.calloutAssetUrl) {
-                            updates.showCallout = true;
-                            if ((match as any).calloutTag) {
-                              updates.calloutTag = (match as any).calloutTag;
-                            }
+                          updates.showCallout = true;
+                          if (match.fullStoryCalloutConfig?.text) {
+                            updates.calloutTag = match.fullStoryCalloutConfig.text;
+                          } else if ((match as any).calloutTag) {
+                            updates.calloutTag = (match as any).calloutTag;
                           }
 
                           const locBadgeId = match?.locationBadgeAssetId || match?.headerConfig?.locationBadgeAssetId || 'loc_style_split_duotone';
                           updates.selectedLocationBadgeId = locBadgeId;
-                          const locAsset = match?.headerConfig?.manualLocationAsset || (match?.headerConfig as any)?.locationBadgeAssetUrl || (match?.headerConfig as any)?.locationBadgeUrl;
+                          const locAsset = match?.headerConfig?.manualLocationAsset || (match?.headerConfig as any)?.locationBadgeAssetUrl || (match?.headerConfig as any)?.locationBadgeUrl || getAssetLibraryItemById(locBadgeId)?.url;
                           if (locAsset) updates.customLocationBadgeUrl = locAsset;
                           if (match?.headerConfig?.locationTextColor) {
                             updates.locationTextColor = match.headerConfig.locationTextColor;
@@ -2303,12 +2295,14 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           if (match?.headerConfig?.showLocation !== undefined) {
                             updates.showLocation = match.headerConfig.showLocation !== false;
                           }
+                          updates.isTestMode = false;
                         } else {
                           updates.selectedCalloutId = undefined;
                           updates.customCalloutAssetUrl = undefined;
                           updates.selectedLocationBadgeId = undefined;
                           updates.customLocationBadgeUrl = undefined;
                           updates.showLocation = true;
+                          updates.isTestMode = false;
                         }
 
                         if (match?.footerConfig?.footerWidthPct) {
@@ -2623,7 +2617,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               हेडलाइन लिखें:
             </label>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-yellow-400 font-mono bg-neutral-900 px-2 py-0.5 rounded border border-neutral-800">
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${
+                countCharacters((card.headline || '').replace(/\r?\n/g, ' ')) > 140
+                  ? 'bg-rose-950/80 text-rose-300 border-rose-700/60 font-bold'
+                  : countCharacters((card.headline || '').replace(/\r?\n/g, ' ')) > 100
+                  ? 'bg-amber-950/80 text-amber-300 border-amber-700/60'
+                  : 'bg-neutral-900 text-yellow-400 border-neutral-800'
+              }`}>
                 {countCharacters((card.headline || '').replace(/\r?\n/g, ' '))} / 200 अक्षर
               </span>
               <VoiceInputButton
@@ -5576,7 +5576,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     return c === calloutCategoryFilter;
                   })
                   .map((lc) => {
-                    const isSelected = card.customCalloutAssetUrl === (lc.url || lc.assetUrl) || (!card.customCalloutAssetUrl && lc.id === (currentDynamicFrame?.fullStoryCalloutConfig?.calloutAssetId || 'callout_story_live_update'));
+                    const isSelected = card.customCalloutAssetUrl === (lc.url || lc.assetUrl) ||
+                      card.selectedCalloutId === lc.id ||
+                      (!card.customCalloutAssetUrl && !card.selectedCalloutId && lc.id === (currentDynamicFrame?.fullStoryCalloutConfig?.calloutAssetId || currentDynamicFrame?.calloutAssetId || 'callout_story_live_update'));
                     const planHierarchy: Record<string, number> = { BASIC: 1, ADVANCED: 2, PRO: 3, PROFESSIONAL: 3, 'VIP DESK': 4, VIP: 4, ULTRA: 4 };
                     const userTierRank = effectiveAdmin ? 99 : (effectiveTier === 'ultra' ? 4 : (effectiveTier === 'professional' ? 3 : (effectiveTier === 'advanced' ? 2 : 1)));
                     const canChangeCallout = effectiveAdmin || userTierRank >= 3;
@@ -5590,7 +5592,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                             alert('कॉलआउट कस्टमाइज़ेशन केवल PRO और VIP DESK यूज़र्स के लिए उपलब्ध है। बेसिक और एडवांस प्लान में मास्टर फ्रेम का निर्धारित कॉलआउट लॉक रहता है।');
                             return;
                           }
-                          onChange({ customCalloutAssetUrl: lc.url || lc.assetUrl, showCallout: true });
+                          onChange({ customCalloutAssetUrl: lc.url || lc.assetUrl, selectedCalloutId: lc.id, showCallout: true });
                         }}
                         className={`p-2 rounded-xl text-left border transition-all cursor-pointer flex flex-col gap-1.5 relative ${
                           isSelected
