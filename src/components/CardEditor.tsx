@@ -1978,34 +1978,42 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           };
                         }
                         // Priorities 6 & 7: Authoritative Master Admin Callout & Location Badge settings
-                        const calloutId = match?.calloutAssetId || match?.fullStoryCalloutConfig?.calloutAssetId || 'callout_story_live_update';
-                        updates.selectedCalloutId = calloutId;
-                        const calloutAsset = match?.fullStoryCalloutConfig?.manualCalloutAsset || (match?.fullStoryCalloutConfig as any)?.calloutAssetUrl || match?.calloutAssetUrl;
-                        if (calloutAsset) updates.customCalloutAssetUrl = calloutAsset;
-                        if (match?.fullStoryCalloutConfig?.enabled) {
-                          updates.showCallout = true;
-                          if (match.fullStoryCalloutConfig.text) {
-                            updates.calloutTag = match.fullStoryCalloutConfig.text;
+                        if (match) {
+                          const calloutId = match?.calloutAssetId || match?.fullStoryCalloutConfig?.calloutAssetId || 'callout_story_details_hindi';
+                          updates.selectedCalloutId = calloutId;
+                          const calloutAsset = match?.fullStoryCalloutConfig?.manualCalloutAsset || (match?.fullStoryCalloutConfig as any)?.calloutAssetUrl || match?.calloutAssetUrl;
+                          if (calloutAsset) updates.customCalloutAssetUrl = calloutAsset;
+                          if (match?.fullStoryCalloutConfig?.enabled !== false) {
+                            updates.showCallout = true;
+                            if (match.fullStoryCalloutConfig?.text) {
+                              updates.calloutTag = match.fullStoryCalloutConfig.text;
+                            }
+                          } else if (match?.calloutAssetUrl) {
+                            updates.showCallout = true;
+                            if ((match as any).calloutTag) {
+                              updates.calloutTag = (match as any).calloutTag;
+                            }
                           }
-                        } else if (match?.calloutAssetUrl) {
-                          updates.showCallout = true;
-                          if ((match as any).calloutTag) {
-                            updates.calloutTag = (match as any).calloutTag;
-                          }
-                        }
 
-                        const locBadgeId = match?.locationBadgeAssetId || match?.headerConfig?.locationBadgeAssetId || 'loc_style_vintage_stamp';
-                        updates.selectedLocationBadgeId = locBadgeId;
-                        const locAsset = match?.headerConfig?.manualLocationAsset || (match?.headerConfig as any)?.locationBadgeAssetUrl || (match?.headerConfig as any)?.locationBadgeUrl;
-                        if (locAsset) updates.customLocationBadgeUrl = locAsset;
-                        if (match?.headerConfig?.locationTextColor) {
-                          updates.locationTextColor = match.headerConfig.locationTextColor;
-                        }
-                        if (match?.headerConfig?.locationBgColor) {
-                          updates.locationBgColor = match.headerConfig.locationBgColor;
-                        }
-                        if (match?.headerConfig?.showLocation !== undefined) {
-                          updates.showLocation = match.headerConfig.showLocation !== false;
+                          const locBadgeId = match?.locationBadgeAssetId || match?.headerConfig?.locationBadgeAssetId || 'loc_style_split_duotone';
+                          updates.selectedLocationBadgeId = locBadgeId;
+                          const locAsset = match?.headerConfig?.manualLocationAsset || (match?.headerConfig as any)?.locationBadgeAssetUrl || (match?.headerConfig as any)?.locationBadgeUrl;
+                          if (locAsset) updates.customLocationBadgeUrl = locAsset;
+                          if (match?.headerConfig?.locationTextColor) {
+                            updates.locationTextColor = match.headerConfig.locationTextColor;
+                          }
+                          if (match?.headerConfig?.locationBgColor) {
+                            updates.locationBgColor = match.headerConfig.locationBgColor;
+                          }
+                          if (match?.headerConfig?.showLocation !== undefined) {
+                            updates.showLocation = match.headerConfig.showLocation !== false;
+                          }
+                        } else {
+                          updates.selectedCalloutId = undefined;
+                          updates.customCalloutAssetUrl = undefined;
+                          updates.selectedLocationBadgeId = undefined;
+                          updates.customLocationBadgeUrl = undefined;
+                          updates.showLocation = true;
                         }
 
                         if (match?.footerConfig?.footerWidthPct) {
@@ -2265,34 +2273,42 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           };
                         }
                         // Priorities 6 & 7: Authoritative Master Admin Callout & Location Badge settings
-                        const calloutId = match?.calloutAssetId || match?.fullStoryCalloutConfig?.calloutAssetId || 'callout_story_live_update';
-                        updates.selectedCalloutId = calloutId;
-                        const calloutAsset = match?.fullStoryCalloutConfig?.manualCalloutAsset || (match?.fullStoryCalloutConfig as any)?.calloutAssetUrl || match?.calloutAssetUrl;
-                        if (calloutAsset) updates.customCalloutAssetUrl = calloutAsset;
-                        if (match?.fullStoryCalloutConfig?.enabled) {
-                          updates.showCallout = true;
-                          if (match.fullStoryCalloutConfig.text) {
-                            updates.calloutTag = match.fullStoryCalloutConfig.text;
+                        if (match) {
+                          const calloutId = match?.calloutAssetId || match?.fullStoryCalloutConfig?.calloutAssetId || 'callout_story_details_hindi';
+                          updates.selectedCalloutId = calloutId;
+                          const calloutAsset = match?.fullStoryCalloutConfig?.manualCalloutAsset || (match?.fullStoryCalloutConfig as any)?.calloutAssetUrl || match?.calloutAssetUrl;
+                          if (calloutAsset) updates.customCalloutAssetUrl = calloutAsset;
+                          if (match?.fullStoryCalloutConfig?.enabled !== false) {
+                            updates.showCallout = true;
+                            if (match.fullStoryCalloutConfig?.text) {
+                              updates.calloutTag = match.fullStoryCalloutConfig.text;
+                            }
+                          } else if (match?.calloutAssetUrl) {
+                            updates.showCallout = true;
+                            if ((match as any).calloutTag) {
+                              updates.calloutTag = (match as any).calloutTag;
+                            }
                           }
-                        } else if (match?.calloutAssetUrl) {
-                          updates.showCallout = true;
-                          if ((match as any).calloutTag) {
-                            updates.calloutTag = (match as any).calloutTag;
-                          }
-                        }
 
-                        const locBadgeId = match?.locationBadgeAssetId || match?.headerConfig?.locationBadgeAssetId || 'loc_style_vintage_stamp';
-                        updates.selectedLocationBadgeId = locBadgeId;
-                        const locAsset = match?.headerConfig?.manualLocationAsset || (match?.headerConfig as any)?.locationBadgeAssetUrl || (match?.headerConfig as any)?.locationBadgeUrl;
-                        if (locAsset) updates.customLocationBadgeUrl = locAsset;
-                        if (match?.headerConfig?.locationTextColor) {
-                          updates.locationTextColor = match.headerConfig.locationTextColor;
-                        }
-                        if (match?.headerConfig?.locationBgColor) {
-                          updates.locationBgColor = match.headerConfig.locationBgColor;
-                        }
-                        if (match?.headerConfig?.showLocation !== undefined) {
-                          updates.showLocation = match.headerConfig.showLocation !== false;
+                          const locBadgeId = match?.locationBadgeAssetId || match?.headerConfig?.locationBadgeAssetId || 'loc_style_split_duotone';
+                          updates.selectedLocationBadgeId = locBadgeId;
+                          const locAsset = match?.headerConfig?.manualLocationAsset || (match?.headerConfig as any)?.locationBadgeAssetUrl || (match?.headerConfig as any)?.locationBadgeUrl;
+                          if (locAsset) updates.customLocationBadgeUrl = locAsset;
+                          if (match?.headerConfig?.locationTextColor) {
+                            updates.locationTextColor = match.headerConfig.locationTextColor;
+                          }
+                          if (match?.headerConfig?.locationBgColor) {
+                            updates.locationBgColor = match.headerConfig.locationBgColor;
+                          }
+                          if (match?.headerConfig?.showLocation !== undefined) {
+                            updates.showLocation = match.headerConfig.showLocation !== false;
+                          }
+                        } else {
+                          updates.selectedCalloutId = undefined;
+                          updates.customCalloutAssetUrl = undefined;
+                          updates.selectedLocationBadgeId = undefined;
+                          updates.customLocationBadgeUrl = undefined;
+                          updates.showLocation = true;
                         }
 
                         if (match?.footerConfig?.footerWidthPct) {

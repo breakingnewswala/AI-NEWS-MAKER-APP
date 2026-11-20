@@ -648,7 +648,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 return (
                   <div
                     key={slot.id || sIdx}
-                    className="absolute overflow-hidden bg-slate-900 border border-slate-800/80 flex flex-col items-center justify-center text-slate-500 pointer-events-none select-none"
+                    className="absolute overflow-hidden bg-slate-950/60 border border-slate-800/80 flex flex-col items-center justify-center p-4 text-center pointer-events-none select-none backdrop-blur-xs"
                     style={{
                       left: `${slot.rect.x}%`,
                       top: `${slot.rect.y}%`,
@@ -657,12 +657,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       borderRadius: slot.borderRadius ? `${slot.borderRadius}px` : undefined,
                     }}
                   >
-                    <Camera className="w-8 h-8 text-slate-600 stroke-[1.5] mb-1.5 opacity-60" />
-                    <span className="text-[11px] font-bold tracking-wide text-slate-400 font-['Poppins']">
-                      {slot.name || `PHOTO SLOT ${sIdx + 1}`}
+                    <div className="w-12 h-12 rounded-full bg-slate-900/90 border border-slate-700/80 flex items-center justify-center mb-2 shadow-lg">
+                      <Camera className="w-6 h-6 text-slate-300 stroke-[1.75]" />
+                    </div>
+                    <span className="text-xs sm:text-sm font-bold text-white font-['Noto_Sans_Devanagari'] drop-shadow-md">
+                      फोटो जोड़ने के लिए स्टेप 4 पर जाएँ
                     </span>
-                    <span className="text-[9px] text-slate-500 font-['Noto_Sans_Devanagari'] mt-0.5">
-                      (कृपया फोटो जोड़ें)
+                    <span className="text-[10px] sm:text-[11px] text-slate-300 font-['Noto_Sans_Devanagari'] mt-0.5 drop-shadow-sm">
+                      (यहाँ आपकी चुनी गई खबर की फोटो प्रदर्शित होगी)
                     </span>
                   </div>
                 );
@@ -1501,11 +1503,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               }}
             >
               <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
-                <img
-                  src="/assets/location_white_icon.png"
-                  alt="Location"
-                  className="w-2.5 h-2.5 sm:w-3 sm:h-3 object-contain"
-                />
+                <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
               </div>
               <span
                 className="font-bold text-[11px] sm:text-xs md:text-sm text-neutral-950 tracking-wide truncate inline-block translate-y-[2px] leading-tight"

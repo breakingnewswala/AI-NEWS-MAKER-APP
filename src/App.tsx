@@ -1724,7 +1724,7 @@ export default function App() {
           ...initial,
           headline: CANONICAL_DEFAULT_HEADLINE,
           formattedHeadline: CANONICAL_DEFAULT_HEADLINE,
-          highlightWords: [],
+          highlightWords: ['हेडलाइन', 'मुख्य खबर', 'खबर'],
           images: { main: '', second: '', third: '', fourth: '' },
           photoUrl: '',
           showDate: false,
@@ -2535,7 +2535,7 @@ export default function App() {
       customDynamicFrame: undefined,
       headline: CANONICAL_DEFAULT_HEADLINE,
       formattedHeadline: CANONICAL_DEFAULT_HEADLINE,
-      highlightWords: [],
+      highlightWords: ['हेडलाइन', 'मुख्य खबर', 'खबर'],
       headlineAlign: 'center',
       headlineFontSize: 48,
       location: formatCleanLocationText(savedProfile?.district || savedProfile?.city || savedProfile?.location || 'भोपाल'),
@@ -5561,7 +5561,7 @@ export default function App() {
                     templateId: df.id,
                     aspectRatio: df.aspectRatio || '4:5',
                     customDynamicFrame: df,
-                    isTestMode: true,
+                    isTestMode: false,
                     // Authoritative Transfer of Location Badge Settings
                     selectedLocationBadgeId: df.headerConfig?.locationBadgeAssetId || df.locationBadgeAssetId || prev.selectedLocationBadgeId,
                     customLocationBadgeUrl: df.headerConfig?.manualLocationAsset || prev.customLocationBadgeUrl,
@@ -5581,7 +5581,7 @@ export default function App() {
                     ...prev,
                     frameDesign: templateId,
                     templateId: templateId,
-                    isTestMode: true,
+                    isTestMode: false,
                   }));
                 }
               }

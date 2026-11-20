@@ -5063,12 +5063,17 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
 
           {/* STAGE 4: CANVAS MARKING & ELEMENT ADJUSTMENT */}
           {currentStage === 'canvas_marking' && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               {/* Canvas Column */}
-              <div className="lg:col-span-2 flex flex-col items-center">
+              <div className="lg:col-span-7 flex flex-col items-center">
                 {/* Safe Zone & Layout Lock Toggle Header */}
-                <div className="flex items-center justify-between w-full max-w-[360px] mb-2">
-                  <span className="text-xs font-bold text-slate-300">कैनवास मार्किंग</span>
+                <div
+                  className="flex items-center justify-between w-full mb-2"
+                  style={{
+                    maxWidth: selectedRatio === '4:5' ? '420px' : selectedRatio === '1:1' ? '400px' : selectedRatio === '4:3' ? '460px' : '320px',
+                  }}
+                >
+                  <span className="text-xs font-bold text-slate-300">कैनवास मार्किंग (वेब एडिटर)</span>
                   <div className="flex items-center gap-1.5">
                     <button
                       type="button"
@@ -5099,7 +5104,12 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
 
                 {/* Safe Zone Warnings Banner */}
                 {safeZoneConfig.enabled && safeZoneWarnings.length > 0 && (
-                  <div className="w-full max-w-[360px] mb-2 p-2 bg-amber-950/60 border border-amber-500/40 rounded-lg flex items-center gap-2 text-[11px] text-amber-200">
+                  <div
+                    className="w-full mb-2 p-2 bg-amber-950/60 border border-amber-500/40 rounded-lg flex items-center gap-2 text-[11px] text-amber-200"
+                    style={{
+                      maxWidth: selectedRatio === '4:5' ? '420px' : selectedRatio === '1:1' ? '400px' : selectedRatio === '4:3' ? '460px' : '320px',
+                    }}
+                  >
                     <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
                     <span className="truncate">{safeZoneWarnings[0]}</span>
                     {safeZoneWarnings.length > 1 && (
@@ -5118,8 +5128,8 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                   onPointerUp={handleCanvasPointerUp}
                   className="relative border-4 border-slate-700 rounded-2xl overflow-hidden shadow-2xl bg-slate-950 select-none touch-none"
                   style={{
-                    width: selectedRatio === '4:5' ? '340px' : selectedRatio === '1:1' ? '340px' : selectedRatio === '4:3' ? '400px' : '280px',
-                    height: selectedRatio === '4:5' ? '425px' : selectedRatio === '1:1' ? '340px' : selectedRatio === '4:3' ? '300px' : '497px',
+                    width: selectedRatio === '4:5' ? '420px' : selectedRatio === '1:1' ? '400px' : selectedRatio === '4:3' ? '460px' : '320px',
+                    height: selectedRatio === '4:5' ? '525px' : selectedRatio === '1:1' ? '400px' : selectedRatio === '4:3' ? '345px' : '569px',
                     backgroundColor: '#0B1329',
                   }}
                 >
@@ -5299,34 +5309,38 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
               </div>
 
               {/* Sidebar: Layers List & Property Inspector */}
-              <div className="space-y-4">
-                <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3 text-xs">
-                  <h4 className="font-bold text-xs text-amber-400 uppercase tracking-wider">
-                    लेयर सूची (Layers & Positions)
-                  </h4>
-                  <div className="space-y-1.5 max-h-[350px] overflow-y-auto">
+              <div className="lg:col-span-5 space-y-3 max-h-[620px] overflow-y-auto pr-1 scrollbar-thin">
+                <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl space-y-2 text-xs">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-xs text-amber-400 uppercase tracking-wider">
+                      लेयर सूची (Layers & Positions)
+                    </h4>
+                    <span className="text-[10px] text-slate-400 font-bold">{layers.length} लेयर्स</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 max-h-[140px] overflow-y-auto pr-1">
                     {layers.map((l) => (
-                      <div
+                      <button
                         key={l.id}
+                        type="button"
                         onClick={() => setSelectedLayerId(l.id)}
-                        className={`p-2 rounded-lg flex items-center justify-between cursor-pointer transition ${
+                        className={`p-2 rounded-lg flex items-center justify-between cursor-pointer transition text-left ${
                           selectedLayerId === l.id
-                            ? 'bg-amber-500 text-slate-950 font-black'
-                            : 'bg-slate-900 text-slate-300 hover:bg-slate-850'
+                            ? 'bg-amber-500 text-slate-950 font-black shadow-md ring-1 ring-amber-300'
+                            : 'bg-slate-900 text-slate-300 hover:bg-slate-850 border border-slate-800'
                         }`}
                       >
                         <div className="flex items-center gap-1.5 truncate">
                           <span className={`w-2 h-2 rounded-full shrink-0 ${l.visible !== false ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-                          <span className="truncate">{l.name}</span>
+                          <span className="truncate text-[11px]">{l.name}</span>
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
+                        <div className="flex items-center gap-1 shrink-0 ml-1">
                           {l.visible === false && (
-                            <span className="text-[9px] bg-slate-800 text-slate-400 px-1 py-0.2 rounded font-normal">बंद</span>
+                            <span className="text-[8px] bg-slate-800 text-slate-400 px-1 py-0.2 rounded font-normal">बंद</span>
                           )}
-                          {l.rotation ? <span className="text-[9px] font-mono opacity-80">{l.rotation}°</span> : null}
-                          {l.locked && <Lock className="w-3 h-3 text-amber-300" />}
+                          {l.rotation ? <span className="text-[8px] font-mono opacity-80">{l.rotation}°</span> : null}
+                          {l.locked && <Lock className="w-2.5 h-2.5 text-amber-300" />}
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>

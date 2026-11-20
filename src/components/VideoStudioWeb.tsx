@@ -1794,6 +1794,16 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     return () => window.removeEventListener('channel_profile_updated', handleProfileUpdate);
   }, []);
 
+  // Priority: Default Image Watermark to user's profile channel logo
+  useEffect(() => {
+    if (watermarkType === 'image' && !watermarkImage) {
+      const defaultLogo = userPngLogo || activeLogoUrl || channelLogoUrl || '/assets/ai_news_maker_logo.png';
+      if (defaultLogo) {
+        setWatermarkImage(defaultLogo);
+      }
+    }
+  }, [watermarkType, watermarkImage, userPngLogo, activeLogoUrl, channelLogoUrl]);
+
   const [tickerText, setTickerText] = useState<string>('');
   const [isExclusiveBadge, setIsExclusiveBadge] = useState<boolean>(true);
   const [isAiGenerating, setIsAiGenerating] = useState<boolean>(false);
@@ -2957,11 +2967,27 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       };
 
       const recordingPromise = new Promise<Blob>((resolve, reject) => {
+        let settled = false;
+        const fallbackTimer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          const recordedType = recorder.mimeType || mimeType || 'video/webm';
+          resolve(new Blob(chunks, { type: recordedType }));
+        }, 5000);
+
         recorder.onstop = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(fallbackTimer);
           const recordedType = recorder.mimeType || mimeType || 'video/webm';
           resolve(new Blob(chunks, { type: recordedType }));
         };
-        recorder.onerror = (e) => reject(e);
+        recorder.onerror = (e) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(fallbackTimer);
+          reject(e);
+        };
       });
 
       const fallbackDur = (duration && isFinite(duration) && duration > 1.5)
@@ -3062,9 +3088,17 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         let animId: number;
         let backupIntervalId: any;
 
+        const handleVideoEnded = () => {
+          stopAndFinish();
+        };
+        video.addEventListener('ended', handleVideoEnded);
+
         const stopAndFinish = () => {
           if (hasEnded) return;
           hasEnded = true;
+          try {
+            video.removeEventListener('ended', handleVideoEnded);
+          } catch {}
           cancelAnimationFrame(animId);
           if (backupIntervalId) clearInterval(backupIntervalId);
           try {
@@ -3138,16 +3172,20 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           const now = Date.now();
           const wallElapsed = Math.max(0, (now - exportStartWallTime) / 1000);
 
-          // Watchdog: detect genuine stall (>1200ms) and resume playback without premature end-jumping
+          // Watchdog: detect genuine stall (>900ms) and resume playback or finalize
           if (Math.abs(video.currentTime - lastVideoCurrentTime) > 0.01) {
             lastVideoCurrentTime = video.currentTime;
             lastProgressWallTime = now;
-          } else if (!video.seeking && now - lastProgressWallTime > 1200) {
-            if (video.paused && !video.ended) {
+          } else if (now - lastProgressWallTime > 900) {
+            if (video.ended || video.currentTime >= endTime - 0.2) {
+              stopAndFinish();
+              return;
+            }
+            if (video.paused) {
               video.play().catch(() => {});
-            } else if (!video.ended) {
+            } else {
               try {
-                video.currentTime = Math.min(endTime - 0.1, startTime + wallElapsed);
+                video.currentTime = Math.min(endTime, startTime + wallElapsed);
               } catch {}
             }
             lastProgressWallTime = now;
@@ -3157,16 +3195,13 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           const elapsed = Math.max(0, Math.min(totalDuration, video.currentTime - startTime));
           const timePct = Math.min(95, Math.max(20, Math.round(20 + (elapsed / totalDuration) * 75)));
           const wallPct = Math.min(95, Math.max(20, Math.round(20 + (wallElapsed / totalDuration) * 75)));
-          maxReportedPct = Math.max(maxReportedPct, Math.min(timePct, wallPct + 15), wallPct);
+          maxReportedPct = Math.max(maxReportedPct, Math.max(timePct, wallPct));
           setVideoExportProgress(maxReportedPct);
 
-          const minElapsedBeforeStop = Math.min(1.8, totalDuration * 0.6);
-          const isTimeComplete =
-            wallElapsed >= minElapsedBeforeStop &&
-            !video.seeking &&
-            ((video.currentTime >= endTime - 0.08 && video.currentTime <= endTime + 5) ||
-              (video.ended && wallElapsed >= totalDuration * 0.75));
-          const isHardTimeout = wallElapsed >= totalDuration + 2.0;
+          const minElapsedBeforeStop = Math.min(1.0, totalDuration * 0.4);
+          const isVideoAtEnd = video.ended || (video.currentTime >= endTime - 0.12 && video.currentTime <= endTime + 5);
+          const isTimeComplete = wallElapsed >= minElapsedBeforeStop && !video.seeking && isVideoAtEnd;
+          const isHardTimeout = wallElapsed >= totalDuration + 1.5;
 
           if (isTimeComplete || isHardTimeout) {
             stopAndFinish();
@@ -3213,7 +3248,15 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       }
 
       // Fix WebM duration header so Mobile Chrome & Android players display exact duration
-      const finalBlob = await injectWebmDuration(rawBlob, totalDuration * 1000);
+      let finalBlob = rawBlob;
+      try {
+        finalBlob = await Promise.race([
+          injectWebmDuration(rawBlob, totalDuration * 1000),
+          new Promise<Blob>((res) => setTimeout(() => res(rawBlob), 2500)),
+        ]);
+      } catch {
+        finalBlob = rawBlob;
+      }
 
       // Validate video stream existence before download (Priority 0)
       const isMp4 = finalBlob.type.includes('mp4') || finalBlob.type.includes('avc1');
@@ -5445,7 +5488,13 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           </button>
                           <button
                             type="button"
-                            onClick={() => setWatermarkType('image')}
+                            onClick={() => {
+                              setWatermarkType('image');
+                              if (!watermarkImage) {
+                                const defaultLogo = userPngLogo || activeLogoUrl || channelLogoUrl || '/assets/ai_news_maker_logo.png';
+                                if (defaultLogo) setWatermarkImage(defaultLogo);
+                              }
+                            }}
                             className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
                               watermarkType === 'image'
                                 ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow'
@@ -5480,16 +5529,43 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                                     alt="Watermark preview"
                                     className="h-10 w-16 object-contain bg-black/40 rounded p-1 border border-slate-700"
                                   />
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-[10px] text-emerald-400 font-bold">
+                                      {watermarkImage === (userPngLogo || activeLogoUrl || channelLogoUrl) ? '✓ आधिकारिक चैनल लोगो' : 'कस्टम वॉटरमार्क'}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const defaultLogo = userPngLogo || activeLogoUrl || channelLogoUrl || '/assets/ai_news_maker_logo.png';
+                                        setWatermarkImage(defaultLogo);
+                                      }}
+                                      className="text-[9px] text-amber-300 hover:underline text-left cursor-pointer"
+                                    >
+                                      डिफ़ॉल्ट लोगो रीसेट
+                                    </button>
+                                  </div>
                                   <button
                                     type="button"
                                     onClick={() => setWatermarkImage(null)}
-                                    className="px-2 py-1 bg-red-950 text-red-300 border border-red-800 rounded text-[10px] font-bold"
+                                    className="px-2 py-1 bg-red-950 text-red-300 border border-red-800 rounded text-[10px] font-bold ml-1 cursor-pointer"
                                   >
                                     हटाएं
                                   </button>
                                 </div>
                               ) : (
-                                <span className="text-xs text-slate-400 italic">कोई इमेज अपलोड नहीं है</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-slate-400 italic">कोई इमेज सेट नहीं है</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const defaultLogo = userPngLogo || activeLogoUrl || channelLogoUrl || '/assets/ai_news_maker_logo.png';
+                                      if (defaultLogo) setWatermarkImage(defaultLogo);
+                                    }}
+                                    className="px-2 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[10px] font-bold cursor-pointer"
+                                  >
+                                    चैनल लोगो लगाएं
+                                  </button>
+                                </div>
                               )}
                               <label className="ml-auto px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold rounded-xl border border-slate-700 cursor-pointer flex items-center gap-1.5">
                                 <Upload className="w-3.5 h-3.5 text-amber-400" />

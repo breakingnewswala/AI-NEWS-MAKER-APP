@@ -571,6 +571,10 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
     rawHeadline.includes('अपनी मुख्य खबर का शीर्षक दर्ज करें') ||
     rawHeadline.includes('मुख्य खबर का शीर्षक');
 
+  const effectiveHighlightWords = (options.highlightWords && options.highlightWords.length > 0)
+    ? options.highlightWords
+    : (isDefaultInstructionalHeadline ? ['हेडलाइन', 'मुख्य खबर', 'खबर'] : []);
+
   // Exact user font size: Respect 32px, 35px, or other user selected pixel sizes directly
   const normalizedUserFontSize = options.userFontSize ? options.userFontSize : undefined;
 
@@ -610,7 +614,7 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
       // User pressed Enter: preserve user line intent while wrapping each line inside maxWidth
       let manualOverflow = false;
       for (const mLine of manualLines) {
-        const mTokens = parseHeadlineTokens(mLine, options.highlightWords);
+        const mTokens = parseHeadlineTokens(mLine, effectiveHighlightWords);
         let curLine: WordToken[] = [];
         let curWidth = 0;
 
@@ -644,7 +648,7 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
       }
     } else {
       // Single continuous headline: auto-wrap tokens inside maxW
-      const allTokens = parseHeadlineTokens(rawHeadline, options.highlightWords);
+      const allTokens = parseHeadlineTokens(rawHeadline, effectiveHighlightWords);
       let curLine: WordToken[] = [];
       let curWidth = 0;
 
@@ -683,7 +687,7 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
       let manualOverflow = false;
 
       for (const mLine of manualLines) {
-        const mTokens = parseHeadlineTokens(mLine, options.highlightWords);
+        const mTokens = parseHeadlineTokens(mLine, effectiveHighlightWords);
         let curLine: WordToken[] = [];
         let curWidth = 0;
 
@@ -722,7 +726,7 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
     for (let s = endFontSize - 2; s >= 20; s -= 2) {
       const lineH = Math.round(s * 1.30);
       const spaceW = measureTextWidth(' ', fontFam, s, '900', options.ctx);
-      const allTokens = parseHeadlineTokens(rawHeadline, options.highlightWords);
+      const allTokens = parseHeadlineTokens(rawHeadline, effectiveHighlightWords);
       const lines: WordToken[][] = [];
       let curLine: WordToken[] = [];
       let curWidth = 0;
@@ -755,7 +759,7 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
   // Final fallback if headline exceeds available space even at 20px
   if (!fitsCleanly) {
     const spaceW = measureTextWidth(' ', fontFam, endFontSize, '900', options.ctx);
-    const allTokens = parseHeadlineTokens(rawHeadline, options.highlightWords);
+    const allTokens = parseHeadlineTokens(rawHeadline, effectiveHighlightWords);
     const lines: WordToken[][] = [];
     let curLine: WordToken[] = [];
     let curWidth = 0;

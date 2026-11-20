@@ -28,7 +28,12 @@ import {
   Calendar,
   Filter,
   Trash2,
+  Youtube,
+  Facebook,
+  Instagram,
+  Twitter,
 } from 'lucide-react';
+import aiNewsMakerLogo from '../assets/ai_news_maker_logo.png';
 import {
   GraphicPlanCategory,
   getAllTemplateConfigs,
@@ -757,8 +762,9 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                   {/* Authentic Dynamic Frame Overlay on Thumbnail */}
                   {item.rawDynamicFrame && (() => {
                     const df = normalizeDynamicFrame(item.rawDynamicFrame);
-                    const badgeAsset = df.headerConfig?.manualLocationAsset || (df.headerConfig?.locationBadgeAssetId ? getAssetLibraryItemById(df.headerConfig.locationBadgeAssetId)?.url : undefined);
-                    const calloutAsset = df.fullStoryCalloutConfig?.manualCalloutAsset || (df.fullStoryCalloutConfig?.calloutAssetId ? getAssetLibraryItemById(df.fullStoryCalloutConfig.calloutAssetId)?.url : undefined);
+                    const rawBadge = df.headerConfig?.manualLocationAsset || (df.headerConfig?.locationBadgeAssetId ? getAssetLibraryItemById(df.headerConfig.locationBadgeAssetId)?.url : undefined);
+                    const badgeAsset = (rawBadge && !rawBadge.includes('location_white_icon.png')) ? rawBadge : getAssetLibraryItemById('asset_1794132101671_u0g9s')?.url;
+                    const calloutAsset = df.fullStoryCalloutConfig?.manualCalloutAsset || (df.fullStoryCalloutConfig?.calloutAssetId ? getAssetLibraryItemById(df.fullStoryCalloutConfig.calloutAssetId)?.url : undefined) || (df as any).calloutAssetUrl || getAssetLibraryItemById('callout_story_details_hindi')?.url;
                     const highlightColor = df.primaryHighlightColor || df.quoteHighlightColor || df.textSlots?.[0]?.highlightColor || '#FFE600';
 
                     return (
@@ -861,15 +867,17 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
 
                         {/* Permanent Footer */}
                         <div
-                          className="absolute bottom-0 inset-x-0 border-t flex items-center justify-between px-2 text-[6px] font-bold z-25"
+                          className="absolute bottom-0 inset-x-0 border-t flex items-center justify-between px-1.5 text-[6px] font-bold z-25"
                           style={{
                             height: `${(df.footerConfig?.footerHeightRatio || 0.08) * 100}%`,
                             backgroundColor: df.footerConfig?.footerBgColor || '#FFFFFF',
                             color: df.footerConfig?.footerTextColor || '#000000',
                           }}
                         >
-                          <span>@breakingnewswala</span>
-                          <span>ainewsmaker.online</span>
+                          <div className="flex items-center gap-0.5">
+                            <span className="text-[6px]">@ainewsmaker</span>
+                          </div>
+                          <span className="text-[6px]">ainewsmaker.online</span>
                         </div>
                       </div>
                     );
@@ -1059,8 +1067,9 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                 const widthPx = isStory ? '230px' : isSquare ? '260px' : '260px';
                 const heightPx = isStory ? '408px' : isSquare ? '260px' : '325px';
 
-                const badgeAsset = df.headerConfig?.manualLocationAsset || (df.headerConfig?.locationBadgeAssetId ? getAssetLibraryItemById(df.headerConfig.locationBadgeAssetId)?.url : undefined);
-                const calloutAsset = df.fullStoryCalloutConfig?.manualCalloutAsset || (df.fullStoryCalloutConfig?.calloutAssetId ? getAssetLibraryItemById(df.fullStoryCalloutConfig.calloutAssetId)?.url : undefined);
+                const rawBadgeAsset = df.headerConfig?.manualLocationAsset || (df.headerConfig?.locationBadgeAssetId ? getAssetLibraryItemById(df.headerConfig.locationBadgeAssetId)?.url : undefined);
+                const badgeAsset = (rawBadgeAsset && !rawBadgeAsset.includes('location_white_icon.png')) ? rawBadgeAsset : getAssetLibraryItemById('asset_1794132101671_u0g9s')?.url;
+                const calloutAsset = df.fullStoryCalloutConfig?.manualCalloutAsset || (df.fullStoryCalloutConfig?.calloutAssetId ? getAssetLibraryItemById(df.fullStoryCalloutConfig.calloutAssetId)?.url : undefined) || (df as any).calloutAssetUrl || getAssetLibraryItemById('callout_story_details_hindi')?.url;
                 const highlightColor = df.primaryHighlightColor || df.quoteHighlightColor || df.textSlots?.[0]?.highlightColor || '#FFE600';
 
                 return (
@@ -1083,38 +1092,40 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                       )}
 
                       {/* Logo Layer */}
-                      {df.headerConfig?.showLogo && (
+                      {df.headerConfig?.showLogo !== false && (
                         <div
                           className="absolute z-10 flex items-center justify-start pointer-events-none"
                           style={{
-                            left: `${df.headerConfig.logoRect?.x ?? 5}%`,
-                            top: `${df.headerConfig.logoRect?.y ?? 3.5}%`,
-                            width: `${df.headerConfig.logoRect?.width ?? 22}%`,
-                            height: `${df.headerConfig.logoRect?.height ?? 9}%`,
+                            left: `${df.headerConfig?.logoRect?.x ?? 5}%`,
+                            top: `${df.headerConfig?.logoRect?.y ?? 3.5}%`,
+                            width: `${df.headerConfig?.logoRect?.width ?? 22}%`,
+                            height: `${df.headerConfig?.logoRect?.height ?? 9}%`,
                           }}
                         >
                           <img
-                            src="/assets/ai_news_maker_logo.png"
+                            src={aiNewsMakerLogo || '/assets/ai_news_maker_logo.png'}
                             alt="Logo"
                             className="max-w-full max-h-full object-contain drop-shadow"
                             onError={(e) => {
                               const target = e.currentTarget as HTMLImageElement;
-                              target.style.display = 'none';
+                              if (!target.src.includes('ai_news_maker_logo.png')) {
+                                target.src = '/assets/ai_news_maker_logo.png';
+                              }
                             }}
                           />
                         </div>
                       )}
 
                       {/* Location Badge */}
-                      {df.headerConfig?.showLocation && (
+                      {df.headerConfig?.showLocation !== false && (
                         <div
                           className="absolute z-15 flex items-center justify-center pointer-events-none"
                           style={{
-                            left: `${df.headerConfig.locationRect?.x ?? 5}%`,
-                            top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
-                            width: `${df.headerConfig.locationRect?.width ?? 28}%`,
-                            height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
-                            transform: (df.headerConfig.locationRotation ?? 0) !== 0 ? `rotate(${df.headerConfig.locationRotation}deg)` : undefined,
+                            left: `${df.headerConfig?.locationRect?.x ?? 5}%`,
+                            top: `${df.headerConfig?.locationRect?.y ?? 13.5}%`,
+                            width: `${df.headerConfig?.locationRect?.width ?? 28}%`,
+                            height: `${df.headerConfig?.locationRect?.height ?? 4.5}%`,
+                            transform: (df.headerConfig?.locationRotation ?? 0) !== 0 ? `rotate(${df.headerConfig?.locationRotation}deg)` : undefined,
                             transformOrigin: 'center center',
                           }}
                         >
@@ -1124,6 +1135,9 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                                 src={badgeAsset}
                                 alt=""
                                 className="h-full w-full object-contain pointer-events-none"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLElement).style.display = 'none';
+                                }}
                               />
                               <div
                                 className="absolute inset-y-0 flex items-center justify-center overflow-hidden"
@@ -1135,8 +1149,8 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                                 <span
                                   className="truncate font-black text-[8px]"
                                   style={{
-                                    color: df.headerConfig.locationTextColor || '#FFFFFF',
-                                    fontFamily: df.headerConfig.typographyConfig?.fontFamily || 'Baloo 2',
+                                    color: df.headerConfig?.locationTextColor || '#FFFFFF',
+                                    fontFamily: df.headerConfig?.typographyConfig?.fontFamily || 'Baloo 2',
                                   }}
                                 >
                                   भोपाल
@@ -1147,11 +1161,11 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                             <div
                               className="rounded-full px-2 py-0.5 text-[8px] font-bold shadow flex items-center gap-0.5"
                               style={{
-                                backgroundColor: df.headerConfig.locationBgColor || '#DC2626',
-                                color: df.headerConfig.locationTextColor || '#FFFFFF',
+                                backgroundColor: df.headerConfig?.locationBgColor || '#DC2626',
+                                color: df.headerConfig?.locationTextColor || '#FFFFFF',
                               }}
                             >
-                              <MapPin className="w-2.5 h-2.5" />
+                              <MapPin className="w-2.5 h-2.5 text-white" />
                               <span>भोपाल</span>
                             </div>
                           )}
@@ -1226,15 +1240,15 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                       </div>
 
                       {/* Full Story Callout */}
-                      {df.fullStoryCalloutConfig?.enabled && (
+                      {(df.fullStoryCalloutConfig?.enabled !== false || Boolean(calloutAsset)) && (
                         <div
                           className="absolute z-25 flex items-center justify-center pointer-events-none"
                           style={{
-                            left: `${df.fullStoryCalloutConfig.rect?.x ?? 10}%`,
-                            top: `${df.fullStoryCalloutConfig.rect?.y ?? 86}%`,
-                            width: `${df.fullStoryCalloutConfig.rect?.width ?? 80}%`,
-                            height: `${df.fullStoryCalloutConfig.rect?.height ?? 3.5}%`,
-                            transform: (df.fullStoryCalloutConfig.rotation ?? 0) !== 0 ? `rotate(${df.fullStoryCalloutConfig.rotation}deg)` : undefined,
+                            left: `${df.fullStoryCalloutConfig?.rect?.x ?? 10}%`,
+                            top: `${df.fullStoryCalloutConfig?.rect?.y ?? 86}%`,
+                            width: `${df.fullStoryCalloutConfig?.rect?.width ?? 80}%`,
+                            height: `${df.fullStoryCalloutConfig?.rect?.height ?? 3.5}%`,
+                            transform: (df.fullStoryCalloutConfig?.rotation ?? 0) !== 0 ? `rotate(${df.fullStoryCalloutConfig.rotation}deg)` : undefined,
                             transformOrigin: 'center center',
                           }}
                         >
@@ -1248,12 +1262,12 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                             <div
                               className="text-[7px] font-bold px-2 py-0.5 rounded shadow flex items-center gap-0.5"
                               style={{
-                                backgroundColor: df.fullStoryCalloutConfig.bgColor || '#F59E0B',
-                                color: df.fullStoryCalloutConfig.textColor || '#0F172A',
+                                backgroundColor: df.fullStoryCalloutConfig?.bgColor || '#F59E0B',
+                                color: df.fullStoryCalloutConfig?.textColor || '#0F172A',
                               }}
                             >
                               <span>📢</span>
-                              <span>{df.fullStoryCalloutConfig.text || 'पूरी खबर विवरण'}</span>
+                              <span>{df.fullStoryCalloutConfig?.text || 'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें'}</span>
                             </div>
                           )}
                         </div>
@@ -1270,8 +1284,14 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                           color: df.footerConfig?.footerTextColor || '#000000',
                         }}
                       >
-                        <span>@breakingnewswala</span>
-                        <span>सत्यापित समाचार नेटवर्क</span>
+                        <div className="flex items-center gap-1">
+                          <Youtube className="w-2.5 h-2.5 text-red-600 fill-current" />
+                          <Facebook className="w-2.5 h-2.5 text-blue-600 fill-current" />
+                          <Instagram className="w-2.5 h-2.5 text-pink-600" />
+                          <Twitter className="w-2.5 h-2.5 text-sky-500 fill-current" />
+                          <span className="font-bold text-[7px]">@ainewsmaker</span>
+                        </div>
+                        <span className="font-bold text-[7px]">ainewsmaker.online</span>
                       </div>
                     </div>
                     <span className="text-[11px] text-slate-400 mt-2 font-bold">वास्तविक पब्लिश्ड फ्रेम प्रीव्यू</span>
