@@ -702,12 +702,13 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         );
       })()}
 
-      {/* 0B2. DYNAMIC FRAME TEXT WATERMARK (Strictly restricted to photo area bounds, drawn beneath artwork and headline) */}
+      {/* 0B2. DYNAMIC FRAME TEXT WATERMARK (Covers 100% of photo area including behind logo, strictly clipped above headline) */}
       {df && (card.showTextWatermark === true || card.showSuperBreakingWatermark === true || card.watermarkMode === 'text') && card.watermarkMode !== 'image' && !card.watermarkImage && (() => {
-        const topPct = df.photoSlots?.[0]?.rect?.y ?? 0;
-        const leftPct = df.photoSlots?.[0]?.rect?.x ?? 0;
-        const widthPct = df.photoSlots?.[0]?.rect?.width ?? 100;
-        const heightPct = df.photoSlots?.[0]?.rect?.height ?? (df.textSlots?.[0]?.rect ? Math.max(30, df.textSlots[0].rect.y) : 58);
+        const topPct = 0;
+        const leftPct = 0;
+        const widthPct = 100;
+        const maxHeadlineY = df.textSlots?.[0]?.rect ? Math.max(30, df.textSlots[0].rect.y) : 60;
+        const heightPct = Math.min(maxHeadlineY, df.photoSlots?.[0]?.rect?.height ? ((df.photoSlots[0].rect.y || 0) + df.photoSlots[0].rect.height) : maxHeadlineY);
 
         return (
           <div
@@ -783,7 +784,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       })()}
 
       {/* 0. BASE BACKGROUND FOR GRAPHIC_001 */}
-      {card.frameDesign === 'graphic_001' && (
+      {!df && card.frameDesign === 'graphic_001' && (
         <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
           <img
             src="/assets/primary_news_graphic_bg.jpg"
@@ -1346,8 +1347,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         )}
       </div>
 
-      {/* Optional Full Frame Overlay PNG - active when customFrameOverlayPng is present */}
-      {card.customFrameOverlayPng && (
+      {/* Optional Full Frame Overlay PNG - active when customFrameOverlayPng is present and not dynamic frame */}
+      {!df && card.customFrameOverlayPng && (
         <img
           src={card.customFrameOverlayPng}
           alt="Frame Overlay"
@@ -1356,7 +1357,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       )}
 
       {/* 2B. PHOTO DISCLAIMER Watermark (AI GENERATED (प्रतीकात्मक फोटो)): Vertical along Left Wall, Rotated 90° - Topmost Visual Layer */}
-      {!currentDynamicFrame?.watermarkConfig?.enabled && (card.photoDisclaimerType === 'ai' ||
+      {!df && !card.frameDesign?.startsWith('df_') && !currentDynamicFrame?.watermarkConfig?.enabled && (card.photoDisclaimerType === 'ai' ||
         card.photoDisclaimerType === 'representative' ||
         (card.showAiGenerated && card.photoDisclaimerType !== 'none')) && (() => {
         const showBox = card.photoTagShowBox !== false;
@@ -1414,8 +1415,436 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         </div>
       )}
 
-      {/* 3. BOTTOM SECTION: GRAPHIC 1 vs DEFAULT FRAME vs MORNING JACKET vs TEXT BREAKING vs SUPER BREAKING vs QUOTE vs STANDARD ORIGINAL */}
-      {card.frameDesign === 'graphic_001' ? (
+      {/* 3. BOTTOM SECTION: DYNAMIC FRAME vs GRAPHIC 1 vs DEFAULT FRAME vs MORNING JACKET vs TEXT BREAKING vs SUPER BREAKING vs QUOTE vs STANDARD ORIGINAL */}
+      {df ? (
+        (() => {
+          return (
+            <div className="absolute inset-0 z-20 pointer-events-none select-none">
+              {/* Dynamic Logo */}
+              {df.headerConfig?.showLogo && card.showMasterBranding !== false && (
+                <div
+                  className="absolute pointer-events-auto flex items-center justify-start"
+                  style={{
+                    left: `${df.headerConfig.logoRect?.x ?? 5}%`,
+                    top: `${df.headerConfig.logoRect?.y ?? 3.5}%`,
+                    width: `${df.headerConfig.logoRect?.width ?? 22}%`,
+                    height: `${df.headerConfig.logoRect?.height ?? 9}%`,
+                    opacity: df.headerConfig.logoOpacity ?? 1,
+                    transform: card.logoScale ? `scale(${(card.logoScale) / 1.25})` : undefined,
+                    transformOrigin: 'top left',
+                  }}
+                >
+                  <img
+                    src={getProxiedImageUrl(card.testLogoUrl || card.customLogoUrl || (card as any).channelLogo || '/assets/ai_news_maker_logo.png')}
+                    alt="Channel Logo"
+                    onError={(e) => {
+                      const target = e.currentTarget as HTMLImageElement;
+                      if (!target.src.includes('/assets/ai_news_maker_logo.png') && !target.src.includes('/assets/breaking_news_wala_logo.png')) {
+                        target.src = '/assets/ai_news_maker_logo.png';
+                      }
+                    }}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                </div>
+              )}
+
+              {/* Dynamic Location Badge */}
+              {df.headerConfig?.showLocation && card.location && card.showLocation !== false && (() => {
+                const cleanLoc = formatCleanLocationText(card.location);
+                let badgeAsset = card.customLocationBadgeUrl || df.headerConfig.manualLocationAsset || (df.headerConfig as any).locationBadgeAssetUrl || (df.headerConfig as any).locationBadgeUrl;
+                if (!badgeAsset) {
+                  const badgeId = card.selectedLocationBadgeId || df.headerConfig.locationBadgeAssetId || df.locationBadgeAssetId;
+                  if (badgeId) {
+                    const item = getAssetLibraryItemById(badgeId);
+                    if (item && item.url) badgeAsset = item.url;
+                  }
+                }
+                const locColor = card.locationTextColor || df.headerConfig.locationTextColor || '#FFFFFF';
+                const isDarkChip = df.headerConfig.locationBadgeAssetId === 'loc_style_compact_chip' || df.locationBadgeAssetId === 'loc_style_compact_chip' || df.headerConfig.locationStyle === 'compact_chip' || df.headerConfig.locationStyle === 'box';
+                const locBgColor = card.locationBgColor || df.headerConfig.locationBgColor || (badgeAsset ? 'transparent' : (isDarkChip ? '#18181B' : '#DC2626'));
+                const locBorderRadius = isDarkChip || df.headerConfig.locationStyle === 'box' ? '6px' : '9999px';
+                const locBorder = isDarkChip ? '2px solid #FFFFFF' : '1.5px solid rgba(255, 255, 255, 0.4)';
+
+                let safeBadgeUrl = badgeAsset;
+                if (badgeAsset && badgeAsset.startsWith('data:image/svg+xml')) {
+                  try {
+                    // Only encode if not already encoded
+                    if (!badgeAsset.includes('%3Csvg') && !badgeAsset.includes(';base64,')) {
+                      const svgContent = badgeAsset.replace(/^data:image\/svg\+xml(?:;utf8)?,/, '');
+                      safeBadgeUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svgContent)}`;
+                    }
+                  } catch {
+                    safeBadgeUrl = badgeAsset;
+                  }
+                }
+
+                const dynamicLoc = calculateDynamicLocationMetrics({
+                  locationText: cleanLoc,
+                  locationRect: df.headerConfig.locationRect,
+                  sliceConfig: df.sliceConfig || df.headerConfig.sliceConfig,
+                  typographyConfig: df.headerConfig.typographyConfig,
+                  locationFontSize: df.headerConfig.locationFontSize,
+                  hasBadgeAsset: Boolean(badgeAsset),
+                });
+                const locWidth = `${dynamicLoc.widthPct}%` || `${df.headerConfig.locationRect?.width ?? 28}%`;
+
+                return badgeAsset ? (
+                  <div
+                    className="absolute pointer-events-auto flex items-center justify-center font-bold shadow-md select-none"
+                    style={{
+                      left: `${df.headerConfig.locationRect?.x ?? 5}%`,
+                      top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
+                      width: locWidth,
+                      maxWidth: '85%',
+                      height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
+                      transform: (df.headerConfig.locationRotation ?? 0) !== 0 ? `rotate(${df.headerConfig.locationRotation}deg)` : undefined,
+                      transformOrigin: 'center center',
+                    }}
+                  >
+                    <div className="relative flex items-center justify-center h-full w-full">
+                      <img
+                        src={safeBadgeUrl || badgeAsset}
+                        alt=""
+                        className="h-full w-full object-contain pointer-events-none select-none"
+                        onError={(e) => {
+                          const target = e.currentTarget as HTMLImageElement;
+                          target.style.display = 'none';
+                        }}
+                      />
+                      <div
+                        className="absolute inset-y-0 flex items-center justify-center overflow-hidden"
+                        style={{
+                          left: `${Math.round(((df.sliceConfig?.leftWidthPct ?? df.headerConfig?.sliceConfig?.leftWidthPct) ?? 0.28) * 100)}%`,
+                          right: `${Math.round(((df.sliceConfig?.rightWidthPct ?? df.headerConfig?.sliceConfig?.rightWidthPct) ?? 0.15) * 100)}%`,
+                        }}
+                      >
+                        <span
+                          className="truncate shadow-xs"
+                          style={{
+                            color: locColor,
+                            fontFamily: card.locationFont || df.headerConfig.typographyConfig?.fontFamily || 'Baloo 2',
+                            fontWeight: df.headerConfig.typographyConfig?.weight || 800,
+                            fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 22) * previewScale))}px`,
+                          }}
+                        >
+                          {cleanLoc}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className="absolute pointer-events-auto flex items-center justify-center font-bold px-2.5 shadow-md"
+                    style={{
+                      left: `${df.headerConfig.locationRect?.x ?? 5}%`,
+                      top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
+                      width: locWidth,
+                      maxWidth: `${df.headerConfig.locationRect?.width ?? 38}%`,
+                      height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
+                      backgroundColor: locBgColor,
+                      color: locColor,
+                      border: locBorder,
+                      borderRadius: locBorderRadius,
+                      fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 20) * previewScale))}px`,
+                    }}
+                  >
+                    {df.headerConfig.locationShowIcon !== false && <MapPin className="w-3.5 h-3.5 mr-1 inline shrink-0" style={{ color: locColor }} />}
+                    <span className="truncate">{cleanLoc}</span>
+                  </div>
+                );
+              })()}
+
+              {/* Dynamic Date Stamp (Always visible when showDate !== false with authentic Date Box/Badge support) */}
+              {(df.headerConfig?.showDate || card.showDate !== false) && card.showDate !== false && (() => {
+                const rot = card.dateRotation ?? df.headerConfig?.dateRotation ?? 270;
+                const showDateBox = card.dateShowBox !== false && (Boolean(card.dateBoxColor) || Boolean(df.headerConfig?.dateBgColor) || df.headerConfig?.dateStampStyle !== 'only_text');
+                const dateBg = showDateBox ? (card.dateBoxColor || df.headerConfig?.dateBgColor || 'rgba(0,0,0,0.75)') : undefined;
+                const dateColor = df.headerConfig?.dateTextColor || '#CBD5E1';
+                const dateAsset = (df.headerConfig as any)?.dateBoxAssetUrl || (card as any)?.customDateAssetUrl;
+
+                return (
+                  <div
+                    className="absolute pointer-events-auto flex items-center justify-center text-center font-bold overflow-hidden"
+                    style={{
+                      left: `${df.headerConfig?.dateRect?.x ?? 5}%`,
+                      top: `${df.headerConfig?.dateRect?.y ?? 18.5}%`,
+                      width: `${df.headerConfig?.dateRect?.width ?? 34}%`,
+                      height: `${df.headerConfig?.dateRect?.height ?? 3.5}%`,
+                      transform: rot !== 0 ? `rotate(${rot}deg)` : undefined,
+                      transformOrigin: 'center center',
+                      color: dateColor,
+                      backgroundColor: !dateAsset && dateBg ? dateBg : undefined,
+                      borderRadius: df.headerConfig?.dateStampStyle === 'rounded_badge' ? '9999px' : '4px',
+                      fontFamily: card.dateFont || card.locationFont || 'Baloo 2',
+                      fontSize: `${Math.max(9, Math.round((df.headerConfig?.dateFontSize || 14) * previewScale))}px`,
+                    }}
+                  >
+                    {dateAsset && (
+                      <img src={dateAsset} alt="Date Box" className="absolute inset-0 w-full h-full object-contain pointer-events-none" />
+                    )}
+                    <span className="truncate relative z-10 px-2 py-0.5 flex items-center justify-center leading-none text-center">
+                      {card.dateStr || getFormattedHindiDate()}
+                    </span>
+                  </div>
+                );
+              })()}
+
+              {/* Breaking News Ribbon */}
+              {df.ribbonConfig?.enabled && (
+                <div
+                  className="absolute pointer-events-auto"
+                  style={{
+                    left: `${df.ribbonConfig.rect?.x ?? 15}%`,
+                    top: `${df.ribbonConfig.rect?.y ?? 60}%`,
+                    width: `${df.ribbonConfig.rect?.width ?? 70}%`,
+                    height: `${df.ribbonConfig.rect?.height ?? 8}%`,
+                    transform: `rotate(${df.ribbonConfig.rotation || 0}deg)`,
+                  }}
+                >
+                  <img
+                    src={df.ribbonConfig.customRibbonUrl || '/assets/breaking_news_ribbon.svg'}
+                    alt="Ribbon"
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              )}
+
+              {/* Watermark (Part 10 & 12: Dynamic User Mode Sync, Position, Rotation, Center-Pivot parity) */}
+              {df.watermarkConfig?.enabled && (() => {
+                const isWatermarkOff = card.photoDisclaimerType === 'none' || (card.showAiGenerated === false && card.photoDisclaimerType !== 'representative' && card.photoDisclaimerType !== 'ai');
+                if (isWatermarkOff) return null;
+
+                const rot = card.watermarkRotation ?? df.watermarkConfig.rotation ?? (df.watermarkConfig.position === 'right_edge' ? 270 : 0);
+                const pos = df.watermarkConfig.position || 'right_edge';
+                let posStyle: React.CSSProperties = { right: '12px', top: '35%' };
+                let baseTranslate = 'translateY(-50%)';
+
+                if (pos === 'left_edge') {
+                  posStyle = { left: '12px', top: '35%' };
+                  baseTranslate = 'translateY(-50%)';
+                } else if (pos === 'top') {
+                  posStyle = { top: '16px', left: '50%' };
+                  baseTranslate = 'translateX(-50%)';
+                } else if (pos === 'bottom') {
+                  posStyle = { bottom: '16px', left: '50%' };
+                  baseTranslate = 'translateX(-50%)';
+                } else if (pos === 'center') {
+                  posStyle = { top: '50%', left: '50%' };
+                  baseTranslate = 'translate(-50%, -50%)';
+                } else if (df.watermarkConfig.rect?.x !== undefined) {
+                  const wRect = df.watermarkConfig.rect;
+                  posStyle = {
+                    left: `${wRect.x + (wRect.width || 10) / 2}%`,
+                    top: `${wRect.y + (wRect.height || 4) / 2}%`,
+                    width: `${wRect.width || 10}%`,
+                    height: `${wRect.height || 4}%`,
+                  };
+                  baseTranslate = 'translate(-50%, -50%)';
+                }
+
+                const transform = baseTranslate ? `${baseTranslate} rotate(${rot}deg)` : `rotate(${rot}deg)`;
+                const wmText = card.photoDisclaimerType === 'representative'
+                  ? (card.representativePhotoText || 'प्रतीकात्मक फोटो')
+                  : (card.aiGeneratedText || df.watermarkConfig.customText || df.watermarkConfig.label || 'AI GENERATED');
+
+                return (
+                  <div
+                    className="absolute pointer-events-auto flex items-center justify-center font-bold z-30 select-none"
+                    style={{
+                      ...posStyle,
+                      transform,
+                      transformOrigin: 'center center',
+                      opacity: df.watermarkConfig.opacity ?? 0.85,
+                    }}
+                  >
+                    {df.watermarkConfig.type === 'image' && df.watermarkConfig.imageUrl ? (
+                      <img
+                        src={df.watermarkConfig.imageUrl}
+                        alt="Watermark"
+                        className="max-h-8 max-w-20 object-contain"
+                      />
+                    ) : (
+                      <span
+                        className="px-2.5 py-1 rounded text-center whitespace-nowrap flex items-center justify-center leading-none font-bold"
+                        style={{
+                          backgroundColor: card.photoTagShowBox !== false
+                            ? (card.photoTagBoxColor || (df.watermarkConfig.watermarkStyle === 'box' || df.watermarkConfig.watermarkStyle === 'boxed' ? df.watermarkConfig.bgColor : 'rgba(0,0,0,0.85)'))
+                            : 'transparent',
+                          color: card.photoTagTextColor || df.watermarkConfig.textColor || '#FFFFFF',
+                          fontFamily: card.photoTagFont || 'Baloo 2',
+                          fontSize: `${Math.max(8, Math.round((df.watermarkConfig.fontSize || 14) * previewScale))}px`,
+                          textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.7)',
+                          borderRadius: card.photoTagShowBox !== false ? '4px' : undefined,
+                          lineHeight: 1,
+                        }}
+                      >
+                        {wmText}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Full Story Callout */}
+              {(df.fullStoryCalloutConfig?.calloutVisibilityPolicy === 'forced_on' ||
+                ((df.fullStoryCalloutConfig?.enabled || Boolean(card.customCalloutAssetUrl)) &&
+                  df.fullStoryCalloutConfig?.calloutVisibilityPolicy !== 'disabled' &&
+                  card.showCallout !== false)) && (
+                (() => {
+                  let calloutUrl = card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig?.manualCalloutAsset;
+                  if (!calloutUrl) {
+                    const calloutId = card.selectedCalloutId || df.fullStoryCalloutConfig?.calloutAssetId || df.calloutAssetId;
+                    if (calloutId) {
+                      const item = getAssetLibraryItemById(calloutId);
+                      if (item && item.url) calloutUrl = item.url;
+                    }
+                  }
+                  // Priority 2: Master Admin global default Callout Library item
+                  if (!calloutUrl && (df.fullStoryCalloutConfig?.enabled || df.fullStoryCalloutConfig?.calloutVisibilityPolicy === 'forced_on')) {
+                    const defaultItem = getAssetLibraryItemById('callout_bully_forward_story') || getDefaultAssetLibrariesFallback('callout_png')[0];
+                    if (defaultItem && defaultItem.url) calloutUrl = defaultItem.url;
+                  }
+                  const effectiveCalloutText = (card.calloutTag && card.calloutTag.trim()) || (df.fullStoryCalloutConfig.text && df.fullStoryCalloutConfig.text.trim()) || '';
+                  if (!calloutUrl && !effectiveCalloutText) return null;
+
+                  const calloutRawY = df.fullStoryCalloutConfig?.rect?.y ?? 85;
+                  const calloutRawH = df.fullStoryCalloutConfig?.rect?.height ?? 3.5;
+                  const footerH = df.footerConfig?.rect?.height ?? 8;
+                  const maxBottomY = 100 - footerH - 0.5;
+                  const calloutY = Math.min(calloutRawY, maxBottomY - calloutRawH);
+                  const isImageMode = Boolean(calloutUrl && !calloutImgError && df.fullStoryCalloutConfig?.calloutAssetMode !== 'styled_box');
+
+                  return (
+                    <div
+                      className="absolute pointer-events-auto flex items-center justify-center select-none"
+                      style={{
+                        left: `${df.fullStoryCalloutConfig?.rect?.x ?? 10}%`,
+                        top: `${calloutY}%`,
+                        width: `${df.fullStoryCalloutConfig?.rect?.width ?? 80}%`,
+                        height: `${calloutRawH}%`,
+                        transform: `rotate(${df.fullStoryCalloutConfig?.rotation || 0}deg) scale(${card.calloutScale ?? 1.0})`,
+                        transformOrigin: 'center center',
+                      }}
+                    >
+                      {isImageMode ? (
+                        <img
+                          src={calloutUrl}
+                          alt="Callout"
+                          className="w-full h-full object-contain"
+                          onError={() => setCalloutImgError(true)}
+                        />
+                      ) : (
+                        <div
+                          className="font-black px-3 py-0.5 rounded-lg shadow-md flex items-center justify-center gap-1.5 whitespace-nowrap max-w-full overflow-hidden"
+                          style={{
+                            color: df.fullStoryCalloutConfig?.textColor || '#FFFFFF',
+                            backgroundColor: df.fullStoryCalloutConfig?.bgColor || '#DC2626',
+                            border: `${df.fullStoryCalloutConfig?.borderWidth ?? 1}px solid ${df.fullStoryCalloutConfig?.borderColor || '#FACC15'}`,
+                            fontSize: `${Math.max(10, Math.round((df.fullStoryCalloutConfig?.fontSize || 18) * previewScale))}px`,
+                          }}
+                        >
+                          {df.fullStoryCalloutConfig?.showIcon !== false && <span>📢</span>}
+                          <span className="truncate">{effectiveCalloutText || 'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें'}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
+              )}
+
+              {/* Optional POWERED BY Element */}
+              {df.poweredByConfig?.enabled && (
+                <div
+                  className="absolute pointer-events-auto px-2 py-0.5 rounded shadow-sm text-center font-bold truncate"
+                  style={{
+                    left: `${df.poweredByConfig.rect?.x ?? 55}%`,
+                    top: `${df.poweredByConfig.rect?.y ?? 92}%`,
+                    width: `${df.poweredByConfig.rect?.width ?? 42}%`,
+                    height: `${df.poweredByConfig.rect?.height ?? 3.5}%`,
+                    backgroundColor: df.poweredByConfig.bgColor || 'rgba(15, 23, 42, 0.85)',
+                    color: df.poweredByConfig.textColor || '#FFFFFF',
+                    borderColor: df.poweredByConfig.borderColor || '#3B82F6',
+                    borderWidth: `${df.poweredByConfig.borderWidth ?? 1}px`,
+                    opacity: df.poweredByConfig.opacity ?? 0.85,
+                    transform: `rotate(${df.poweredByConfig.rotation || 0}deg)`,
+                    fontSize: `${Math.max(8, Math.round((df.poweredByConfig.fontSize || 14) * previewScale))}px`,
+                  }}
+                >
+                  {df.poweredByConfig.text || 'POWERED BY AINEWSMAKER.ONLINE'}
+                </div>
+              )}
+
+              {/* Headline */}
+              {(() => {
+                const textSlots = df.textSlots && df.textSlots.length > 0 ? df.textSlots : [{ rect: { x: 7, y: 63, width: 86, height: 27 }, alignment: 'center', textColor: '#FFFFFF' }];
+                const slot0 = textSlots[0];
+                const hbBg = slot0?.backgroundColor && slot0.backgroundColor !== 'transparent' ? slot0.backgroundColor : 'transparent';
+                const hbOpacity = slot0?.backgroundOpacity !== undefined ? slot0.backgroundOpacity : 1;
+                const hbBorderWidth = (slot0?.borderWidth || 0) * previewScale;
+                const hbBorderColor = slot0?.borderColor || '#FACC15';
+                const hbBorderRadius = (slot0?.borderRadius || 0) * previewScale;
+                const hbPadding = (slot0?.padding || 0) * previewScale;
+                return (
+                  <div
+                    className={`absolute pointer-events-auto flex items-center overflow-hidden max-h-full ${slot0?.alignment === 'left' ? 'justify-start text-left' : slot0?.alignment === 'right' ? 'justify-end text-right' : 'justify-center text-center'}`}
+                    style={{
+                      left: `${slot0?.rect?.x ?? 7}%`,
+                      top: `${slot0?.rect?.y ?? 63}%`,
+                      width: `${slot0?.rect?.width ?? 86}%`,
+                      height: `${slot0?.rect?.height ?? 27}%`,
+                      maxHeight: `${slot0?.rect?.height ?? 27}%`,
+                      backgroundColor: hbBg,
+                      opacity: hbOpacity,
+                      border: hbBorderWidth > 0 ? `${hbBorderWidth}px solid ${hbBorderColor}` : undefined,
+                      borderRadius: hbBorderRadius > 0 ? `${hbBorderRadius}px` : undefined,
+                      padding: hbPadding > 0 ? `${hbPadding}px` : undefined,
+                    }}
+                  >
+                    <h1
+                      className="font-black leading-snug drop-shadow-md w-full overflow-hidden max-h-full pb-0.5"
+                      style={{
+                        color: slot0?.textColor || '#FFFFFF',
+                        fontFamily: `"${card.headlineFontFamily || df.typographyConfig?.primaryFontFamily || slot0?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`,
+                        fontSize: `${effectivePreviewFontSize}px`,
+                        textAlign: (slot0?.alignment as any) || 'center',
+                      }}
+                    >
+                      {renderFormattedHeadline(slot0?.textColor || card.headlineTextColor || card.textColor)}
+                    </h1>
+                  </div>
+                );
+              })()}
+
+              {/* Permanent Theme Footer */}
+              <div
+                className="absolute bottom-0 inset-x-0 pointer-events-auto"
+                style={{
+                  height: `${(df.footerConfig?.footerHeightRatio || 0.08) * 100}%`,
+                  width: `${card.footerWidthPct || df.footerConfig?.footerWidthPct || 100}%`,
+                  left: `${(100 - (card.footerWidthPct || df.footerConfig?.footerWidthPct || 100)) / 2}%`,
+                }}
+              >
+                <FooterGraphic
+                  socialHandle={card.socialHandle}
+                  channelName={card.channelNameEn || card.channelNameHi || card.brandName}
+                  whatsappNumber={card.whatsappNumber}
+                  customFooterPng={getActiveFooterPng(card)}
+                  websiteUrl={card.websiteUrl}
+                  showWebsite={card.showWebsite}
+                  showMobileNumber={card.showMobileNumber}
+                  activeSocialIcons={card.activeSocialIcons}
+                  footerBgColor={df.footerConfig?.footerBgColor || card.footerBgColor}
+                  footerTextColor={df.footerConfig?.footerTextColor || card.footerTextColor}
+                  footerIconStyle={card.footerIconStyle}
+                  showMasterBranding={card.showMasterBranding}
+                  footerConfig={card.customFooterConfig || (df as any)?.footerConfig}
+                  previewScale={previewScale}
+                />
+              </div>
+            </div>
+          );
+        })()
+      ) : card.frameDesign === 'graphic_001' ? (
         /* ================= GRAPHIC 1 (AUTHENTIC DEFAULT 4:5 PRIMARY NEWS GRAPHIC) ================= */
         <div className="absolute inset-0 z-20 pointer-events-none select-none overflow-hidden">
           {/* Custom Header PNG if user assigned custom header */}
@@ -3575,432 +4004,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             </div>
           );
         })()
-      ) : df ? (
-        (() => {
-          return (
-            <div className="absolute inset-0 z-20 pointer-events-none select-none">
-              {/* Dynamic Logo */}
-              {df.headerConfig?.showLogo && card.showMasterBranding !== false && (
-                <div
-                  className="absolute pointer-events-auto flex items-center justify-start"
-                  style={{
-                    left: `${df.headerConfig.logoRect?.x ?? 5}%`,
-                    top: `${df.headerConfig.logoRect?.y ?? 3.5}%`,
-                    width: `${df.headerConfig.logoRect?.width ?? 22}%`,
-                    height: `${df.headerConfig.logoRect?.height ?? 9}%`,
-                    opacity: df.headerConfig.logoOpacity ?? 1,
-                    transform: card.logoScale ? `scale(${(card.logoScale) / 1.25})` : undefined,
-                    transformOrigin: 'top left',
-                  }}
-                >
-                  <img
-                    src={getProxiedImageUrl(card.testLogoUrl || card.customLogoUrl || (card as any).channelLogo || '/assets/ai_news_maker_logo.png')}
-                    alt="Channel Logo"
-                    onError={(e) => {
-                      const target = e.currentTarget as HTMLImageElement;
-                      if (!target.src.includes('/assets/ai_news_maker_logo.png') && !target.src.includes('/assets/breaking_news_wala_logo.png')) {
-                        target.src = '/assets/ai_news_maker_logo.png';
-                      }
-                    }}
-                    className="max-w-full max-h-full object-contain"
-                  />
-                </div>
-              )}
-
-              {/* Dynamic Location Badge */}
-              {df.headerConfig?.showLocation && card.location && card.showLocation !== false && (() => {
-                const cleanLoc = formatCleanLocationText(card.location);
-                let badgeAsset = card.customLocationBadgeUrl || df.headerConfig.manualLocationAsset || (df.headerConfig as any).locationBadgeAssetUrl || (df.headerConfig as any).locationBadgeUrl;
-                if (!badgeAsset) {
-                  const badgeId = card.selectedLocationBadgeId || df.headerConfig.locationBadgeAssetId || df.locationBadgeAssetId;
-                  if (badgeId) {
-                    const item = getAssetLibraryItemById(badgeId);
-                    if (item && item.url) badgeAsset = item.url;
-                  }
-                }
-                const locColor = card.locationTextColor || df.headerConfig.locationTextColor || '#FFFFFF';
-                const isDarkChip = df.headerConfig.locationBadgeAssetId === 'loc_style_compact_chip' || df.locationBadgeAssetId === 'loc_style_compact_chip' || df.headerConfig.locationStyle === 'compact_chip' || df.headerConfig.locationStyle === 'box';
-                const locBgColor = card.locationBgColor || df.headerConfig.locationBgColor || (badgeAsset ? 'transparent' : (isDarkChip ? '#18181B' : '#DC2626'));
-                const locBorderRadius = isDarkChip || df.headerConfig.locationStyle === 'box' ? '6px' : '9999px';
-                const locBorder = isDarkChip ? '2px solid #FFFFFF' : '1.5px solid rgba(255, 255, 255, 0.4)';
-
-                let safeBadgeUrl = badgeAsset;
-                if (badgeAsset && badgeAsset.startsWith('data:image/svg+xml')) {
-                  try {
-                    // Only encode if not already encoded
-                    if (!badgeAsset.includes('%3Csvg') && !badgeAsset.includes(';base64,')) {
-                      const svgContent = badgeAsset.replace(/^data:image\/svg\+xml(?:;utf8)?,/, '');
-                      safeBadgeUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svgContent)}`;
-                    }
-                  } catch {
-                    safeBadgeUrl = badgeAsset;
-                  }
-                }
-
-                const dynamicLoc = calculateDynamicLocationMetrics({
-                  locationText: cleanLoc,
-                  locationRect: df.headerConfig.locationRect,
-                  sliceConfig: df.sliceConfig || df.headerConfig.sliceConfig,
-                  typographyConfig: df.headerConfig.typographyConfig,
-                  locationFontSize: df.headerConfig.locationFontSize,
-                  hasBadgeAsset: Boolean(badgeAsset),
-                });
-                const locWidth = `${dynamicLoc.widthPct}%` || `${df.headerConfig.locationRect?.width ?? 28}%`;
-
-                return badgeAsset ? (
-                  <div
-                    className="absolute pointer-events-auto flex items-center justify-center font-bold shadow-md select-none"
-                    style={{
-                      left: `${df.headerConfig.locationRect?.x ?? 5}%`,
-                      top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
-                      width: locWidth,
-                      maxWidth: '85%',
-                      height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
-                      transform: (df.headerConfig.locationRotation ?? 0) !== 0 ? `rotate(${df.headerConfig.locationRotation}deg)` : undefined,
-                      transformOrigin: 'center center',
-                    }}
-                  >
-                    <div className="relative flex items-center justify-center h-full w-full">
-                      <img
-                        src={safeBadgeUrl || badgeAsset}
-                        alt=""
-                        className="h-full w-full object-contain pointer-events-none select-none"
-                        onError={(e) => {
-                          const target = e.currentTarget as HTMLImageElement;
-                          target.style.display = 'none';
-                        }}
-                      />
-                      <div
-                        className="absolute inset-y-0 flex items-center justify-center overflow-hidden"
-                        style={{
-                          left: `${Math.round(((df.sliceConfig?.leftWidthPct ?? df.headerConfig?.sliceConfig?.leftWidthPct) ?? 0.28) * 100)}%`,
-                          right: `${Math.round(((df.sliceConfig?.rightWidthPct ?? df.headerConfig?.sliceConfig?.rightWidthPct) ?? 0.15) * 100)}%`,
-                        }}
-                      >
-                        <span
-                          className="truncate shadow-xs"
-                          style={{
-                            color: locColor,
-                            fontFamily: card.locationFont || df.headerConfig.typographyConfig?.fontFamily || 'Baloo 2',
-                            fontWeight: df.headerConfig.typographyConfig?.weight || 800,
-                            fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 22) * previewScale))}px`,
-                          }}
-                        >
-                          {cleanLoc}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    className="absolute pointer-events-auto flex items-center justify-center font-bold px-2.5 shadow-md"
-                    style={{
-                      left: `${df.headerConfig.locationRect?.x ?? 5}%`,
-                      top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
-                      width: locWidth,
-                      maxWidth: `${df.headerConfig.locationRect?.width ?? 38}%`,
-                      height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
-                      backgroundColor: locBgColor,
-                      color: locColor,
-                      border: locBorder,
-                      borderRadius: locBorderRadius,
-                      fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 20) * previewScale))}px`,
-                    }}
-                  >
-                    {df.headerConfig.locationShowIcon !== false && <MapPin className="w-3.5 h-3.5 mr-1 inline shrink-0" style={{ color: locColor }} />}
-                    <span className="truncate">{cleanLoc}</span>
-                  </div>
-                );
-              })()}
-
-              {/* Dynamic Date Stamp (Always visible when showDate !== false with authentic Date Box/Badge support) */}
-              {(df.headerConfig?.showDate || card.showDate !== false) && card.showDate !== false && (() => {
-                const rot = card.dateRotation ?? df.headerConfig?.dateRotation ?? 270;
-                const showDateBox = card.dateShowBox !== false && (Boolean(card.dateBoxColor) || Boolean(df.headerConfig?.dateBgColor) || df.headerConfig?.dateStampStyle !== 'only_text');
-                const dateBg = showDateBox ? (card.dateBoxColor || df.headerConfig?.dateBgColor || 'rgba(0,0,0,0.75)') : undefined;
-                const dateColor = df.headerConfig?.dateTextColor || '#CBD5E1';
-                const dateAsset = (df.headerConfig as any)?.dateBoxAssetUrl || (card as any)?.customDateAssetUrl;
-
-                return (
-                  <div
-                    className="absolute pointer-events-auto flex items-center justify-center text-center font-bold overflow-hidden"
-                    style={{
-                      left: `${df.headerConfig?.dateRect?.x ?? 5}%`,
-                      top: `${df.headerConfig?.dateRect?.y ?? 18.5}%`,
-                      width: `${df.headerConfig?.dateRect?.width ?? 34}%`,
-                      height: `${df.headerConfig?.dateRect?.height ?? 3.5}%`,
-                      transform: rot !== 0 ? `rotate(${rot}deg)` : undefined,
-                      transformOrigin: 'center center',
-                      color: dateColor,
-                      backgroundColor: !dateAsset && dateBg ? dateBg : undefined,
-                      borderRadius: df.headerConfig?.dateStampStyle === 'rounded_badge' ? '9999px' : '4px',
-                      fontFamily: card.dateFont || card.locationFont || 'Baloo 2',
-                      fontSize: `${Math.max(9, Math.round((df.headerConfig?.dateFontSize || 14) * previewScale))}px`,
-                    }}
-                  >
-                    {dateAsset && (
-                      <img src={dateAsset} alt="Date Box" className="absolute inset-0 w-full h-full object-contain pointer-events-none" />
-                    )}
-                    <span className="truncate relative z-10 px-1">{card.dateStr || getFormattedHindiDate()}</span>
-                  </div>
-                );
-              })()}
-
-              {/* Breaking News Ribbon */}
-              {df.ribbonConfig?.enabled && (
-                <div
-                  className="absolute pointer-events-auto"
-                  style={{
-                    left: `${df.ribbonConfig.rect?.x ?? 15}%`,
-                    top: `${df.ribbonConfig.rect?.y ?? 60}%`,
-                    width: `${df.ribbonConfig.rect?.width ?? 70}%`,
-                    height: `${df.ribbonConfig.rect?.height ?? 8}%`,
-                    transform: `rotate(${df.ribbonConfig.rotation || 0}deg)`,
-                  }}
-                >
-                  <img
-                    src={df.ribbonConfig.customRibbonUrl || '/assets/breaking_news_ribbon.svg'}
-                    alt="Ribbon"
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-              )}
-
-              {/* Watermark (Part 10 & 12: Dynamic User Mode Sync, Position, Rotation, Center-Pivot parity) */}
-              {df.watermarkConfig?.enabled && (() => {
-                const isWatermarkOff = card.photoDisclaimerType === 'none' || (card.showAiGenerated === false && card.photoDisclaimerType !== 'representative' && card.photoDisclaimerType !== 'ai');
-                if (isWatermarkOff) return null;
-
-                const rot = card.watermarkRotation ?? df.watermarkConfig.rotation ?? (df.watermarkConfig.position === 'right_edge' ? 270 : 0);
-                const pos = df.watermarkConfig.position || 'right_edge';
-                let posStyle: React.CSSProperties = { right: '12px', top: '35%' };
-                let baseTranslate = 'translateY(-50%)';
-
-                if (pos === 'left_edge') {
-                  posStyle = { left: '12px', top: '35%' };
-                  baseTranslate = 'translateY(-50%)';
-                } else if (pos === 'top') {
-                  posStyle = { top: '16px', left: '50%' };
-                  baseTranslate = 'translateX(-50%)';
-                } else if (pos === 'bottom') {
-                  posStyle = { bottom: '16px', left: '50%' };
-                  baseTranslate = 'translateX(-50%)';
-                } else if (pos === 'center') {
-                  posStyle = { top: '50%', left: '50%' };
-                  baseTranslate = 'translate(-50%, -50%)';
-                } else if (df.watermarkConfig.rect?.x !== undefined) {
-                  const wRect = df.watermarkConfig.rect;
-                  posStyle = {
-                    left: `${wRect.x + (wRect.width || 10) / 2}%`,
-                    top: `${wRect.y + (wRect.height || 4) / 2}%`,
-                    width: `${wRect.width || 10}%`,
-                    height: `${wRect.height || 4}%`,
-                  };
-                  baseTranslate = 'translate(-50%, -50%)';
-                }
-
-                const transform = baseTranslate ? `${baseTranslate} rotate(${rot}deg)` : `rotate(${rot}deg)`;
-                const wmText = card.photoDisclaimerType === 'representative'
-                  ? (card.representativePhotoText || 'प्रतीकात्मक फोटो')
-                  : (card.aiGeneratedText || df.watermarkConfig.customText || df.watermarkConfig.label || 'AI GENERATED');
-
-                return (
-                  <div
-                    className="absolute pointer-events-none flex items-center justify-center font-bold z-30 select-none"
-                    style={{
-                      ...posStyle,
-                      transform,
-                      transformOrigin: 'center center',
-                      opacity: df.watermarkConfig.opacity ?? 0.85,
-                    }}
-                  >
-                    {df.watermarkConfig.type === 'image' && df.watermarkConfig.imageUrl ? (
-                      <img
-                        src={df.watermarkConfig.imageUrl}
-                        alt="Watermark"
-                        className="max-h-8 max-w-20 object-contain"
-                      />
-                    ) : (
-                      <span
-                        className="px-2 py-0.5 rounded text-center whitespace-nowrap"
-                        style={{
-                          backgroundColor: card.photoTagShowBox !== false
-                            ? (card.photoTagBoxColor || (df.watermarkConfig.watermarkStyle === 'box' || df.watermarkConfig.watermarkStyle === 'boxed' ? df.watermarkConfig.bgColor : 'rgba(0,0,0,0.85)'))
-                            : 'transparent',
-                          color: card.photoTagTextColor || df.watermarkConfig.textColor || '#FFFFFF',
-                          fontFamily: card.photoTagFont || 'Baloo 2',
-                          fontSize: `${Math.max(8, Math.round((df.watermarkConfig.fontSize || 14) * previewScale))}px`,
-                          textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.7)',
-                          borderRadius: card.photoTagShowBox !== false ? '4px' : undefined,
-                        }}
-                      >
-                        {wmText}
-                      </span>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* Full Story Callout */}
-              {(df.fullStoryCalloutConfig?.calloutVisibilityPolicy === 'forced_on' ||
-                ((df.fullStoryCalloutConfig?.enabled || Boolean(card.customCalloutAssetUrl)) &&
-                  df.fullStoryCalloutConfig?.calloutVisibilityPolicy !== 'disabled' &&
-                  card.showCallout !== false)) && (
-                (() => {
-                  let calloutUrl = card.customCalloutAssetUrl || df.calloutAssetUrl || df.fullStoryCalloutConfig?.manualCalloutAsset;
-                  if (!calloutUrl) {
-                    const calloutId = card.selectedCalloutId || df.fullStoryCalloutConfig?.calloutAssetId || df.calloutAssetId;
-                    if (calloutId) {
-                      const item = getAssetLibraryItemById(calloutId);
-                      if (item && item.url) calloutUrl = item.url;
-                    }
-                  }
-                  // Priority 2: Master Admin global default Callout Library item
-                  if (!calloutUrl && (df.fullStoryCalloutConfig?.enabled || df.fullStoryCalloutConfig?.calloutVisibilityPolicy === 'forced_on')) {
-                    const defaultItem = getAssetLibraryItemById('callout_bully_forward_story') || getDefaultAssetLibrariesFallback('callout_png')[0];
-                    if (defaultItem && defaultItem.url) calloutUrl = defaultItem.url;
-                  }
-                  const effectiveCalloutText = (card.calloutTag && card.calloutTag.trim()) || (df.fullStoryCalloutConfig.text && df.fullStoryCalloutConfig.text.trim()) || '';
-                  if (!calloutUrl && !effectiveCalloutText) return null;
-
-                  const calloutRawY = df.fullStoryCalloutConfig?.rect?.y ?? 85;
-                  const calloutRawH = df.fullStoryCalloutConfig?.rect?.height ?? 3.5;
-                  const footerH = df.footerConfig?.rect?.height ?? 8;
-                  const maxBottomY = 100 - footerH - 0.5;
-                  const calloutY = Math.min(calloutRawY, maxBottomY - calloutRawH);
-                  const isImageMode = Boolean(calloutUrl && !calloutImgError && df.fullStoryCalloutConfig?.calloutAssetMode !== 'styled_box');
-
-                  return (
-                    <div
-                      className="absolute pointer-events-auto flex items-center justify-center select-none"
-                      style={{
-                        left: `${df.fullStoryCalloutConfig?.rect?.x ?? 10}%`,
-                        top: `${calloutY}%`,
-                        width: `${df.fullStoryCalloutConfig?.rect?.width ?? 80}%`,
-                        height: `${calloutRawH}%`,
-                        transform: `rotate(${df.fullStoryCalloutConfig?.rotation || 0}deg) scale(${card.calloutScale ?? 1.0})`,
-                        transformOrigin: 'center center',
-                      }}
-                    >
-                      {isImageMode ? (
-                        <img
-                          src={calloutUrl}
-                          alt="Callout"
-                          className="w-full h-full object-contain"
-                          onError={() => setCalloutImgError(true)}
-                        />
-                      ) : (
-                        <div
-                          className="font-black px-3 py-0.5 rounded-lg shadow-md flex items-center justify-center gap-1.5 whitespace-nowrap max-w-full overflow-hidden"
-                          style={{
-                            color: df.fullStoryCalloutConfig?.textColor || '#FFFFFF',
-                            backgroundColor: df.fullStoryCalloutConfig?.bgColor || '#DC2626',
-                            border: `${df.fullStoryCalloutConfig?.borderWidth ?? 1}px solid ${df.fullStoryCalloutConfig?.borderColor || '#FACC15'}`,
-                            fontSize: `${Math.max(10, Math.round((df.fullStoryCalloutConfig?.fontSize || 18) * previewScale))}px`,
-                          }}
-                        >
-                          {df.fullStoryCalloutConfig?.showIcon !== false && <span>📢</span>}
-                          <span className="truncate">{effectiveCalloutText || 'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें'}</span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()
-              )}
-
-              {/* Optional POWERED BY Element */}
-              {df.poweredByConfig?.enabled && (
-                <div
-                  className="absolute pointer-events-auto px-2 py-0.5 rounded shadow-sm text-center font-bold truncate"
-                  style={{
-                    left: `${df.poweredByConfig.rect?.x ?? 55}%`,
-                    top: `${df.poweredByConfig.rect?.y ?? 92}%`,
-                    width: `${df.poweredByConfig.rect?.width ?? 42}%`,
-                    height: `${df.poweredByConfig.rect?.height ?? 3.5}%`,
-                    backgroundColor: df.poweredByConfig.bgColor || 'rgba(15, 23, 42, 0.85)',
-                    color: df.poweredByConfig.textColor || '#FFFFFF',
-                    borderColor: df.poweredByConfig.borderColor || '#3B82F6',
-                    borderWidth: `${df.poweredByConfig.borderWidth ?? 1}px`,
-                    opacity: df.poweredByConfig.opacity ?? 0.85,
-                    transform: `rotate(${df.poweredByConfig.rotation || 0}deg)`,
-                    fontSize: `${Math.max(8, Math.round((df.poweredByConfig.fontSize || 14) * previewScale))}px`,
-                  }}
-                >
-                  {df.poweredByConfig.text || 'POWERED BY AINEWSMAKER.ONLINE'}
-                </div>
-              )}
-
-              {/* Headline */}
-              {(() => {
-                const textSlots = df.textSlots && df.textSlots.length > 0 ? df.textSlots : [{ rect: { x: 7, y: 63, width: 86, height: 27 }, alignment: 'center', textColor: '#FFFFFF' }];
-                const slot0 = textSlots[0];
-                const hbBg = slot0?.backgroundColor && slot0.backgroundColor !== 'transparent' ? slot0.backgroundColor : 'transparent';
-                const hbOpacity = slot0?.backgroundOpacity !== undefined ? slot0.backgroundOpacity : 1;
-                const hbBorderWidth = (slot0?.borderWidth || 0) * previewScale;
-                const hbBorderColor = slot0?.borderColor || '#FACC15';
-                const hbBorderRadius = (slot0?.borderRadius || 0) * previewScale;
-                const hbPadding = (slot0?.padding || 0) * previewScale;
-                return (
-                  <div
-                    className={`absolute pointer-events-auto flex items-center overflow-hidden max-h-full ${slot0?.alignment === 'left' ? 'justify-start text-left' : slot0?.alignment === 'right' ? 'justify-end text-right' : 'justify-center text-center'}`}
-                    style={{
-                      left: `${slot0?.rect?.x ?? 7}%`,
-                      top: `${slot0?.rect?.y ?? 63}%`,
-                      width: `${slot0?.rect?.width ?? 86}%`,
-                      height: `${slot0?.rect?.height ?? 27}%`,
-                      maxHeight: `${slot0?.rect?.height ?? 27}%`,
-                      backgroundColor: hbBg,
-                      opacity: hbOpacity,
-                      border: hbBorderWidth > 0 ? `${hbBorderWidth}px solid ${hbBorderColor}` : undefined,
-                      borderRadius: hbBorderRadius > 0 ? `${hbBorderRadius}px` : undefined,
-                      padding: hbPadding > 0 ? `${hbPadding}px` : undefined,
-                    }}
-                  >
-                    <h1
-                      className="font-black leading-snug drop-shadow-md w-full overflow-hidden max-h-full pb-0.5"
-                      style={{
-                        color: slot0?.textColor || '#FFFFFF',
-                        fontFamily: `"${card.headlineFontFamily || df.typographyConfig?.primaryFontFamily || slot0?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`,
-                        fontSize: `${effectivePreviewFontSize}px`,
-                        textAlign: (slot0?.alignment as any) || 'center',
-                      }}
-                    >
-                      {renderFormattedHeadline(slot0?.textColor || card.headlineTextColor || card.textColor)}
-                    </h1>
-                  </div>
-                );
-              })()}
-
-              {/* Permanent Theme Footer */}
-              <div
-                className="absolute bottom-0 inset-x-0 pointer-events-auto"
-                style={{
-                  height: `${(df.footerConfig?.footerHeightRatio || 0.08) * 100}%`,
-                  width: `${card.footerWidthPct || df.footerConfig?.footerWidthPct || 100}%`,
-                  left: `${(100 - (card.footerWidthPct || df.footerConfig?.footerWidthPct || 100)) / 2}%`,
-                }}
-              >
-                <FooterGraphic
-                  socialHandle={card.socialHandle}
-                  channelName={card.channelNameEn || card.channelNameHi || card.brandName}
-                  whatsappNumber={card.whatsappNumber}
-                  customFooterPng={getActiveFooterPng(card)}
-                  websiteUrl={card.websiteUrl}
-                  showWebsite={card.showWebsite}
-                  showMobileNumber={card.showMobileNumber}
-                  activeSocialIcons={card.activeSocialIcons}
-                  footerBgColor={df.footerConfig?.footerBgColor || card.footerBgColor}
-                  footerTextColor={df.footerConfig?.footerTextColor || card.footerTextColor}
-                  footerIconStyle={card.footerIconStyle}
-                  showMasterBranding={card.showMasterBranding}
-                  footerConfig={card.customFooterConfig || (df as any)?.footerConfig}
-                  previewScale={previewScale}
-                />
-              </div>
-            </div>
-          );
-        })()
-      ) : (
+) : (
         /* ================= STANDARD ORIGINAL JACKET LAYOUT ================= */
         <div className="absolute bottom-0 inset-x-0 z-20 flex flex-col justify-end pt-8 pb-0 bg-gradient-to-t from-black via-black/95 via-50% to-transparent">
           {/* Top Strip above Caption: Location & "🔴 पूरी खबर डिस्क्रिप्शन में" */}

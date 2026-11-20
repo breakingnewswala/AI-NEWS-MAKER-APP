@@ -44,7 +44,7 @@ import {
 import { calculateEditorProgress } from './lib/aiCoreRules';
 import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/dateUtils';
 import { getProfileHeaderFooter, getPermanentUserLogo } from './lib/profileConfig';
-import { formatCleanLocationText } from './lib/locationUtils';
+import { formatCleanLocationText, extractLocationFromNewsText } from './lib/locationUtils';
 import { getDynamicFrameById } from './lib/dynamicFramesManager';
 import { syncAllSourcesLive, syncAndMigrateLocalApprovals } from './lib/rssSourceManager';
 import { trackSpaPageView, trackEvent } from './lib/analyticsTracker';
@@ -3281,7 +3281,9 @@ export default function App() {
     const effectiveLink = hasExternalSource ? rawUrl : '';
     const userProf = getSavedChannelProfile();
     const fallbackDistrict = userProf?.district || userProf?.defaultLocation || userProf?.location || '';
-    const effectiveLoc = post.district || post.location || fallbackDistrict || '';
+    const extractedNewsCity = extractLocationFromNewsText(post.title, post.summary);
+    const rawLoc = (post.district && post.district.trim()) || (post.location && post.location.trim()) || (extractedNewsCity && extractedNewsCity.trim()) || fallbackDistrict || '';
+    const effectiveLoc = formatCleanLocationText(rawLoc);
 
     setStudioMode('graphic');
 
@@ -3330,36 +3332,7 @@ export default function App() {
     const safeTargetImage = safeProxy(targetImageForStudio);
     const candidatePrimaryPhoto = safeTargetImage || targetImageForStudio || '';
 
-    // Deduplication check: If graphic for this news was already generated, restore cached state without deducting quota or burning AI tokens
-    try {
-      const cachedStoreRaw = typeof localStorage !== 'undefined' ? localStorage.getItem('news_studio_cached_graphics_v1') : null;
-      if (cachedStoreRaw) {
-        const cachedStore = JSON.parse(cachedStoreRaw);
-        if (cachedStore && post?.id && cachedStore[post.id]) {
-          const cachedCard = cachedStore[post.id];
-          const restoredCard = {
-            ...cachedCard,
-            location: cachedCard.location || effectiveLoc || '',
-            showLocation: cachedCard.showLocation !== undefined ? cachedCard.showLocation : true,
-            images: {
-              ...cachedCard.images,
-              main: cachedCard.images?.main || candidatePrimaryPhoto || safeTargetImage || '',
-            },
-          };
-          setStudioMode('graphic');
-          setCard(restoredCard);
-          navigateToTab('studio');
-          setActiveStep(1);
-          setToastMessage('✅ पूर्व निर्मित ग्राफिक लोड किया गया (शून्य कोटा/टोकन खर्च)');
-          setTimeout(() => {
-            scrollToStepById('step-ai');
-          }, 150);
-          return;
-        }
-      }
-    } catch (cacheErr) {
-      console.warn('Cache lookup error:', cacheErr);
-    }
+    // Always trigger fresh generation workflow with 5 new headline options and proper credit accounting
 
     // Check if this specific card has the default photo toggled or missing image
     const getDefaultThumbnailIds = (): Set<string> => {
@@ -3469,11 +3442,10 @@ export default function App() {
     };
 
     const editorialLoadingSubtitles = [
-      'खबर के तथ्यों, संदर्भ और प्रमुख बिंदुओं का विश्लेषण करके ग्राफिक के लिए सामग्री व्यवस्थित की जा रही है...',
-      'पत्रकारिता मानकों के अनुसार निष्पक्ष तथ्यों व संदर्भ की पुष्टि की जा रही है...',
-      'संपादकीय डेस्क द्वारा 5 संतुलित व प्रभावी हेडलाइन विकल्प तैयार किए जा रहे हैं...',
-      'सोशल मीडिया और डिजिटल पाठकों के लिए प्रासंगिक कीवर्ड व हैशटैग जोड़े जा रहे हैं...',
-      'न्यूज़ स्टूडियो फ्रेम, लोगो और फोटो लेआउट को अंतिम रूप दिया जा रहा है...',
+      'संपादकीय डेस्क आपकी चुनी हुई खबर के लिए पाँच प्रभावी हेडलाइन विकल्प तैयार कर रहा है।',
+      'आर्टिफिशियल इंटेलिजेंस द्वारा खबर के मुख्य बिंदुओं, स्थान और संदर्भ का सटीक विश्लेषण जारी है...',
+      'उच्च गुणवत्ता वाले फॉन्ट्स और लेआउट के अनुरूप दृश्य संरचना को संतुलित किया जा रहा है...',
+      'आपकी खबर को सोशल मीडिया के लिए आकर्षक और वायरल प्रारूप में ढाला जा रहा है...',
     ];
 
     const tagRaw = String((post as any).photoWatermarkTag || (post as any).watermarkGlobalMode || '').toUpperCase();
@@ -3582,7 +3554,10 @@ export default function App() {
             sourceUrl: effectiveLink || post.sourceUrl || (post as any).url || (post as any).originalUrl || '',
             isBonus: Boolean(post.isBonus === true),
             originalHeadline: post.title,
-            frameDesign: 'graphic_001',
+            frameDesign: prev.frameDesign || 'graphic_001',
+            customDynamicFrame: prev.customDynamicFrame,
+            customFrameOverlayPng: undefined,
+            isTestMode: false,
             layout: (post as any).layoutMode || prev.layout || 'single',
             showCirclePhoto: (post as any).layoutMode === 'inset-circle' || prev.showCirclePhoto || false,
             watermarkGlobalMode: (post as any).watermarkGlobalMode || prev.watermarkGlobalMode || 'OFF',
@@ -3591,7 +3566,11 @@ export default function App() {
             showAiGenerated: targetShowAi,
             photoTagShowBox: true,
             photoTagBoxColor: '#000000',
-            showCallout: false,
+            showCallout: prev.showCallout !== undefined ? prev.showCallout : Boolean((prev.customDynamicFrame as any)?.fullStoryCalloutConfig?.enabled),
+            selectedCalloutId: prev.selectedCalloutId || (prev.customDynamicFrame as any)?.fullStoryCalloutConfig?.calloutAssetId,
+            customCalloutAssetUrl: prev.customCalloutAssetUrl || (prev.customDynamicFrame as any)?.fullStoryCalloutConfig?.manualCalloutAsset,
+            selectedLocationBadgeId: prev.selectedLocationBadgeId || (prev.customDynamicFrame as any)?.headerConfig?.locationBadgeAssetId,
+            customLocationBadgeUrl: prev.customLocationBadgeUrl || (prev.customDynamicFrame as any)?.headerConfig?.manualLocationAsset,
             showDate: false,
             showWatermark: Boolean((post as any).showTextWatermark === true || (post as any).showWatermark === true),
             showLocation: true,
@@ -3687,7 +3666,10 @@ export default function App() {
           sourceUrl: effectiveLink || post.sourceUrl || (post as any).url || (post as any).originalUrl || '',
           isBonus: Boolean(post.isBonus === true),
           originalHeadline: post.title,
-          frameDesign: 'graphic_001',
+          frameDesign: prev.frameDesign || 'graphic_001',
+          customDynamicFrame: prev.customDynamicFrame,
+          customFrameOverlayPng: undefined,
+          isTestMode: false,
           layout: (post as any).layoutMode || prev.layout || 'single',
           showCirclePhoto: (post as any).layoutMode === 'inset-circle' || prev.showCirclePhoto || false,
           watermarkGlobalMode: (post as any).watermarkGlobalMode || prev.watermarkGlobalMode || 'OFF',
@@ -3696,7 +3678,11 @@ export default function App() {
           showAiGenerated: targetShowAi,
           photoTagShowBox: true,
           photoTagBoxColor: '#000000',
-          showCallout: false,
+          showCallout: prev.showCallout !== undefined ? prev.showCallout : Boolean((prev.customDynamicFrame as any)?.fullStoryCalloutConfig?.enabled),
+          selectedCalloutId: prev.selectedCalloutId || (prev.customDynamicFrame as any)?.fullStoryCalloutConfig?.calloutAssetId,
+          customCalloutAssetUrl: prev.customCalloutAssetUrl || (prev.customDynamicFrame as any)?.fullStoryCalloutConfig?.manualCalloutAsset,
+          selectedLocationBadgeId: prev.selectedLocationBadgeId || (prev.customDynamicFrame as any)?.headerConfig?.locationBadgeAssetId,
+          customLocationBadgeUrl: prev.customLocationBadgeUrl || (prev.customDynamicFrame as any)?.headerConfig?.manualLocationAsset,
           showDate: false,
           showWatermark: Boolean((post as any).showTextWatermark === true || (post as any).showWatermark === true),
           showLocation: true,

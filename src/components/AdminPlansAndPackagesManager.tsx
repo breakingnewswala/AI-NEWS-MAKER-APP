@@ -1,5 +1,6 @@
 import { sanitizeObjectStrings, sanitizeUtf8Hindi } from '../lib/utf8Sanitizer';
 import { getAuthToken, reauthenticateAdmin } from '../lib/apiConfig';
+import { showAppConfirm, showAppSuccess } from '../lib/notificationService';
 import React, { useState, useEffect } from 'react';
 import {
   Package,
@@ -5757,26 +5758,26 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       <td className="p-3 text-right">
                         <button
                           type="button"
-                          onClick={async () => {
-                            if (deletingSourceId === s.id) {
-                              setDeletingSourceId(null);
-                              await deleteAdminRssSourceAsync(s.id, s.url, s.name);
-                              const updated = await fetchAdminRssSourcesFromBackend();
-                              setRssSources(updated);
-                              setRssMsg({ type: 'success', text: `स्रोत "${s.name}" हटा दिया गया।` });
-                            } else {
-                              setDeletingSourceId(s.id);
-                            }
+                          onClick={() => {
+                            showAppConfirm({
+                              title: 'RSS फ़ीड हटाएं?',
+                              message: `क्या आप वाकई RSS स्रोत "${s.name}" और इसकी सभी खबरों को हटाना चाहते हैं?`,
+                              confirmText: 'हाँ, हटाएं',
+                              isDestructive: true,
+                              onConfirm: async () => {
+                                await deleteAdminRssSourceAsync(s.id, s.url, s.name);
+                                const updated = await fetchAdminRssSourcesFromBackend();
+                                setRssSources(updated);
+                                setRssMsg({ type: 'success', text: `स्रोत "${s.name}" हटा दिया गया।` });
+                                showAppSuccess(`स्रोत "${s.name}" हटा दिया गया।`, 'RSS फ़ीड हटाई गई');
+                              },
+                            });
                           }}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer inline-flex items-center gap-1.5 ${
-                            deletingSourceId === s.id
-                              ? 'bg-rose-600 text-white border-rose-400 shadow-md animate-pulse ring-2 ring-rose-400/50'
-                              : 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border-rose-500/40 hover:text-white'
-                          }`}
+                          className="px-2.5 py-1 rounded-lg text-[10px] font-bold border border-rose-500/40 bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 hover:text-white transition-all cursor-pointer inline-flex items-center gap-1.5"
                           title="RSS फ़ीड हटाएं"
                         >
                           <Trash2 className="w-3.5 h-3.5 shrink-0 text-rose-400" />
-                          <span>{deletingSourceId === s.id ? 'पुष्टि करें (हटाएं)' : 'हटाएं'}</span>
+                          <span>हटाएं</span>
                         </button>
                       </td>
                     </tr>
@@ -6294,26 +6295,26 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       <td className="p-3 text-right">
                         <button
                           type="button"
-                          onClick={async () => {
-                            if (deletingSourceId === s.id) {
-                              setDeletingSourceId(null);
-                              await deleteAdminRssSourceAsync(s.id, s.url, s.name);
-                              const updated = await fetchAdminRssSourcesFromBackend();
-                              setRssSources(updated);
-                              setRssMsg({ type: 'success', text: `वेब लिंक "${s.name}" हटा दिया गया।` });
-                            } else {
-                              setDeletingSourceId(s.id);
-                            }
+                          onClick={() => {
+                            showAppConfirm({
+                              title: 'वेब लिंक हटाएं?',
+                              message: `क्या आप वाकई वेब स्रोत "${s.name}" और इसकी सभी खबरों को हटाना चाहते हैं?`,
+                              confirmText: 'हाँ, हटाएं',
+                              isDestructive: true,
+                              onConfirm: async () => {
+                                await deleteAdminRssSourceAsync(s.id, s.url, s.name);
+                                const updated = await fetchAdminRssSourcesFromBackend();
+                                setRssSources(updated);
+                                setRssMsg({ type: 'success', text: `वेब लिंक "${s.name}" सफलतापूर्वक हटा दिया गया।` });
+                                showAppSuccess(`वेब लिंक "${s.name}" हटा दिया गया।`, 'वेब लिंक हटाई गई');
+                              },
+                            });
                           }}
-                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer inline-flex items-center gap-1.5 ${
-                            deletingSourceId === s.id
-                              ? 'bg-rose-600 text-white border-rose-400 shadow-md animate-pulse ring-2 ring-rose-400/50'
-                              : 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border-rose-500/40 hover:text-white'
-                          }`}
+                          className="px-2.5 py-1 rounded-lg text-[10px] font-bold border border-rose-500/40 bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 hover:text-white transition-all cursor-pointer inline-flex items-center gap-1.5"
                           title="वेब लिंक हटाएं"
                         >
                           <Trash2 className="w-3.5 h-3.5 shrink-0 text-rose-400" />
-                          <span>{deletingSourceId === s.id ? 'पुष्टि करें (हटाएं)' : 'हटाएं'}</span>
+                          <span>हटाएं</span>
                         </button>
                       </td>
                     </tr>

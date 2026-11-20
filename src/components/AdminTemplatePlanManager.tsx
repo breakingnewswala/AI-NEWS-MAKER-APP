@@ -1102,12 +1102,41 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                         backgroundColor: df.primaryBackgroundHex || '#0F172A',
                       }}
                     >
-                      {/* Background Artwork */}
+                      {/* Photo Slot Sample Photo (Layer 0, underneath frame overlay) */}
+                      {(() => {
+                        const samplePhoto = df.samplePhotoUrl || df.photoSlots?.[0]?.defaultAssetUrl || '/assets/placeholder_news_photo.jpg';
+                        const slotRect = df.photoSlots?.[0]?.rect || { x: 0, y: 0, width: 100, height: 75 };
+                        return (
+                          <div
+                            className="absolute z-0 overflow-hidden bg-slate-900"
+                            style={{
+                              left: `${slotRect.x ?? 0}%`,
+                              top: `${slotRect.y ?? 0}%`,
+                              width: `${slotRect.width ?? 100}%`,
+                              height: `${slotRect.height ?? 75}%`,
+                            }}
+                          >
+                            <img
+                              src={samplePhoto}
+                              alt="Sample Photo"
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                const target = e.currentTarget as HTMLImageElement;
+                                if (!target.src.includes('placeholder_news_photo')) {
+                                  target.src = '/assets/placeholder_news_photo.jpg';
+                                }
+                              }}
+                            />
+                          </div>
+                        );
+                      })()}
+
+                      {/* Background Artwork (Layer 1, cutout allows sample photo to show through) */}
                       {(df.previewImageUrl || df.sampleReferenceUrl || df.primaryBackgroundAsset) && (
                         <img
                           src={df.primaryBackgroundAsset || df.previewImageUrl || df.sampleReferenceUrl}
                           alt="Frame Background"
-                          className="w-full h-full object-cover pointer-events-none"
+                          className="absolute inset-0 w-full h-full object-cover pointer-events-none z-1"
                         />
                       )}
 

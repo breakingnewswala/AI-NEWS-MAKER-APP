@@ -489,6 +489,27 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
     setTimeout(() => setCopiedDraftId(null), 2000);
   };
 
+  const [copiedHistoryKey, setCopiedHistoryKey] = useState<string | null>(null);
+
+  const handleCopyHistory = (key: string, text: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!text) return;
+    try {
+      navigator.clipboard.writeText(text);
+      setCopiedHistoryKey(key);
+      setTimeout(() => setCopiedHistoryKey(null), 2000);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setCopiedHistoryKey(key);
+      setTimeout(() => setCopiedHistoryKey(null), 2000);
+    }
+  };
+
   const filteredDrafts = drafts.filter((d) => {
     if (!draftSearchQuery) return true;
     const q = draftSearchQuery.toLowerCase();
@@ -1952,6 +1973,99 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                         <h4 className="text-xs sm:text-sm font-bold text-white group-hover:text-amber-300 transition-colors line-clamp-2 leading-snug">
                           {item.title}
                         </h4>
+
+                        {(() => {
+                          const headlineText = (item.data?.headline || item.title || '').trim();
+                          const captionText = (item.data?.caption || item.data?.summary || item.caption || item.summary || '').trim();
+                          const combinedText = [headlineText, captionText].filter(Boolean).join('\n\n');
+
+                          return (
+                            <div className="space-y-2 pt-1 border-t border-slate-900">
+                              {captionText && (
+                                <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
+                                  {captionText}
+                                </p>
+                              )}
+
+                              {/* 1-Click Copy Buttons */}
+                              <div className="grid grid-cols-3 gap-1.5 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleCopyHistory(`h_${item.id}`, headlineText, e)}
+                                  disabled={!headlineText}
+                                  className={`py-1 px-1.5 rounded-lg text-[10px] font-bold border transition flex items-center justify-center gap-1 cursor-pointer truncate ${
+                                    copiedHistoryKey === `h_${item.id}`
+                                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50'
+                                      : 'bg-slate-900 hover:bg-slate-850 text-slate-300 border-slate-800 hover:border-slate-700'
+                                  }`}
+                                  title="हेडलाइन कॉपी करें"
+                                >
+                                  {copiedHistoryKey === `h_${item.id}` ? (
+                                    <>
+                                      <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+                                      <span>कॉपी हुआ</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="w-3 h-3 text-amber-400 shrink-0" />
+                                      <span className="truncate">📋 हेडलाइन</span>
+                                    </>
+                                  )}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleCopyHistory(`c_${item.id}`, captionText, e)}
+                                  disabled={!captionText}
+                                  className={`py-1 px-1.5 rounded-lg text-[10px] font-bold border transition flex items-center justify-center gap-1 cursor-pointer truncate ${
+                                    !captionText
+                                      ? 'opacity-40 cursor-not-allowed bg-slate-900 border-slate-800 text-slate-500'
+                                      : copiedHistoryKey === `c_${item.id}`
+                                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50'
+                                        : 'bg-slate-900 hover:bg-slate-850 text-slate-300 border-slate-800 hover:border-slate-700'
+                                  }`}
+                                  title="कैप्शन कॉपी करें"
+                                >
+                                  {copiedHistoryKey === `c_${item.id}` ? (
+                                    <>
+                                      <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+                                      <span>कॉपी हुआ</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <FileText className="w-3 h-3 text-blue-400 shrink-0" />
+                                      <span className="truncate">📝 कैप्शन</span>
+                                    </>
+                                  )}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleCopyHistory(`b_${item.id}`, combinedText, e)}
+                                  disabled={!combinedText}
+                                  className={`py-1 px-1.5 rounded-lg text-[10px] font-bold border transition flex items-center justify-center gap-1 cursor-pointer truncate ${
+                                    copiedHistoryKey === `b_${item.id}`
+                                      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50'
+                                      : 'bg-slate-900 hover:bg-slate-850 text-slate-300 border-slate-800 hover:border-slate-700'
+                                  }`}
+                                  title="हेडलाइन और कैप्शन दोनों कॉपी करें"
+                                >
+                                  {copiedHistoryKey === `b_${item.id}` ? (
+                                    <>
+                                      <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+                                      <span>कॉपी हुआ</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="w-3 h-3 text-purple-400 shrink-0" />
+                                      <span className="truncate">📑 दोनों</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-850">
@@ -1969,7 +2083,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                           className="flex-1 py-1.5 px-2 bg-amber-400/10 hover:bg-amber-400 text-amber-300 hover:text-slate-950 border border-amber-400/40 rounded-xl text-xs font-black transition cursor-pointer flex items-center justify-center gap-1.5"
                         >
                           <FileEdit className="w-3.5 h-3.5" />
-                          <span>स्टूडियो में खोलें</span>
+                          <span>🖼️ स्टूडियो में खोलें</span>
                         </button>
                         <button
                           type="button"

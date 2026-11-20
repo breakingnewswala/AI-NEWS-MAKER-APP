@@ -66,10 +66,10 @@ export const VIDEO_LOADER_SUBTITLES: string[] = [
 ];
 
 export const HOME_CARD_GRAPHIC_SUBTITLES: string[] = [
-  'खबर के तथ्यों, संदर्भ और प्रमुख बिंदुओं का विश्लेषण करके ग्राफिक के लिए सामग्री व्यवस्थित की जा रही है।',
-  'पत्रकारिता मानकों के अनुसार निष्पक्ष तथ्यों की पुष्टि...',
-  'संतुलित हेडलाइन और उपयोगी कैप्शन तैयार किए जा रहे हैं...',
-  'ग्राफिक लेआउट और फोटो की मैपिंग को अंतिम रूप दिया जा रहा है...',
+  'संपादकीय डेस्क आपकी चुनी हुई खबर के लिए पाँच प्रभावी हेडलाइन विकल्प तैयार कर रहा है।',
+  'आर्टिफिशियल इंटेलिजेंस द्वारा खबर के मुख्य बिंदुओं, स्थान और संदर्भ का सटीक विश्लेषण जारी है...',
+  'उच्च गुणवत्ता वाले फॉन्ट्स और लेआउट के अनुरूप दृश्य संरचना को संतुलित किया जा रहा है...',
+  'आपकी खबर को सोशल मीडिया के लिए आकर्षक और वायरल प्रारूप में ढाला जा रहा है...',
 ];
 
 export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = ({
@@ -78,7 +78,7 @@ export const BrandedNewsLoadingModal: React.FC<BrandedNewsLoadingModalProps> = (
   title,
   durationSeconds,
   subtitles,
-  subtitleIntervalMs = 5000,
+  subtitleIntervalMs = 3500,
   onComplete,
   onCancel,
   error = null,

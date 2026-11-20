@@ -79,6 +79,8 @@ import {
   getLocalDynamicFrames,
   getDynamicFrameById,
   normalizeDynamicFrame,
+  getDefaultAssetLibrariesFallback,
+  getAssetLibraryItemById,
 } from '../lib/dynamicFramesManager';
 import { DynamicFrameGeneratorModal } from './DynamicFrameGeneratorModal';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -467,6 +469,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
   );
   const [libraryFooters, setLibraryFooters] = React.useState<any[]>([]);
   const [libraryCallouts, setLibraryCallouts] = React.useState<any[]>([]);
+  const [libraryLocationBadges, setLibraryLocationBadges] = React.useState<any[]>(() => {
+    return getDefaultAssetLibrariesFallback('location_badge') || [];
+  });
   const [footerCategoryFilter, setFooterCategoryFilter] = React.useState<string>('all');
   const [calloutCategoryFilter, setCalloutCategoryFilter] = React.useState<string>('all');
 
@@ -566,6 +571,19 @@ export const CardEditor: React.FC<CardEditorProps> = ({
       .then((d) => {
         if (d.success && Array.isArray(d.items)) {
           setLibraryCallouts(d.items.filter((it: any) => it.enabled !== false));
+        }
+      })
+      .catch(() => {});
+
+    fetch(`/api/asset-libraries?type=location_badge`, {
+      headers: {
+        ...(currentUser?.token ? { Authorization: `Bearer ${currentUser.token}` } : {})
+      }
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && Array.isArray(d.items)) {
+          setLibraryLocationBadges(d.items.filter((it: any) => it.enabled !== false));
         }
       })
       .catch(() => {});
@@ -1949,6 +1967,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           frameDesign: f.id,
                           customDynamicFrame: match || undefined,
                           aspectRatio: (match?.aspectRatio as any) || f.aspectRatio || card.aspectRatio || '4:5',
+                          customFrameOverlayPng: undefined,
+                          isTestMode: false,
                         };
                         // Bug D: Synchronize Master Admin's authoritative typography settings
                         if (match?.typographyConfig?.primaryFontFamily) {
@@ -2244,6 +2264,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           frameDesign: f.id,
                           customDynamicFrame: match || undefined,
                           aspectRatio: (match?.aspectRatio as any) || f.aspectRatio || card.aspectRatio || '4:5',
+                          customFrameOverlayPng: undefined,
+                          isTestMode: false,
                         };
                         if (match?.typographyConfig?.primaryFontFamily) {
                           updates.headlineFontFamily = match.typographyConfig.primaryFontFamily;
@@ -4871,6 +4893,64 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <p className="text-[10px] text-neutral-400">
             * लोकेशन OFF करने पर चैनल लोगो या कोई फिक्स्ड एलिमेंट अपनी जगह से नहीं हिलेगा (दाएं कोने पर सुरक्षित रहेगा)।
           </p>
+
+          {/* Location Badge Library Grid */}
+          <div className="pt-3 border-t border-neutral-800 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-neutral-200 font-bold flex items-center gap-1.5">
+                <span>📍</span>
+                <span>स्थान बैज चुनें (Location Badge Library):</span>
+              </label>
+              <span className="text-[10px] text-amber-400 font-mono font-bold">
+                {card.selectedLocationBadgeId || 'डिफ़ॉल्ट बैज'}
+              </span>
+            </div>
+            <p className="text-[10px] text-neutral-400">
+              अपनी पसंद का स्थान बैज स्टाइल चुनें। यह ग्राफिक में आपके शहर/जिले के साथ प्रदर्शित होगा।
+            </p>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-56 overflow-y-auto pr-1">
+              {libraryLocationBadges.map((badge: any) => {
+                const isSelected = card.selectedLocationBadgeId === badge.id ||
+                  (!card.selectedLocationBadgeId && card.customLocationBadgeUrl === (badge.url || badge.assetUrl));
+
+                return (
+                  <button
+                    key={badge.id}
+                    type="button"
+                    onClick={() => {
+                      onChange({
+                        selectedLocationBadgeId: badge.id,
+                        customLocationBadgeUrl: badge.url || badge.assetUrl,
+                        locationTextColor: badge.typographyConfig?.textColor || '#FFFFFF',
+                        locationBadgeConfig: badge,
+                        showLocation: true,
+                      });
+                    }}
+                    className={`p-2 rounded-xl text-left border transition-all cursor-pointer flex flex-col gap-1.5 relative ${
+                      isSelected
+                        ? 'bg-amber-950/60 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
+                        : 'bg-neutral-900 border-neutral-800 hover:border-neutral-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-[11px] font-bold text-neutral-200">
+                      <span className="truncate">{badge.name || badge.id}</span>
+                      {isSelected && (
+                        <span className="text-[10px] font-black text-amber-400 shrink-0">✓ चयनित</span>
+                      )}
+                    </div>
+                    <div className="h-8 w-full bg-neutral-950 rounded border border-neutral-800 flex items-center justify-center p-1 overflow-hidden">
+                      {badge.url || badge.assetUrl ? (
+                        <img src={badge.url || badge.assetUrl} alt={badge.name} className="h-full w-full object-contain" />
+                      ) : (
+                        <span className="text-[9px] text-neutral-400">स्थान बैज</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {/* Date Stamp */}
@@ -5976,6 +6056,22 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     {card.footerBgColor || '#FFFFFF'}
                   </span>
                 </div>
+
+                {(card.selectedCustomFooterId || card.customFooterPng) && (
+                  <div className="p-2.5 bg-amber-950/40 border border-amber-500/50 rounded-xl text-[11px] text-amber-300 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span>⚡</span>
+                      <span>कस्टम फ़ुटर सक्रिय है। सामान्य बैकग्राउंड बदलने के लिए पहले फ़ुटर हटाएं।</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onChange({ selectedCustomFooterId: undefined, customFooterConfig: undefined, customFooterPng: undefined })}
+                      className="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded text-[10px] shrink-0 cursor-pointer"
+                    >
+                      फ़ुटर हटाएं
+                    </button>
+                  </div>
+                )}
 
                 {effectiveTier === 'basic' && !effectiveAdmin ? (
                   <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-800 text-[11px] text-neutral-300 flex items-center gap-2">

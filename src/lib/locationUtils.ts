@@ -1,6 +1,34 @@
 // AI NEWS MAKER — Location Utility Functions
 // Handles Location Deduplication, Normalization, and Clean Presentation
 
+const COMMON_INDIAN_CITIES = [
+  'मुरैना', 'ग्वालियर', 'भोपाल', 'इंदौर', 'जबलपुर', 'उज्जैन', 'रीवा', 'सागर', 'सतना', 'रतलाम',
+  'छतरपुर', 'शिवपुरी', 'भिंड', 'दतिया', 'गुना', 'मंदसौर', 'नीमच', 'खंडवा', 'खरगोन', 'बड़वानी',
+  'झाबुआ', 'धार', 'देवास', 'शाजापुर', 'आगर मालवा', 'सीहोर', 'रायसेन', 'राजगढ़', 'विदिशा', 'बैतूल',
+  'हरदा', 'होशंगाबाद', 'नर्मदापुरम', 'कटनी', 'नरसिंहपुर', 'छिंदवाड़ा', 'सिवनी', 'मंडला', 'डिंडोरी', 'बालाघाट',
+  'शहडोल', 'अनूपपुर', 'उमरिया', 'सीधी', 'सिंगरौली', 'पन्ना', 'दमोह', 'टीकमगढ़', 'निवाड़ी', 'अशोकनगर',
+  'श्योपुर', 'बुरहानपुर', 'मैहर', 'पांढुर्ना', 'मऊगंज', 'दिल्ली', 'जयपुर', 'लखनऊ', 'वाराणसी', 'प्रयागराज',
+  'कानपुर', 'आगरा', 'मेरठ', 'नोएडा', 'गाजियाबाद', 'अयोध्या', 'पटना', 'मुजफ्फरपुर', 'रांची', 'रायपुर',
+  'बिलासपुर', 'अहमदाबाद', 'सूरत', 'मुंबई', 'पुणे', 'नागपुर', 'चंडीगढ़', 'शिमला', 'देहरादून', 'हरिद्वार'
+];
+
+/**
+ * Extracts city/district from news title or summary if post metadata location is missing
+ */
+export function extractLocationFromNewsText(title?: string, summary?: string): string {
+  const combined = `${title || ''} ${summary || ''}`.trim();
+  if (!combined) return '';
+
+  for (const city of COMMON_INDIAN_CITIES) {
+    // Look for patterns like "मुरैना में", "मुरैना:", "मुरैना से", "मुरैना खबर"
+    const regex = new RegExp(`(^|[\\s:।,–—\\(\\[])${city}([\\s:।,–—\\)\\]]|में|से|के|का|की|पर|जिले|शहर)`, 'u');
+    if (regex.test(combined)) {
+      return city;
+    }
+  }
+  return '';
+}
+
 export function formatCleanLocationText(rawLocation?: string | null): string {
   if (!rawLocation || typeof rawLocation !== 'string') return '';
   let cleaned = rawLocation
