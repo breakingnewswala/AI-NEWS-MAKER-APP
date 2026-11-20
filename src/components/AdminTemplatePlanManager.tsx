@@ -42,7 +42,7 @@ import {
 } from '../lib/graphicTemplatesRegistry';
 import { getEffectiveFrameOptions, FrameOption } from '../lib/HeaderDesigns';
 import { DynamicFrameTemplate } from '../types/dynamicFrame';
-import { fetchDynamicFramesFromApi, getLocalDynamicFrames, saveDynamicFrameToApi, deleteDynamicFrameFromApi } from '../lib/dynamicFramesManager';
+import { fetchDynamicFramesFromApi, getLocalDynamicFrames, saveDynamicFrameToApi, deleteDynamicFrameFromApi, normalizeDynamicFrame, getAssetLibraryItemById } from '../lib/dynamicFramesManager';
 import { getAuthToken } from '../lib/apiConfig';
 import { getUserFeatureEntitlements, getAdminSelectedUserEmail, setAdminSelectedUserEmail } from '../lib/userPlanManager';
 
@@ -755,55 +755,125 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                   )}
 
                   {/* Authentic Dynamic Frame Overlay on Thumbnail */}
-                  {item.rawDynamicFrame && (
-                    <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
-                      {/* Location Badge */}
-                      {item.rawDynamicFrame.headerConfig?.showLocation && (
+                  {item.rawDynamicFrame && (() => {
+                    const df = normalizeDynamicFrame(item.rawDynamicFrame);
+                    const badgeAsset = df.headerConfig?.manualLocationAsset || (df.headerConfig?.locationBadgeAssetId ? getAssetLibraryItemById(df.headerConfig.locationBadgeAssetId)?.url : undefined);
+                    const calloutAsset = df.fullStoryCalloutConfig?.manualCalloutAsset || (df.fullStoryCalloutConfig?.calloutAssetId ? getAssetLibraryItemById(df.fullStoryCalloutConfig.calloutAssetId)?.url : undefined);
+                    const highlightColor = df.primaryHighlightColor || df.quoteHighlightColor || df.textSlots?.[0]?.highlightColor || '#FFE600';
+
+                    return (
+                      <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
+                        {/* Location Badge */}
+                        {df.headerConfig?.showLocation && (
+                          <div
+                            className="absolute z-10 flex items-center justify-center"
+                            style={{
+                              left: `${df.headerConfig.locationRect?.x ?? 5}%`,
+                              top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
+                              width: `${df.headerConfig.locationRect?.width ?? 28}%`,
+                              height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
+                            }}
+                          >
+                            {badgeAsset ? (
+                              <img src={badgeAsset} alt="" className="h-full w-full object-contain pointer-events-none" />
+                            ) : (
+                              <div
+                                className="text-[7px] font-bold px-1 py-0.2 rounded shadow-sm flex items-center gap-0.5 truncate"
+                                style={{
+                                  backgroundColor: df.headerConfig.locationBgColor || '#DC2626',
+                                  color: df.headerConfig.locationTextColor || '#FFFFFF',
+                                }}
+                              >
+                                <span>📍 भोपाल</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Date Stamp */}
+                        {df.headerConfig?.showDate && (
+                          <div
+                            className="absolute z-10 flex items-center justify-center font-bold text-[6px] overflow-hidden truncate"
+                            style={{
+                              left: `${df.headerConfig.dateRect?.x ?? 5}%`,
+                              top: `${df.headerConfig.dateRect?.y ?? 18.5}%`,
+                              width: `${df.headerConfig.dateRect?.width ?? 34}%`,
+                              height: `${df.headerConfig.dateRect?.height ?? 3.5}%`,
+                              transform: (df.headerConfig.dateRotation ?? 270) !== 0 ? `rotate(${df.headerConfig.dateRotation ?? 270}deg)` : undefined,
+                              transformOrigin: 'center center',
+                              color: df.headerConfig.dateTextColor || '#CBD5E1',
+                              backgroundColor: df.headerConfig.dateBgColor || 'rgba(0,0,0,0.75)',
+                              borderRadius: '2px',
+                            }}
+                          >
+                            <span className="truncate px-0.5">20 नवम्बर</span>
+                          </div>
+                        )}
+
+                        {/* Headline Preview */}
                         <div
-                          className="absolute text-[7px] font-bold text-white bg-red-600/90 px-1 py-0.2 rounded flex items-center gap-0.5 shadow-sm"
+                          className="absolute text-center z-15 flex items-center justify-center"
                           style={{
-                            left: `${item.rawDynamicFrame.headerConfig.locationRect?.x ?? 5}%`,
-                            top: `${item.rawDynamicFrame.headerConfig.locationRect?.y ?? 13.5}%`,
+                            left: `${df.textSlots?.[0]?.rect?.x ?? 4}%`,
+                            top: `${df.textSlots?.[0]?.rect?.y ?? 65}%`,
+                            width: `${df.textSlots?.[0]?.rect?.width ?? 92}%`,
+                            height: `${df.textSlots?.[0]?.rect?.height ?? 25}%`,
                           }}
                         >
-                          <span>📍 भोपाल</span>
+                          <div
+                            className="font-bold text-[7px] leading-tight drop-shadow px-1 py-0.5 rounded truncate w-full"
+                            style={{
+                              color: df.textSlots?.[0]?.textColor || '#FFFFFF',
+                              backgroundColor: df.textSlots?.[0]?.backgroundColor || 'transparent',
+                            }}
+                          >
+                            <span>मुख्य समाचार </span>
+                            <span style={{ color: highlightColor }}>हेडलाइन</span>
+                          </div>
                         </div>
-                      )}
 
-                      {/* Headline Preview */}
-                      <div
-                        className="absolute text-center px-1"
-                        style={{
-                          bottom: `${(item.rawDynamicFrame.footerConfig?.footerHeightRatio || 0.08) * 100 + 4}%`,
-                          left: '3%',
-                          right: '3%',
-                        }}
-                      >
+                        {/* Full Story Callout */}
+                        {df.fullStoryCalloutConfig?.enabled && (
+                          <div
+                            className="absolute z-20 flex items-center justify-center"
+                            style={{
+                              left: `${df.fullStoryCalloutConfig.rect?.x ?? 10}%`,
+                              top: `${df.fullStoryCalloutConfig.rect?.y ?? 86}%`,
+                              width: `${df.fullStoryCalloutConfig.rect?.width ?? 80}%`,
+                              height: `${df.fullStoryCalloutConfig.rect?.height ?? 3.5}%`,
+                            }}
+                          >
+                            {calloutAsset ? (
+                              <img src={calloutAsset} alt="" className="max-h-full max-w-full object-contain pointer-events-none" />
+                            ) : (
+                              <div
+                                className="text-[6px] font-bold px-1 rounded shadow truncate"
+                                style={{
+                                  backgroundColor: df.fullStoryCalloutConfig.bgColor || '#F59E0B',
+                                  color: df.fullStoryCalloutConfig.textColor || '#0F172A',
+                                }}
+                              >
+                                पूरी खबर
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Permanent Footer */}
                         <div
-                          className="font-bold text-[8px] leading-tight drop-shadow px-1 py-0.5 rounded truncate"
+                          className="absolute bottom-0 inset-x-0 border-t flex items-center justify-between px-2 text-[6px] font-bold z-25"
                           style={{
-                            color: item.rawDynamicFrame.textSlots?.[0]?.textColor || '#FFFFFF',
-                            backgroundColor: item.rawDynamicFrame.textSlots?.[0]?.backgroundColor || 'transparent',
+                            height: `${(df.footerConfig?.footerHeightRatio || 0.08) * 100}%`,
+                            backgroundColor: df.footerConfig?.footerBgColor || '#FFFFFF',
+                            color: df.footerConfig?.footerTextColor || '#000000',
                           }}
                         >
-                          मुख्य समाचार हेडलाइन यहाँ प्रदर्शित होगी
+                          <span>@breakingnewswala</span>
+                          <span>ainewsmaker.online</span>
                         </div>
                       </div>
-
-                      {/* Permanent Footer */}
-                      <div
-                        className="absolute bottom-0 inset-x-0 border-t flex items-center justify-between px-2 text-[6px] font-bold"
-                        style={{
-                          height: `${(item.rawDynamicFrame.footerConfig?.footerHeightRatio || 0.08) * 100}%`,
-                          backgroundColor: item.rawDynamicFrame.footerConfig?.footerBgColor || '#FFFFFF',
-                          color: item.rawDynamicFrame.footerConfig?.footerTextColor || '#000000',
-                        }}
-                      >
-                        <span>@breakingnewswala</span>
-                        <span>ainewsmaker.online</span>
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Badges on preview */}
                   <span className="absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded bg-slate-950/85 backdrop-blur-xs text-[9px] font-bold text-amber-300 border border-amber-500/30 shadow-xs">
@@ -981,106 +1051,233 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
 
             {/* Modal Body: Two Columns (Visual Canvas Preview & Details) */}
             <div className="p-6 overflow-y-auto flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-              {/* Visual Canvas Rendering */}
-              <div className="flex flex-col items-center justify-center">
-                <div
-                  className="relative rounded-2xl overflow-hidden border-4 border-purple-500/50 shadow-2xl bg-slate-950"
-                  style={{
-                    width: previewFrame.aspectRatio === '4:5' ? '280px' : previewFrame.aspectRatio === '9:16' ? '240px' : '260px',
-                    height: previewFrame.aspectRatio === '4:5' ? '350px' : previewFrame.aspectRatio === '9:16' ? '426px' : '260px',
-                    backgroundColor: previewFrame.primaryBackgroundHex || '#0F172A',
-                  }}
-                >
-                  {/* Background Artwork */}
-                  {(previewFrame.previewImageUrl || previewFrame.sampleReferenceUrl || previewFrame.primaryBackgroundAsset) && (
-                    <img
-                      src={previewFrame.primaryBackgroundAsset || previewFrame.previewImageUrl || previewFrame.sampleReferenceUrl}
-                      alt="Frame Background"
-                      className="w-full h-full object-cover pointer-events-none"
-                    />
-                  )}
+              {/* Visual Canvas Rendering with Authentic Dynamic Frame Layers */}
+              {(() => {
+                const df = normalizeDynamicFrame(previewFrame);
+                const isStory = df.aspectRatio === '9:16';
+                const isSquare = df.aspectRatio === '1:1';
+                const widthPx = isStory ? '230px' : isSquare ? '260px' : '260px';
+                const heightPx = isStory ? '408px' : isSquare ? '260px' : '325px';
 
-                  {/* Logo Layer */}
-                  {previewFrame.headerConfig?.showLogo && (
+                const badgeAsset = df.headerConfig?.manualLocationAsset || (df.headerConfig?.locationBadgeAssetId ? getAssetLibraryItemById(df.headerConfig.locationBadgeAssetId)?.url : undefined);
+                const calloutAsset = df.fullStoryCalloutConfig?.manualCalloutAsset || (df.fullStoryCalloutConfig?.calloutAssetId ? getAssetLibraryItemById(df.fullStoryCalloutConfig.calloutAssetId)?.url : undefined);
+                const highlightColor = df.primaryHighlightColor || df.quoteHighlightColor || df.textSlots?.[0]?.highlightColor || '#FFE600';
+
+                return (
+                  <div className="flex flex-col items-center justify-center">
                     <div
-                      className="absolute bg-slate-900/90 border border-white/20 rounded px-1.5 py-0.5 text-[8px] font-black text-white z-10"
+                      className="relative rounded-2xl overflow-hidden border-4 border-purple-500/50 shadow-2xl bg-slate-950 select-none"
                       style={{
-                        left: `${previewFrame.headerConfig.logoRect?.x ?? 5}%`,
-                        top: `${previewFrame.headerConfig.logoRect?.y ?? 3.5}%`,
+                        width: widthPx,
+                        height: heightPx,
+                        backgroundColor: df.primaryBackgroundHex || '#0F172A',
                       }}
                     >
-                      चैनल लोगो
-                    </div>
-                  )}
+                      {/* Background Artwork */}
+                      {(df.previewImageUrl || df.sampleReferenceUrl || df.primaryBackgroundAsset) && (
+                        <img
+                          src={df.primaryBackgroundAsset || df.previewImageUrl || df.sampleReferenceUrl}
+                          alt="Frame Background"
+                          className="w-full h-full object-cover pointer-events-none"
+                        />
+                      )}
 
-                  {/* Location Badge */}
-                  {previewFrame.headerConfig?.showLocation && (
-                    <div
-                      className="absolute bg-red-600 rounded-full px-2 py-0.5 text-[8px] font-bold text-white z-10 flex items-center gap-0.5"
-                      style={{
-                        left: `${previewFrame.headerConfig.locationRect?.x ?? 5}%`,
-                        top: `${previewFrame.headerConfig.locationRect?.y ?? 13.5}%`,
-                      }}
-                    >
-                      <MapPin className="w-2.5 h-2.5" />
-                      <span>भोपाल</span>
-                    </div>
-                  )}
+                      {/* Logo Layer */}
+                      {df.headerConfig?.showLogo && (
+                        <div
+                          className="absolute z-10 flex items-center justify-start pointer-events-none"
+                          style={{
+                            left: `${df.headerConfig.logoRect?.x ?? 5}%`,
+                            top: `${df.headerConfig.logoRect?.y ?? 3.5}%`,
+                            width: `${df.headerConfig.logoRect?.width ?? 22}%`,
+                            height: `${df.headerConfig.logoRect?.height ?? 9}%`,
+                          }}
+                        >
+                          <img
+                            src="/assets/ai_news_maker_logo.png"
+                            alt="Logo"
+                            className="max-w-full max-h-full object-contain drop-shadow"
+                            onError={(e) => {
+                              const target = e.currentTarget as HTMLImageElement;
+                              target.style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      )}
 
-                  {/* Headline Area - Verified with transparent background over plain canvas */}
-                  <div
-                    className="absolute text-center px-2 z-15"
-                    style={{
-                      bottom: `${(previewFrame.footerConfig?.footerHeightRatio || 0.08) * 100 + 3}%`,
-                      left: '4%',
-                      right: '4%',
-                    }}
-                  >
-                    <div
-                      className="font-bold text-[10px] leading-snug drop-shadow-md px-1.5 py-1 rounded"
-                      style={{
-                        color: previewFrame.textSlots?.[0]?.textColor || previewFrame.typographyConfig?.primaryHeadline?.fontColor || '#FFFFFF',
-                        fontFamily: previewFrame.typographyConfig?.primaryFontFamily || previewFrame.textSlots?.[0]?.fontFamily || 'Noto Sans Devanagari',
-                        backgroundColor:
-                          previewFrame.textSlots?.[0]?.backgroundColor === 'transparent' || !previewFrame.textSlots?.[0]?.backgroundColor
-                            ? 'transparent'
-                            : previewFrame.textSlots[0].backgroundColor,
-                      }}
-                    >
-                      मध्य प्रदेश में ऐतिहासिक फैसला: कैबिनेट बैठक में बड़े प्रस्तावों को मिली मंजूरी
+                      {/* Location Badge */}
+                      {df.headerConfig?.showLocation && (
+                        <div
+                          className="absolute z-15 flex items-center justify-center pointer-events-none"
+                          style={{
+                            left: `${df.headerConfig.locationRect?.x ?? 5}%`,
+                            top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
+                            width: `${df.headerConfig.locationRect?.width ?? 28}%`,
+                            height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
+                            transform: (df.headerConfig.locationRotation ?? 0) !== 0 ? `rotate(${df.headerConfig.locationRotation}deg)` : undefined,
+                            transformOrigin: 'center center',
+                          }}
+                        >
+                          {badgeAsset ? (
+                            <div className="relative flex items-center justify-center h-full w-full">
+                              <img
+                                src={badgeAsset}
+                                alt=""
+                                className="h-full w-full object-contain pointer-events-none"
+                              />
+                              <div
+                                className="absolute inset-y-0 flex items-center justify-center overflow-hidden"
+                                style={{
+                                  left: `${Math.round((df.headerConfig?.sliceConfig?.leftWidthPct ?? 0.28) * 100)}%`,
+                                  right: `${Math.round((df.headerConfig?.sliceConfig?.rightWidthPct ?? 0.15) * 100)}%`,
+                                }}
+                              >
+                                <span
+                                  className="truncate font-black text-[8px]"
+                                  style={{
+                                    color: df.headerConfig.locationTextColor || '#FFFFFF',
+                                    fontFamily: df.headerConfig.typographyConfig?.fontFamily || 'Baloo 2',
+                                  }}
+                                >
+                                  भोपाल
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div
+                              className="rounded-full px-2 py-0.5 text-[8px] font-bold shadow flex items-center gap-0.5"
+                              style={{
+                                backgroundColor: df.headerConfig.locationBgColor || '#DC2626',
+                                color: df.headerConfig.locationTextColor || '#FFFFFF',
+                              }}
+                            >
+                              <MapPin className="w-2.5 h-2.5" />
+                              <span>भोपाल</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Date Stamp */}
+                      {df.headerConfig?.showDate && (
+                        <div
+                          className="absolute z-15 flex items-center justify-center font-bold text-[7px] pointer-events-none overflow-hidden"
+                          style={{
+                            left: `${df.headerConfig.dateRect?.x ?? 5}%`,
+                            top: `${df.headerConfig.dateRect?.y ?? 18.5}%`,
+                            width: `${df.headerConfig.dateRect?.width ?? 34}%`,
+                            height: `${df.headerConfig.dateRect?.height ?? 3.5}%`,
+                            transform: (df.headerConfig.dateRotation ?? 270) !== 0 ? `rotate(${df.headerConfig.dateRotation ?? 270}deg)` : undefined,
+                            transformOrigin: 'center center',
+                            color: df.headerConfig.dateTextColor || '#CBD5E1',
+                            backgroundColor: df.headerConfig.dateBgColor || 'rgba(0,0,0,0.75)',
+                            borderRadius: '3px',
+                          }}
+                        >
+                          <span className="truncate px-1">20 नवम्बर 2026, शुक्रवार</span>
+                        </div>
+                      )}
+
+                      {/* Watermark / Photo Tag */}
+                      {df.watermarkConfig?.enabled && (
+                        <div
+                          className="absolute z-18 flex items-center justify-center font-bold text-[7px] pointer-events-none select-none"
+                          style={{
+                            left: `${df.watermarkConfig.rect?.x ?? 3}%`,
+                            top: `${df.watermarkConfig.rect?.y ?? 35}%`,
+                            transform: (df.watermarkConfig.rotation ?? 270) !== 0 ? `rotate(${df.watermarkConfig.rotation ?? 270}deg)` : undefined,
+                            transformOrigin: 'center center',
+                            color: df.watermarkConfig.textColor || '#FFFFFF',
+                            backgroundColor: (df.watermarkConfig.watermarkStyle === 'box' || df.watermarkConfig.showBox !== false) ? (df.watermarkConfig.bgColor || 'rgba(0,0,0,0.85)') : 'transparent',
+                            borderRadius: '3px',
+                            padding: '1px 4px',
+                          }}
+                        >
+                          <span className="truncate">{df.watermarkConfig.customText || df.watermarkConfig.label || 'AI GENERATED'}</span>
+                        </div>
+                      )}
+
+                      {/* Headline Slot */}
+                      <div
+                        className="absolute text-center z-20 flex items-center justify-center"
+                        style={{
+                          left: `${df.textSlots?.[0]?.rect?.x ?? 4}%`,
+                          top: `${df.textSlots?.[0]?.rect?.y ?? 65}%`,
+                          width: `${df.textSlots?.[0]?.rect?.width ?? 92}%`,
+                          height: `${df.textSlots?.[0]?.rect?.height ?? 25}%`,
+                        }}
+                      >
+                        <div
+                          className="font-black text-[9px] leading-tight px-1.5 py-1 rounded w-full line-clamp-3"
+                          style={{
+                            color: df.textSlots?.[0]?.textColor || df.typographyConfig?.primaryHeadline?.fontColor || '#FFFFFF',
+                            fontFamily: df.typographyConfig?.primaryFontFamily || df.textSlots?.[0]?.fontFamily || 'Noto Sans Devanagari',
+                            backgroundColor:
+                              df.textSlots?.[0]?.backgroundColor === 'transparent' || !df.textSlots?.[0]?.backgroundColor
+                                ? 'transparent'
+                                : df.textSlots[0].backgroundColor,
+                            border: (df.textSlots?.[0]?.borderWidth ?? 0) > 0 ? `${df.textSlots![0].borderWidth}px solid ${df.textSlots![0].borderColor || '#FACC15'}` : undefined,
+                          }}
+                        >
+                          <span>मध्य प्रदेश में </span>
+                          <span style={{ color: highlightColor }}>ऐतिहासिक फैसला</span>
+                          <span>: कैबिनेट बैठक में प्रस्तावों को मिली मंजूरी</span>
+                        </div>
+                      </div>
+
+                      {/* Full Story Callout */}
+                      {df.fullStoryCalloutConfig?.enabled && (
+                        <div
+                          className="absolute z-25 flex items-center justify-center pointer-events-none"
+                          style={{
+                            left: `${df.fullStoryCalloutConfig.rect?.x ?? 10}%`,
+                            top: `${df.fullStoryCalloutConfig.rect?.y ?? 86}%`,
+                            width: `${df.fullStoryCalloutConfig.rect?.width ?? 80}%`,
+                            height: `${df.fullStoryCalloutConfig.rect?.height ?? 3.5}%`,
+                            transform: (df.fullStoryCalloutConfig.rotation ?? 0) !== 0 ? `rotate(${df.fullStoryCalloutConfig.rotation}deg)` : undefined,
+                            transformOrigin: 'center center',
+                          }}
+                        >
+                          {calloutAsset ? (
+                            <img
+                              src={calloutAsset}
+                              alt=""
+                              className="max-h-full max-w-full object-contain pointer-events-none"
+                            />
+                          ) : (
+                            <div
+                              className="text-[7px] font-bold px-2 py-0.5 rounded shadow flex items-center gap-0.5"
+                              style={{
+                                backgroundColor: df.fullStoryCalloutConfig.bgColor || '#F59E0B',
+                                color: df.fullStoryCalloutConfig.textColor || '#0F172A',
+                              }}
+                            >
+                              <span>📢</span>
+                              <span>{df.fullStoryCalloutConfig.text || 'पूरी खबर विवरण'}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Permanent Footer Bar */}
+                      <div
+                        className="absolute bottom-0 border-t flex items-center justify-between px-2 text-[7px] font-bold z-30"
+                        style={{
+                          height: `${(df.footerConfig?.footerHeightRatio || 0.08) * 100}%`,
+                          width: `${df.footerConfig?.footerWidthPct || 100}%`,
+                          left: `${(100 - (df.footerConfig?.footerWidthPct || 100)) / 2}%`,
+                          backgroundColor: df.footerConfig?.footerBgColor || '#FFFFFF',
+                          color: df.footerConfig?.footerTextColor || '#000000',
+                        }}
+                      >
+                        <span>@breakingnewswala</span>
+                        <span>सत्यापित समाचार नेटवर्क</span>
+                      </div>
                     </div>
+                    <span className="text-[11px] text-slate-400 mt-2 font-bold">वास्तविक पब्लिश्ड फ्रेम प्रीव्यू</span>
                   </div>
-
-                  {/* Callout if enabled */}
-                  {previewFrame.fullStoryCalloutConfig?.enabled && (
-                    <div
-                      className="absolute text-[7px] font-bold bg-amber-400 text-slate-950 px-2 py-0.5 rounded-full shadow z-20"
-                      style={{
-                        left: `${previewFrame.fullStoryCalloutConfig.rect?.x ?? 10}%`,
-                        top: `${previewFrame.fullStoryCalloutConfig.rect?.y ?? 86}%`,
-                      }}
-                    >
-                      {previewFrame.fullStoryCalloutConfig.text || 'पूरी खबर विवरण'}
-                    </div>
-                  )}
-
-                  {/* Permanent Footer */}
-                  <div
-                    className="absolute bottom-0 bg-white border-t flex items-center justify-between px-2 text-[7px] font-bold text-black z-30"
-                    style={{
-                      height: `${(previewFrame.footerConfig?.footerHeightRatio || 0.08) * 100}%`,
-                      width: `${previewFrame.footerConfig?.footerWidthPct || 100}%`,
-                      left: `${(100 - (previewFrame.footerConfig?.footerWidthPct || 100)) / 2}%`,
-                      backgroundColor: previewFrame.footerConfig?.footerBgColor || '#FFFFFF',
-                      color: previewFrame.footerConfig?.footerTextColor || '#000000',
-                    }}
-                  >
-                    <span>@breakingnewswala</span>
-                    <span>सत्यापित समाचार नेटवर्क</span>
-                  </div>
-                </div>
-                <span className="text-[11px] text-slate-400 mt-2 font-bold">वास्तविक पब्लिश्ड फ्रेम प्रीव्यू</span>
-              </div>
+                );
+              })()}
 
               {/* Specifications & Edit Actions (Part 8: 100% Hindi) */}
               <div className="space-y-4 text-xs">

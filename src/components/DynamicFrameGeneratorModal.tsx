@@ -1127,7 +1127,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
       align: 'center',
       showIcon: true,
       rotation: 0,
-      calloutAssetMode: 'dynamic_overlay',
+      calloutAssetMode: initialFrame?.fullStoryCalloutConfig?.calloutAssetMode || 'static_image',
       calloutVisibilityPolicy: 'optional',
       manualCalloutAsset: '',
     }
@@ -5561,27 +5561,11 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[9px] text-slate-400 block mb-0.5">बैकग्राउंड रंग:</label>
-                            <input
-                              type="color"
-                              disabled={isLayoutLocked || fullStoryCalloutConfig.isLocked}
-                              value={fullStoryCalloutConfig.bgColor || '#F59E0B'}
-                              onChange={(e) => setFullStoryCalloutConfig((prev) => ({ ...prev, bgColor: e.target.value }))}
-                              className="w-full h-7 rounded border border-slate-700 cursor-pointer bg-slate-950 p-0.5"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[9px] text-slate-400 block mb-0.5">टेक्स्ट रंग:</label>
-                            <input
-                              type="color"
-                              disabled={isLayoutLocked || fullStoryCalloutConfig.isLocked}
-                              value={fullStoryCalloutConfig.textColor || '#0F172A'}
-                              onChange={(e) => setFullStoryCalloutConfig((prev) => ({ ...prev, textColor: e.target.value }))}
-                              className="w-full h-7 rounded border border-slate-700 cursor-pointer bg-slate-950 p-0.5"
-                            />
-                          </div>
+                        <div className="p-2 bg-slate-950/80 rounded border border-amber-500/30 text-[10px] text-amber-300">
+                          <span className="font-bold block mb-0.5">✓ स्वीकृत रिबन कॉलआउट बैज (Ribbon Asset):</span>
+                          <span className="text-slate-400 text-[9px] block">
+                            स्टेप 3 में चयनित कॉलआउट रिबन बैज का प्रामाणिक रूप रेंडर होगा। प्रो/वीआईपी यूजर लाइव स्टूडियो में बैज बदल सकेंगे।
+                          </span>
                         </div>
 
                         {/* Real-Time Size & Position Controls (Area 8) */}
@@ -5831,30 +5815,36 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       </div>
 
                       <div className="bg-slate-900 border border-slate-800 rounded-lg p-2">
-                        <label className="text-[10px] text-slate-400 font-bold block mb-1">W (%)</label>
+                        <label className="text-[10px] text-slate-400 font-bold block mb-1">
+                          {activeLayer.type === 'logo' ? 'W (%) [फिक्स: 22%]' : 'W (%)'}
+                        </label>
                         <input
                           type="number"
                           step="0.5"
                           min="2"
                           max="100"
-                          disabled={activeLayer.locked}
-                          value={Math.round(activeLayer.rect.width * 10) / 10}
+                          disabled={activeLayer.locked || activeLayer.type === 'logo'}
+                          value={activeLayer.type === 'logo' ? 22 : Math.round(activeLayer.rect.width * 10) / 10}
                           onChange={(e) => updateSelectedLayerRect({ width: parseFloat(e.target.value) || 2 })}
-                          className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono font-bold focus:border-amber-400"
+                          className={`w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono font-bold focus:border-amber-400 ${activeLayer.type === 'logo' ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          title={activeLayer.type === 'logo' ? 'चैनल लोगो की चौड़ाई 22% पर फिक्स है' : undefined}
                         />
                       </div>
 
                       <div className="bg-slate-900 border border-slate-800 rounded-lg p-2">
-                        <label className="text-[10px] text-slate-400 font-bold block mb-1">H (%)</label>
+                        <label className="text-[10px] text-slate-400 font-bold block mb-1">
+                          {activeLayer.type === 'logo' ? 'H (%) [फिक्स: 9%]' : 'H (%)'}
+                        </label>
                         <input
                           type="number"
                           step="0.5"
                           min="1"
                           max="100"
-                          disabled={activeLayer.locked}
-                          value={Math.round(activeLayer.rect.height * 10) / 10}
+                          disabled={activeLayer.locked || activeLayer.type === 'logo'}
+                          value={activeLayer.type === 'logo' ? 9 : Math.round(activeLayer.rect.height * 10) / 10}
                           onChange={(e) => updateSelectedLayerRect({ height: parseFloat(e.target.value) || 1 })}
-                          className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono font-bold focus:border-amber-400"
+                          className={`w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white font-mono font-bold focus:border-amber-400 ${activeLayer.type === 'logo' ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          title={activeLayer.type === 'logo' ? 'चैनल लोगो की ऊंचाई 9% पर फिक्स है' : undefined}
                         />
                       </div>
                     </div>
@@ -5941,29 +5931,29 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          disabled={activeLayer.locked}
+                          disabled={activeLayer.locked || activeLayer.type === 'logo'}
                           onClick={() =>
                             updateSelectedLayerRect({
                               width: activeLayer.rect.width - 2,
                               height: activeLayer.rect.height - 2,
                             })
                           }
-                          className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-300 cursor-pointer"
-                          title="साइज घटाएं"
+                          className={`px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] font-bold text-slate-300 ${activeLayer.type === 'logo' ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-800 cursor-pointer'}`}
+                          title={activeLayer.type === 'logo' ? 'चैनल लोगो का साइज फिक्स है (22% × 9%)' : 'साइज घटाएं'}
                         >
                           - छोटा
                         </button>
                         <button
                           type="button"
-                          disabled={activeLayer.locked}
+                          disabled={activeLayer.locked || activeLayer.type === 'logo'}
                           onClick={() =>
                             updateSelectedLayerRect({
                               width: activeLayer.rect.width + 2,
                               height: activeLayer.rect.height + 2,
                             })
                           }
-                          className="px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-300 cursor-pointer"
-                          title="साइज बढ़ाएं"
+                          className={`px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-[10px] font-bold text-slate-300 ${activeLayer.type === 'logo' ? 'opacity-40 cursor-not-allowed' : 'hover:bg-slate-800 cursor-pointer'}`}
+                          title={activeLayer.type === 'logo' ? 'चैनल लोगो का साइज फिक्स है (22% × 9%)' : 'साइज बढ़ाएं'}
                         >
                           + बड़ा
                         </button>

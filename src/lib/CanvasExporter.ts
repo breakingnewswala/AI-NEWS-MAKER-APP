@@ -516,8 +516,14 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
   if (effectiveLogoUrl) {
     try {
       customLogoImg = await loadImage(effectiveLogoUrl);
+      if (!customLogoImg || customLogoImg.naturalWidth <= 1) {
+        customLogoImg = await loadImage('/assets/ai_news_maker_logo.png').catch(() => undefined);
+      }
     } catch (logoErr) {
       console.warn('Logo load warning:', logoErr);
+      try {
+        customLogoImg = await loadImage('/assets/ai_news_maker_logo.png');
+      } catch {}
     }
   }
 
@@ -1902,7 +1908,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
       (card as any).channelLogo ||
       (card as any).logoUrl ||
       '/assets/breaking_news_wala_logo.png';
-    const logoToDraw = customLogoImg || (resolvedLogoUrl ? await loadImage(resolvedLogoUrl).catch(() => null) : null);
+    const logoToDraw = customLogoImg || (resolvedLogoUrl ? await loadImage(resolvedLogoUrl).catch(() => null) : null) || await loadImage('/assets/ai_news_maker_logo.png').catch(() => null);
     if (logoToDraw) {
       ctx.save();
       if (df.headerConfig.logoOpacity !== undefined) {
@@ -1946,8 +1952,14 @@ async function drawAuthoritativeDynamicFrameCanvas(
       try {
         let safeLocAsset = locAsset;
         if (locAsset.startsWith('data:image/svg+xml')) {
-          const svgContent = locAsset.replace(/^data:image\/svg\+xml(?:;utf8)?,/, '');
-          safeLocAsset = `data:image/svg+xml;utf8,${encodeURIComponent(decodeURIComponent(svgContent))}`;
+          try {
+            if (!locAsset.includes('%3Csvg') && !locAsset.includes(';base64,')) {
+              const svgContent = locAsset.replace(/^data:image\/svg\+xml(?:;utf8)?,/, '');
+              safeLocAsset = `data:image/svg+xml;utf8,${encodeURIComponent(svgContent)}`;
+            }
+          } catch {
+            safeLocAsset = locAsset;
+          }
         }
         const badgeImg = await loadImage(safeLocAsset);
         if (badgeImg && badgeImg.naturalWidth > 1 && badgeImg.naturalHeight > 1) {
@@ -2068,7 +2080,8 @@ async function drawAuthoritativeDynamicFrameCanvas(
     const dh = (dateRect.height / 100) * height;
     const rotDeg = card.dateRotation ?? df.headerConfig?.dateRotation ?? 270;
     const dateOpacity = card.dateOpacity ?? df.headerConfig?.dateOpacity ?? 0.90;
-    const dateBg = df.headerConfig?.dateBgColor || (df.headerConfig?.dateStampStyle && df.headerConfig.dateStampStyle !== 'only_text' ? 'rgba(0,0,0,0.75)' : undefined);
+    const showDateBox = card.dateShowBox !== false && (Boolean(card.dateBoxColor) || Boolean(df.headerConfig?.dateBgColor) || df.headerConfig?.dateStampStyle !== 'only_text');
+    const dateBg = showDateBox ? (card.dateBoxColor || df.headerConfig?.dateBgColor || 'rgba(0,0,0,0.75)') : undefined;
 
     ctx.save();
     ctx.globalAlpha = Math.max(0.15, Math.min(1.0, dateOpacity));
@@ -2080,7 +2093,13 @@ async function drawAuthoritativeDynamicFrameCanvas(
       ctx.fillStyle = dateBg;
       const bw = dw * 0.95;
       const bh = dh * 0.95;
-      ctx.fillRect(-bw / 2, -bh / 2, bw, bh);
+      if (typeof ctx.roundRect === 'function') {
+        ctx.beginPath();
+        ctx.roundRect(-bw / 2, -bh / 2, bw, bh, 6);
+        ctx.fill();
+      } else {
+        ctx.fillRect(-bw / 2, -bh / 2, bw, bh);
+      }
     }
 
     const dateFontSize = Math.round((df.headerConfig?.dateFontSize || 14) * (width / 1080) * 1.4);
@@ -2226,8 +2245,29 @@ async function drawAuthoritativeDynamicFrameCanvas(
         ? (card.representativePhotoText || 'प्रतीकात्मक फोटो')
         : (card.aiGeneratedText || wm.customText || wm.label || 'AI GENERATED');
       const wmFontSize = Math.round((wm.fontSize || 14) * (width / 1080) * 1.5);
-      ctx.font = `bold ${wmFontSize}px "Baloo 2", sans-serif`;
-      ctx.fillStyle = wm.textColor || '#FFFFFF';
+      const wmFontFamily = card.photoTagFont || 'Baloo 2';
+      ctx.font = `bold ${wmFontSize}px "${wmFontFamily}", sans-serif`;
+
+      const showWmBox = card.photoTagShowBox !== false && (Boolean(card.photoTagBoxColor) || wm.watermarkStyle === 'box' || wm.watermarkStyle === 'boxed' || wm.showBox !== false);
+      if (showWmBox) {
+        ctx.save();
+        const textW = ctx.measureText(wmText).width;
+        const boxPadX = 14;
+        const boxPadY = 6;
+        ctx.fillStyle = card.photoTagBoxColor || wm.bgColor || 'rgba(0,0,0,0.85)';
+        const boxW = textW + boxPadX * 2;
+        const boxH = wmFontSize + boxPadY * 2;
+        if (typeof ctx.roundRect === 'function') {
+          ctx.beginPath();
+          ctx.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, 6);
+          ctx.fill();
+        } else {
+          ctx.fillRect(-boxW / 2, -boxH / 2, boxW, boxH);
+        }
+        ctx.restore();
+      }
+
+      ctx.fillStyle = card.photoTagTextColor || wm.textColor || '#FFFFFF';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.shadowColor = 'rgba(0,0,0,0.8)';
@@ -2906,16 +2946,21 @@ async function drawGraphic001Canvas(
     const fontFam = card.headlineFontFamily || 'Baloo 2';
     const highlightColor = card.highlightColor || '#FFE600';
 
-    const layout = computeCanonicalHeadlineLayout({
-      headline: rawHeadline,
-      highlightWords: card.highlightWords,
-      fontFamily: fontFam,
-      templateId: 'graphic_001',
-      aspectRatio: card.aspectRatio,
-      userFontSize: card.headlineFontSize,
-      customBounds: { x: 84, y: bannerY, width: 912, height: bannerH },
-      ctx,
-    });
+    // Use previewHeadlineLayout to maintain 100% WYSIWYG line-break parity with CardPreview
+    const layout = (previewHeadlineLayout && previewHeadlineLayout.lines && previewHeadlineLayout.lines.length > 0)
+      ? previewHeadlineLayout
+      : computeCanonicalHeadlineLayout({
+          headline: rawHeadline,
+          highlightWords: card.highlightWords,
+          fontFamily: fontFam,
+          templateId: 'graphic_001',
+          aspectRatio: card.aspectRatio,
+          userFontSize: card.headlineFontSize,
+          ctx,
+        });
+
+    const centerY = Math.round(bannerY + bannerH / 2 + 6);
+    const startY = centerY - ((layout.lines.length - 1) * layout.lineHeight) / 2;
 
     ctx.font = `900 ${layout.fontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
     ctx.textBaseline = 'middle';
@@ -2924,9 +2969,9 @@ async function drawGraphic001Canvas(
     ctx.shadowOffsetY = 4;
 
     layout.lines.forEach((line, lineIdx) => {
-      const metric = layout.lineMetrics[lineIdx];
+      const metric = layout.lineMetrics[lineIdx] || { startX: Math.round(width / 2), y: Math.round(startY + lineIdx * layout.lineHeight) };
       let curX = metric.startX;
-      const lineY = metric.y;
+      const lineY = Math.round(startY + lineIdx * layout.lineHeight);
 
       for (let i = 0; i < line.length; i++) {
         const token = line[i];

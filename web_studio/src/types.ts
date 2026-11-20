@@ -310,6 +310,9 @@ export interface NewsCardData {
   photoTagShowBox?: boolean; // Default true: with box pill; false: text only without box
   photoTagBoxColor?: string; // Box background color, e.g. '#000000', '#DC2626', etc.
   photoTagTextColor?: string; // Text color for photo tag
+  photoTagFont?: string; // Font family for photo tag (e.g. 'Baloo 2', 'Noto Sans Devanagari', 'Mukta')
+  dateShowBox?: boolean; // Date stamp background box toggle (default true or frame-dependent)
+  dateBoxColor?: string; // Date stamp background box color
   
   // Contact & Social
   socialHandle: string;

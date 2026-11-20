@@ -4500,6 +4500,23 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   />
                 </div>
 
+                <div className="flex items-center gap-2">
+                  <label className="text-[11px] text-neutral-400 whitespace-nowrap">
+                    फ़ॉन्ट स्टाइल:
+                  </label>
+                  <select
+                    value={card.photoTagFont || 'Baloo 2'}
+                    onChange={(e) => onChange({ photoTagFont: e.target.value })}
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-amber-400 font-sans"
+                  >
+                    <option value="Baloo 2">Baloo 2 (डिफ़ॉल्ट / आधुनिक)</option>
+                    <option value="Noto Sans Devanagari">Noto Sans Devanagari (स्पष्ट)</option>
+                    <option value="Mukta">Mukta (बोल्ड / कॉम्पैक्ट)</option>
+                    <option value="Rozha One">Rozha One (क्लासिक)</option>
+                    <option value="Poppins">Poppins (अंग्रेजी / आधुनिक)</option>
+                  </select>
+                </div>
+
                 {/* Box enable/disable toggle & color selection */}
                 <div className="flex items-center justify-between gap-2 flex-wrap pt-1 bg-neutral-900/60 p-2 rounded-lg border border-neutral-800">
                   <div className="flex items-center gap-1.5">
@@ -4885,6 +4902,53 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               आज
             </button>
           </div>
+
+          {/* Date Stamp Box Toggle & Box Color */}
+          {card.showDate !== false && (
+            <div className="flex items-center justify-between gap-2 flex-wrap pt-1 bg-neutral-900/60 p-2 rounded-lg border border-neutral-800">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onChange({ dateShowBox: !(card.dateShowBox !== false) })}
+                  className={`px-2 py-1 rounded text-[11px] font-bold border transition flex items-center gap-1 cursor-pointer ${
+                    card.dateShowBox !== false
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                      : 'bg-neutral-800 text-neutral-400 border-neutral-700'
+                  }`}
+                >
+                  <span>{card.dateShowBox !== false ? '✓ बॉक्स सहित (With Box)' : '✕ बिना बॉक्स (Text Only)'}</span>
+                </button>
+              </div>
+
+              {card.dateShowBox !== false && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-neutral-400 font-semibold">बॉक्स रंग:</span>
+                  {[
+                    { color: 'rgba(0,0,0,0.85)', label: 'काला', hex: '#000000' },
+                    { color: '#dc2626', label: 'लाल', hex: '#dc2626' },
+                    { color: '#2563eb', label: 'नीला', hex: '#2563eb' },
+                    { color: '#d97706', label: 'अंबर', hex: '#d97706' },
+                    { color: '#1e293b', label: 'स्लेट', hex: '#1e293b' },
+                  ].map((c) => {
+                    const isSel = (card.dateBoxColor || 'rgba(0,0,0,0.85)') === c.color;
+                    return (
+                      <button
+                        key={c.hex}
+                        type="button"
+                        onClick={() => onChange({ dateBoxColor: c.color })}
+                        className={`w-5 h-5 rounded-full border transition cursor-pointer ${
+                          isSel ? 'ring-2 ring-amber-400 scale-110 border-white' : 'border-neutral-600 hover:scale-105'
+                        }`}
+                        style={{ backgroundColor: c.hex }}
+                        title={c.label}
+                      />
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           <p className="text-[10px] text-neutral-500">
             * टेम्पलेट के अनुसार कॉम्पैक्ट पोज़ीशन में फिक्स रहेगी।
           </p>

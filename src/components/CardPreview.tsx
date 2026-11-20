@@ -3621,8 +3621,15 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
                 let safeBadgeUrl = badgeAsset;
                 if (badgeAsset && badgeAsset.startsWith('data:image/svg+xml')) {
-                  const svgContent = badgeAsset.replace(/^data:image\/svg\+xml(?:;utf8)?,/, '');
-                  safeBadgeUrl = `data:image/svg+xml;utf8,${encodeURIComponent(decodeURIComponent(svgContent))}`;
+                  try {
+                    // Only encode if not already encoded
+                    if (!badgeAsset.includes('%3Csvg') && !badgeAsset.includes(';base64,')) {
+                      const svgContent = badgeAsset.replace(/^data:image\/svg\+xml(?:;utf8)?,/, '');
+                      safeBadgeUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svgContent)}`;
+                    }
+                  } catch {
+                    safeBadgeUrl = badgeAsset;
+                  }
                 }
 
                 const dynamicLoc = calculateDynamicLocationMetrics({
@@ -3651,8 +3658,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     <div className="relative flex items-center justify-center h-full w-full">
                       <img
                         src={safeBadgeUrl || badgeAsset}
-                        alt="Location Badge"
-                        className="h-full w-full object-contain"
+                        alt=""
+                        className="h-full w-full object-contain pointer-events-none select-none"
+                        onError={(e) => {
+                          const target = e.currentTarget as HTMLImageElement;
+                          target.style.display = 'none';
+                        }}
                       />
                       <div
                         className="absolute inset-y-0 flex items-center justify-center overflow-hidden"
@@ -3700,7 +3711,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               {/* Dynamic Date Stamp (Always visible when showDate !== false with authentic Date Box/Badge support) */}
               {(df.headerConfig?.showDate || card.showDate !== false) && card.showDate !== false && (() => {
                 const rot = card.dateRotation ?? df.headerConfig?.dateRotation ?? 270;
-                const dateBg = df.headerConfig?.dateBgColor || (df.headerConfig?.dateStampStyle && df.headerConfig.dateStampStyle !== 'only_text' ? 'rgba(0,0,0,0.75)' : undefined);
+                const showDateBox = card.dateShowBox !== false && (Boolean(card.dateBoxColor) || Boolean(df.headerConfig?.dateBgColor) || df.headerConfig?.dateStampStyle !== 'only_text');
+                const dateBg = showDateBox ? (card.dateBoxColor || df.headerConfig?.dateBgColor || 'rgba(0,0,0,0.75)') : undefined;
                 const dateColor = df.headerConfig?.dateTextColor || '#CBD5E1';
                 const dateAsset = (df.headerConfig as any)?.dateBoxAssetUrl || (card as any)?.customDateAssetUrl;
 
@@ -3807,10 +3819,14 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       <span
                         className="px-2 py-0.5 rounded text-center whitespace-nowrap"
                         style={{
-                          backgroundColor: (df.watermarkConfig.watermarkStyle === 'box' || df.watermarkConfig.watermarkStyle === 'boxed') ? (df.watermarkConfig.bgColor || 'rgba(0,0,0,0.6)') : 'transparent',
-                          color: df.watermarkConfig.textColor || '#FFFFFF',
+                          backgroundColor: card.photoTagShowBox !== false
+                            ? (card.photoTagBoxColor || (df.watermarkConfig.watermarkStyle === 'box' || df.watermarkConfig.watermarkStyle === 'boxed' ? df.watermarkConfig.bgColor : 'rgba(0,0,0,0.85)'))
+                            : 'transparent',
+                          color: card.photoTagTextColor || df.watermarkConfig.textColor || '#FFFFFF',
+                          fontFamily: card.photoTagFont || 'Baloo 2',
                           fontSize: `${Math.max(8, Math.round((df.watermarkConfig.fontSize || 14) * previewScale))}px`,
                           textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.7)',
+                          borderRadius: card.photoTagShowBox !== false ? '4px' : undefined,
                         }}
                       >
                         {wmText}
