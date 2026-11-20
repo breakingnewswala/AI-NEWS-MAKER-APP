@@ -35,5 +35,65 @@
     "type": "rss",
     "isActive": true,
     "updatedAt": 1795078912682
+  },
+  {
+    "id": "src_1795122768953_bqip",
+    "name": "E2E Wire 1795122768949",
+    "url": "https://news.google.com/rss?e2e=1795122768949",
+    "type": "rss",
+    "category": "देश",
+    "isActive": true,
+    "createdAt": 1795122768953,
+    "addedAt": 1795122768953,
+    "addedDateFormatted": "20 नवंबर 2026",
+    "itemsFetchedCount": 0
+  },
+  {
+    "id": "src_1795142115335_j0xi",
+    "name": "Unreachable Feed",
+    "url": "https://non-existent-domain-for-e2e-failure-test-xyz.org/rss.xml",
+    "type": "rss",
+    "category": "देश",
+    "isActive": true,
+    "createdAt": 1795122769697,
+    "addedAt": 1795122769697,
+    "addedDateFormatted": "20 नवंबर 2026",
+    "itemsFetchedCount": 0
+  },
+  {
+    "id": "src_1795122779877_a9yy",
+    "name": "S3 Wire 1795122779871",
+    "url": "https://news.google.com/rss?s3=1795122779871",
+    "type": "rss",
+    "category": "देश",
+    "isActive": true,
+    "createdAt": 1795122779877,
+    "addedAt": 1795122779877,
+    "addedDateFormatted": "20 नवंबर 2026",
+    "itemsFetchedCount": 0
+  },
+  {
+    "id": "src_1795142113954_qtcx",
+    "name": "E2E Wire 1795142113948",
+    "url": "https://news.google.com/rss?e2e=1795142113948",
+    "type": "rss",
+    "category": "देश",
+    "isActive": true,
+    "createdAt": 1795142113954,
+    "addedAt": 1795142113954,
+    "addedDateFormatted": "20 नवंबर 2026",
+    "itemsFetchedCount": 0
+  },
+  {
+    "id": "src_1795142123839_07f2",
+    "name": "S3 Wire 1795142123834",
+    "url": "https://news.google.com/rss?s3=1795142123834",
+    "type": "rss",
+    "category": "देश",
+    "isActive": true,
+    "createdAt": 1795142123839,
+    "addedAt": 1795142123839,
+    "addedDateFormatted": "20 नवंबर 2026",
+    "itemsFetchedCount": 0
   }
 ]

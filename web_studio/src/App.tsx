@@ -571,6 +571,26 @@ export default function App() {
   });
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [breakingNewsAlert, setBreakingNewsAlert] = useState<{
+    id: string;
+    title: string;
+    summary?: string;
+    sourceChannel?: string;
+    category?: string;
+    imageUrl?: string;
+    publishedTime?: string;
+    fullPost?: NewsFeedPost;
+  } | null>(null);
+
+  useEffect(() => {
+    const handleBreakingAlertEvent = (e: any) => {
+      if (e?.detail) {
+        setBreakingNewsAlert(e.detail);
+      }
+    };
+    window.addEventListener('ai_news_breaking_alert_triggered', handleBreakingAlertEvent);
+    return () => window.removeEventListener('ai_news_breaking_alert_triggered', handleBreakingAlertEvent);
+  }, []);
   const isStudio = currentTab === 'studio' || currentTab === 'generator';
 
   // Navigate to tab cleanly using HTML5 history without visible hashtags or ?fresh= accumulation
@@ -1004,13 +1024,25 @@ export default function App() {
                 const hasBreaking = newItems.some((p: any) => Boolean(p.breaking || p.isBreaking || p.type === 'breaking' || p.category === 'ब्रेकिंग न्यूज़'));
                 if (hasBreaking) {
                   playBreakingNewsAlertSound();
+                  const breakingItem = newItems.find((p: any) => Boolean(p.breaking || p.isBreaking || p.type === 'breaking' || p.category === 'ब्रेकिंग न्यूज़')) || newItems[0];
+                  setBreakingNewsAlert({
+                    id: String(breakingItem.id),
+                    title: breakingItem.title,
+                    summary: breakingItem.summary || breakingItem.description || breakingItem.content || '',
+                    sourceChannel: breakingItem.sourceChannel || breakingItem.channelName || breakingItem.source || 'लाइव डेस्क',
+                    category: breakingItem.category || 'ब्रेकिंग न्यूज़',
+                    imageUrl: breakingItem.imageUrl || breakingItem.image || breakingItem.thumbnailUrl || '',
+                    publishedTime: breakingItem.publishedTime || breakingItem.time || 'अभी-अभी',
+                    fullPost: breakingItem,
+                  });
+                  setToastMessage('🚨 नई ब्रेकिंग न्यूज़ प्रकाशित हुई!');
                 } else {
                   playNormalNotificationSound();
+                  setToastMessage('📰 नई खबर स्वीकृत और होम फ़ीड में जोड़ी गई!');
                 }
                 if (typeof navigator !== 'undefined' && navigator.vibrate) {
                   try { navigator.vibrate([120, 60, 120]); } catch {}
                 }
-                setToastMessage(hasBreaking ? '🚨 नई ब्रेकिंग न्यूज़ प्रकाशित हुई!' : '📰 नई खबर स्वीकृत और होम फ़ीड में जोड़ी गई!');
               }
             }
             setPosts(cleanApi);
@@ -1032,18 +1064,18 @@ export default function App() {
           }
         }
       } else {
-        // P0 Invariant: Do NOT treat API failure as zero-news success; set explicit error state
+        // P0 Invariant: Do NOT treat API failure as zero-news success; preserve already loaded posts if present
         if (!loaded) {
-          setPosts([]);
-          setFeedStatus('error');
+          setPosts((prev) => (prev && prev.length > 0 ? prev : []));
+          setFeedStatus((prev) => (prev === 'verified' ? 'verified' : 'error'));
         }
       }
     } catch (err) {
       console.warn('Authoritative backend news fetch failed:', err);
-      // P0 Invariant: Network failure sets explicit error state without resurrecting stale cached news
+      // P0 Invariant: Network failure preserves already loaded posts if present without wipe
       if (!loaded) {
-        setPosts([]);
-        setFeedStatus('error');
+        setPosts((prev) => (prev && prev.length > 0 ? prev : []));
+        setFeedStatus((prev) => (prev === 'verified' ? 'verified' : 'error'));
       }
     }
 
@@ -3826,6 +3858,16 @@ export default function App() {
         summary: (triggeredStory.summary || triggeredStory.content || triggeredStory.fullContent || '').slice(0, 100),
       });
       setToastMessage('🚨 ब्रेकिंग न्यूज़ अलर्ट जारी किया गया!');
+      setBreakingNewsAlert({
+        id: String(triggeredStory.id),
+        title: triggeredStory.title,
+        summary: triggeredStory.summary || triggeredStory.description || triggeredStory.content || '',
+        sourceChannel: triggeredStory.sourceChannel || triggeredStory.channelName || triggeredStory.source || 'लाइव डेस्क',
+        category: triggeredStory.category || 'ब्रेकिंग न्यूज़',
+        imageUrl: triggeredStory.imageUrl || triggeredStory.image || '',
+        publishedTime: triggeredStory.publishedTime || 'अभी-अभी',
+        fullPost: triggeredStory,
+      });
     } else {
       setToastMessage('खबर का स्टेटस अपडेट हुआ!');
     }
@@ -4192,6 +4234,117 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#070D1E] text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
+      {/* Impressive Premium Breaking News Pop-up Modal (Issue 5) */}
+      {breakingNewsAlert && (
+        <div className="fixed inset-0 z-[120] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div
+            className="relative w-full max-w-md bg-gradient-to-b from-[#180a14] via-[#0d1527] to-[#070d1e] rounded-3xl p-5 sm:p-6 shadow-[0_0_60px_rgba(244,63,94,0.35)] border-2 border-rose-500/70 ring-4 ring-rose-500/20 text-white flex flex-col gap-4 animate-in zoom-in-95 duration-200"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="breaking-news-modal-title"
+          >
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={() => setBreakingNewsAlert(null)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors border border-slate-700/60 z-10"
+              title="बंद करें"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Glowing Header Badge with Pulse Indicator */}
+            <div className="flex items-center gap-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-600/30 border border-rose-500/60 text-rose-300 text-xs font-black tracking-wide shadow-lg">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                </span>
+                <span>🚨 नई ब्रेकिंग न्यूज़ प्रकाशित हुई!</span>
+              </div>
+            </div>
+
+            {/* Optional Image Banner */}
+            {breakingNewsAlert.imageUrl && (
+              <div className="relative w-full h-44 rounded-2xl overflow-hidden border border-rose-500/30 bg-slate-950/60">
+                <img
+                  src={breakingNewsAlert.imageUrl}
+                  alt={breakingNewsAlert.title}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLElement).style.display = 'none';
+                  }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80" />
+                {breakingNewsAlert.category && (
+                  <span className="absolute bottom-2 left-2 px-2.5 py-0.5 rounded-md bg-rose-600/90 text-white text-[10px] font-bold shadow">
+                    {breakingNewsAlert.category}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Source Channel and Time Metadata */}
+            <div className="flex items-center justify-between text-[11px] text-slate-400 border-b border-slate-800/80 pb-2">
+              <span className="flex items-center gap-1.5 text-amber-300 font-bold truncate">
+                <span>📺 स्रोत:</span>
+                <span className="truncate">{breakingNewsAlert.sourceChannel || 'लाइव डेस्क'}</span>
+              </span>
+              <span className="flex items-center gap-1 text-slate-400 shrink-0 font-medium">
+                <span>⏱️</span>
+                <span>{breakingNewsAlert.publishedTime || 'अभी-अभी'}</span>
+              </span>
+            </div>
+
+            {/* Headline Title */}
+            <h3
+              id="breaking-news-modal-title"
+              className="text-base sm:text-lg font-black text-white leading-snug tracking-tight line-clamp-3 text-left"
+            >
+              {breakingNewsAlert.title}
+            </h3>
+
+            {/* Summary Snippet */}
+            {breakingNewsAlert.summary && (
+              <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800/60 text-xs text-slate-300 leading-relaxed line-clamp-3 text-left">
+                {breakingNewsAlert.summary}
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const post = breakingNewsAlert.fullPost || posts.find((p) => String(p.id) === String(breakingNewsAlert.id));
+                  setBreakingNewsAlert(null);
+                  if (post) {
+                    handleOpenStudioWithNews(post);
+                  } else {
+                    navigateToTab('studio');
+                  }
+                }}
+                className="w-full bg-gradient-to-r from-rose-600 via-red-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white font-black py-3 px-4 rounded-xl shadow-[0_0_20px_rgba(244,63,94,0.4)] flex items-center justify-center gap-2 text-sm transition-all transform active:scale-98"
+              >
+                <span>🎨 खबर से ग्राफिक बनाएं</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setBreakingNewsAlert(null);
+                  navigateToTab('home');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="w-full bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700/70 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-xs transition-colors"
+              >
+                <span>📰 होम फ़ीड में देखें</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast Notification - 100% Viewport Center Aligned Design */}
       {toastMessage && (
         <div className="fixed inset-0 z-[100] pointer-events-none flex items-center justify-center top-1/2 -translate-y-1/2 p-4">
@@ -5409,6 +5562,19 @@ export default function App() {
                     aspectRatio: df.aspectRatio || '4:5',
                     customDynamicFrame: df,
                     isTestMode: true,
+                    // Authoritative Transfer of Location Badge Settings
+                    selectedLocationBadgeId: df.headerConfig?.locationBadgeAssetId || df.locationBadgeAssetId || prev.selectedLocationBadgeId,
+                    customLocationBadgeUrl: df.headerConfig?.manualLocationAsset || prev.customLocationBadgeUrl,
+                    locationTextColor: df.headerConfig?.locationTextColor || '#FFFFFF',
+                    locationBgColor: df.headerConfig?.locationBgColor || prev.locationBgColor,
+                    showLocation: df.headerConfig?.showLocation !== false,
+                    // Authoritative Transfer of Full Story Callout Settings
+                    showCallout: df.fullStoryCalloutConfig?.enabled ?? Boolean(df.calloutAssetUrl || prev.showCallout),
+                    calloutTag: df.fullStoryCalloutConfig?.text || prev.calloutTag || 'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें',
+                    selectedCalloutId: df.fullStoryCalloutConfig?.calloutAssetId || df.calloutAssetId || prev.selectedCalloutId,
+                    customCalloutAssetUrl: df.fullStoryCalloutConfig?.manualCalloutAsset || df.calloutAssetUrl || prev.customCalloutAssetUrl,
+                    highlightColor: df.primaryHighlightColor || prev.highlightColor,
+                    headlineFontFamily: df.typographyConfig?.primaryFontFamily || df.textSlots?.[0]?.fontFamily || prev.headlineFontFamily,
                   }));
                 } else {
                   setCard((prev) => ({

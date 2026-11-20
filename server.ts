@@ -2894,9 +2894,24 @@ export function isArticleDeletedByTombstone(
 
 function isDummyWirePost(p: any): boolean {
   if (!p) return true;
-  const channel = String(p.channelName || p.source || '').toLowerCase();
+  const channel = String(p.sourceChannel || p.channelName || p.source || '').toLowerCase();
   const id = String(p.id || '').toLowerCase();
-  if (channel.includes('wire') || channel.includes('e2e') || id.includes('wire') || id.startsWith('test_')) {
+  const title = String(p.title || p.headline || '').toLowerCase();
+  const fullText = `${title} ${channel} ${id}`;
+  if (
+    channel.includes('wire') ||
+    channel.includes('e2e') ||
+    id.includes('wire') ||
+    id.startsWith('test_') ||
+    fullText.includes('s3 wire') ||
+    fullText.includes('e2e wire') ||
+    fullText.includes('unreachable feed') ||
+    fullText.includes('ssrf feed') ||
+    fullText.includes('grand theft auto') ||
+    fullText.includes('voyager 1') ||
+    fullText.includes('russell brand') ||
+    fullText.includes('fantasy football')
+  ) {
     return true;
   }
   return false;
@@ -3412,7 +3427,7 @@ app.get("/api/news-posts", async (req, res) => {
         (dId.startsWith("src_") && (p.id.startsWith(`rss-${dId.replace(/^src_/, "")}-`) || p.id.startsWith(`web-${dId.replace(/^src_/, "")}-`)))
       );
 
-      if (isExplicitlyDeleted && !isAdmin) {
+      if (isExplicitlyDeleted) {
         return false;
       }
 
@@ -11467,15 +11482,71 @@ app.delete(["/api/admin/delete-rss-source/:id", "/api/admin/rss-sources/:id"], r
 
     // Clean generated news posts associated with deleted source
     let posts = loadNewsDatabase();
+    const prevPostCount = posts.length;
     posts = posts.filter((p) => {
       if (p.id.startsWith(`rss-${id}`) || p.id.startsWith(`web-${id}`)) return false;
       if (p.id.startsWith(`rss-${matchedId}`) || p.id.startsWith(`web-${matchedId}`)) return false;
-      if (targetSource?.url && p.sourceUrl === targetSource.url) return false;
+      if ((p as any).sourceId === id || (p as any).sourceId === matchedId) return false;
+      if (targetSource?.url && ((p as any).sourceFeedUrl === targetSource.url || p.sourceUrl === targetSource.url)) return false;
+      if (targetSource?.name && (p.sourceChannel === targetSource.name || (p as any).channelName === targetSource.name)) return false;
       return true;
     });
     saveNewsDatabase(posts);
 
-    return res.json({ success: true, sources });
+    return res.json({ success: true, sources, cleanedPostsCount: prevPostCount - posts.length });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// 2c. PURGE all dummy / test RSS sources & wires (E2E Wire, S3 Wire, Unreachable Feed, SSRF)
+app.post("/api/admin/purge-test-rss-sources", requireAdminMiddleware, async (req, res) => {
+  try {
+    if (!verifyIsAdminUser(req)) {
+      return res.status(403).json({ error: "अनधिकृत: टेस्ट RSS फ़ीड्स साफ़ करना केवल एडमिन के लिए अनुमत है।" });
+    }
+    let sources = loadRssSourcesDatabase();
+    const testKeywords = ['wire', 'e2e', 's3 wire', 'unreachable', 'ssrf', 'test_', 'dummy', 'voyager', 'russell'];
+    const isTestSource = (s: any) => {
+      const name = String(s.name || '').toLowerCase();
+      const url = String(s.url || '').toLowerCase();
+      const id = String(s.id || '').toLowerCase();
+      return testKeywords.some((kw) => name.includes(kw) || url.includes(kw) || id.includes(kw));
+    };
+
+    const purgedSources = sources.filter(isTestSource);
+    sources = sources.filter((s) => !isTestSource(s));
+
+    for (const ps of purgedSources) {
+      recordDeletedRssSourceId(ps.id);
+      if (ps.url) recordDeletedRssSourceId(ps.url);
+      if (centralDb) {
+        try {
+          await centralDb.deleteRssSource(ps.id).catch(() => {});
+          if (centralDb.cache?.rssSources) centralDb.cache.rssSources.delete(ps.id);
+        } catch {}
+      }
+      try {
+        const adapter = require("./server_firestore_adapter.cjs");
+        if (adapter && typeof adapter.firestoreDeleteDoc === 'function') {
+          await adapter.firestoreDeleteDoc("rss_sources", ps.id).catch(() => {});
+        }
+      } catch {}
+    }
+    saveRssSourcesDatabase(sources);
+
+    // Purge test posts from news database
+    let posts = loadNewsDatabase();
+    const prevCount = posts.length;
+    posts = posts.filter((p) => !isDummyWirePost(p));
+    saveNewsDatabase(posts);
+
+    return res.json({
+      success: true,
+      purgedSourcesCount: purgedSources.length,
+      purgedPostsCount: prevCount - posts.length,
+      sources,
+    });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }

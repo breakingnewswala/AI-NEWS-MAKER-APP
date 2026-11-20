@@ -109,6 +109,9 @@ import {
   addAdminRssSource,
   toggleAdminRssSource,
   deleteAdminRssSource,
+  deleteAdminRssSourceAsync,
+  purgeAllTestRssSourcesAsync,
+  purgeDeletedRssSourcePostsLocal,
   syncAllSourcesLive,
   scrapeAllWebSourcesLive,
   getSavedNewsChannels,
@@ -881,6 +884,22 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [newSourceCategory, setNewSourceCategory] = useState<string>('देश');
   const [rssMsg, setRssMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isSyncingRss, setIsSyncingRss] = useState<boolean>(false);
+  const [deletingSourceId, setDeletingSourceId] = useState<string | null>(null);
+  const [isPurgingTestWires, setIsPurgingTestWires] = useState<boolean>(false);
+
+  const handlePurgeAllTestWires = async () => {
+    setIsPurgingTestWires(true);
+    setRssMsg(null);
+    try {
+      const remaining = await purgeAllTestRssSourcesAsync();
+      setRssSources(remaining);
+      setRssMsg({ type: 'success', text: 'सभी डमी व टेस्ट वायर फ़ीड्स और पोस्ट्स सफलतापूर्वक साफ़ कर दी गईं।' });
+    } catch (e: any) {
+      setRssMsg({ type: 'error', text: 'टेस्ट फ़ीड्स साफ़ करने में त्रुटि: ' + (e?.message || 'अज्ञात त्रुटि') });
+    } finally {
+      setIsPurgingTestWires(false);
+    }
+  };
 
   // RSS Two Sections State: 'dashboard' | 'converter'
   const [rssActiveSection, setRssActiveSection] = useState<'dashboard' | 'converter'>('dashboard');
@@ -5672,10 +5691,22 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
           {/* RSS Sources List */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
-            <h4 className="text-sm font-black text-white flex items-center gap-2">
-              <Rss className="w-4 h-4 text-orange-400" />
-              <span>सक्रिय RSS 2.0 फ़ीड्स सूची ({rssSources.filter(s => s.type === 'rss').length})</span>
-            </h4>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-800/80">
+              <h4 className="text-sm font-black text-white flex items-center gap-2">
+                <Rss className="w-4 h-4 text-orange-400" />
+                <span>सक्रिय RSS 2.0 फ़ीड्स सूची ({rssSources.filter(s => s.type === 'rss').length})</span>
+              </h4>
+              <button
+                type="button"
+                onClick={handlePurgeAllTestWires}
+                disabled={isPurgingTestWires}
+                className="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 text-xs font-black flex items-center gap-1.5 transition shadow-sm cursor-pointer disabled:opacity-50 self-start sm:self-auto"
+                title="सभी डमी/परीक्षण फ़ीड्स और वायर पोस्ट हटाएं"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                <span>{isPurgingTestWires ? 'साफ़ हो रहा है...' : 'डमी / टेस्ट फ़ीड्स साफ़ करें (Purge All Test Wires)'}</span>
+              </button>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
                 <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] font-bold">
@@ -5727,16 +5758,25 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         <button
                           type="button"
                           onClick={async () => {
-                            if (confirm(`क्या आप RSS स्रोत "${s.name}" हटाना चाहते हैं?`)) {
-                              await deleteAdminRssSourceAsync(s.id);
+                            if (deletingSourceId === s.id) {
+                              setDeletingSourceId(null);
+                              await deleteAdminRssSourceAsync(s.id, s.url, s.name);
                               const updated = await fetchAdminRssSourcesFromBackend();
                               setRssSources(updated);
+                              setRssMsg({ type: 'success', text: `स्रोत "${s.name}" हटा दिया गया।` });
+                            } else {
+                              setDeletingSourceId(s.id);
                             }
                           }}
-                          className="p-1 text-slate-500 hover:text-rose-400 transition cursor-pointer"
-                          title="हटाएं"
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer inline-flex items-center gap-1.5 ${
+                            deletingSourceId === s.id
+                              ? 'bg-rose-600 text-white border-rose-400 shadow-md animate-pulse ring-2 ring-rose-400/50'
+                              : 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border-rose-500/40 hover:text-white'
+                          }`}
+                          title="RSS फ़ीड हटाएं"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+                          <span>{deletingSourceId === s.id ? 'पुष्टि करें (हटाएं)' : 'हटाएं'}</span>
                         </button>
                       </td>
                     </tr>
@@ -6255,15 +6295,25 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         <button
                           type="button"
                           onClick={async () => {
-                            if (confirm(`क्या आप वेब लिंक "${s.name}" हटाना चाहते हैं?`)) {
-                              await deleteAdminRssSourceAsync(s.id);
+                            if (deletingSourceId === s.id) {
+                              setDeletingSourceId(null);
+                              await deleteAdminRssSourceAsync(s.id, s.url, s.name);
                               const updated = await fetchAdminRssSourcesFromBackend();
                               setRssSources(updated);
+                              setRssMsg({ type: 'success', text: `वेब लिंक "${s.name}" हटा दिया गया।` });
+                            } else {
+                              setDeletingSourceId(s.id);
                             }
                           }}
-                          className="px-2 py-1 text-red-400 hover:bg-red-950/50 rounded cursor-pointer"
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer inline-flex items-center gap-1.5 ${
+                            deletingSourceId === s.id
+                              ? 'bg-rose-600 text-white border-rose-400 shadow-md animate-pulse ring-2 ring-rose-400/50'
+                              : 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border-rose-500/40 hover:text-white'
+                          }`}
+                          title="वेब लिंक हटाएं"
                         >
-                          हटाएँ
+                          <Trash2 className="w-3.5 h-3.5 shrink-0 text-rose-400" />
+                          <span>{deletingSourceId === s.id ? 'पुष्टि करें (हटाएं)' : 'हटाएं'}</span>
                         </button>
                       </td>
                     </tr>

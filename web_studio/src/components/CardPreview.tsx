@@ -3637,52 +3637,23 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
                 return badgeAsset ? (
                   <div
-                    className="absolute pointer-events-auto flex items-center justify-center font-bold px-3 shadow-md"
+                    className="absolute pointer-events-auto flex items-center justify-center font-bold shadow-md select-none"
                     style={{
                       left: `${df.headerConfig.locationRect?.x ?? 5}%`,
                       top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
                       width: locWidth,
                       maxWidth: '85%',
                       height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
-                      backgroundColor: locBgColor,
-                      borderRadius: locBorderRadius,
-                      border: locBorder,
-                      backgroundImage: safeBadgeUrl ? `url("${safeBadgeUrl}")` : undefined,
-                      backgroundSize: '100% 100%',
-                      backgroundPosition: 'center',
-                      backgroundRepeat: 'no-repeat',
-                      color: locColor,
-                      fontFamily: card.locationFont || df.headerConfig.typographyConfig?.fontFamily || 'Baloo 2',
-                      fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 22) * previewScale * 1.1))}px`,
+                      transform: (df.headerConfig.locationRotation ?? 0) !== 0 ? `rotate(${df.headerConfig.locationRotation}deg)` : undefined,
+                      transformOrigin: 'center center',
                     }}
                   >
-                    {df.headerConfig.locationShowIcon !== false && (
-                      <MapPin className="w-3.5 h-3.5 mr-1 inline shrink-0" style={{ color: locColor }} />
-                    )}
-                    {df.headerConfig.textRegion ? (
-                      <div
-                        className="absolute flex items-center overflow-hidden"
-                        style={{
-                          left: `${df.headerConfig.textRegion.x}%`,
-                          top: `${df.headerConfig.textRegion.y}%`,
-                          width: `${df.headerConfig.textRegion.width}%`,
-                          height: `${df.headerConfig.textRegion.height}%`,
-                          justifyContent: df.headerConfig.typographyConfig?.align === 'left' ? 'flex-start' : df.headerConfig.typographyConfig?.align === 'right' ? 'flex-end' : 'center',
-                        }}
-                      >
-                        <span
-                          className="truncate"
-                          style={{
-                            color: locColor,
-                            fontFamily: df.headerConfig.typographyConfig?.fontFamily ? `"${df.headerConfig.typographyConfig.fontFamily}", sans-serif` : undefined,
-                            fontWeight: df.headerConfig.typographyConfig?.weight || 800,
-                            fontSize: `${Math.max(9, Math.round((df.headerConfig.typographyConfig?.fontSize || df.headerConfig.locationFontSize || 20) * previewScale))}px`,
-                          }}
-                        >
-                          {cleanLoc}
-                        </span>
-                      </div>
-                    ) : (
+                    <div className="relative flex items-center justify-center h-full w-full">
+                      <img
+                        src={safeBadgeUrl || badgeAsset}
+                        alt="Location Badge"
+                        className="h-full w-full object-contain"
+                      />
                       <div
                         className="absolute inset-y-0 flex items-center justify-center overflow-hidden"
                         style={{
@@ -3691,18 +3662,18 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                         }}
                       >
                         <span
-                          className="truncate"
+                          className="truncate shadow-xs"
                           style={{
                             color: locColor,
-                            fontFamily: df.headerConfig.typographyConfig?.fontFamily ? `"${df.headerConfig.typographyConfig.fontFamily}", sans-serif` : undefined,
+                            fontFamily: card.locationFont || df.headerConfig.typographyConfig?.fontFamily || 'Baloo 2',
                             fontWeight: df.headerConfig.typographyConfig?.weight || 800,
-                            fontSize: `${Math.max(9, Math.round((df.headerConfig.typographyConfig?.fontSize || df.headerConfig.locationFontSize || 20) * previewScale))}px`,
+                            fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 22) * previewScale))}px`,
                           }}
                         >
                           {cleanLoc}
                         </span>
                       </div>
-                    )}
+                    </div>
                   </div>
                 ) : (
                   <div
@@ -3870,17 +3841,17 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   }
                   const effectiveCalloutText = (card.calloutTag && card.calloutTag.trim()) || (df.fullStoryCalloutConfig.text && df.fullStoryCalloutConfig.text.trim()) || '';
                   if (!calloutUrl && !effectiveCalloutText) return null;
-                  if (!calloutUrl || calloutImgError) return null;
 
                   const calloutRawY = df.fullStoryCalloutConfig?.rect?.y ?? 85;
                   const calloutRawH = df.fullStoryCalloutConfig?.rect?.height ?? 3.5;
                   const footerH = df.footerConfig?.rect?.height ?? 8;
                   const maxBottomY = 100 - footerH - 0.5;
                   const calloutY = Math.min(calloutRawY, maxBottomY - calloutRawH);
+                  const isImageMode = Boolean(calloutUrl && !calloutImgError && df.fullStoryCalloutConfig?.calloutAssetMode !== 'styled_box');
 
                   return (
                     <div
-                      className="absolute pointer-events-auto flex items-center justify-center"
+                      className="absolute pointer-events-auto flex items-center justify-center select-none"
                       style={{
                         left: `${df.fullStoryCalloutConfig?.rect?.x ?? 10}%`,
                         top: `${calloutY}%`,
@@ -3890,12 +3861,27 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                         transformOrigin: 'center center',
                       }}
                     >
-                      <img
-                        src={calloutUrl}
-                        alt="Callout"
-                        className="w-full h-full object-contain"
-                        onError={() => setCalloutImgError(true)}
-                      />
+                      {isImageMode ? (
+                        <img
+                          src={calloutUrl}
+                          alt="Callout"
+                          className="w-full h-full object-contain"
+                          onError={() => setCalloutImgError(true)}
+                        />
+                      ) : (
+                        <div
+                          className="font-black px-3 py-0.5 rounded-lg shadow-md flex items-center justify-center gap-1.5 whitespace-nowrap max-w-full overflow-hidden"
+                          style={{
+                            color: df.fullStoryCalloutConfig?.textColor || '#FFFFFF',
+                            backgroundColor: df.fullStoryCalloutConfig?.bgColor || '#DC2626',
+                            border: `${df.fullStoryCalloutConfig?.borderWidth ?? 1}px solid ${df.fullStoryCalloutConfig?.borderColor || '#FACC15'}`,
+                            fontSize: `${Math.max(10, Math.round((df.fullStoryCalloutConfig?.fontSize || 18) * previewScale))}px`,
+                          }}
+                        >
+                          {df.fullStoryCalloutConfig?.showIcon !== false && <span>📢</span>}
+                          <span className="truncate">{effectiveCalloutText || 'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें'}</span>
+                        </div>
+                      )}
                     </div>
                   );
                 })()

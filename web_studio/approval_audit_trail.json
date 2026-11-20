@@ -4,6 +4,46 @@
     "adminRole": "superadmin",
     "articleId": "s3_story_01",
     "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795142124627,
+    "publicationTimestamp": 1795142124627,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795142115322,
+    "publicationTimestamp": 1795142115322,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795122780785,
+    "publicationTimestamp": 1795122780785,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "test_approval_id_99",
+    "approvalStatus": "APPROVED",
+    "approvalTimestamp": 1795122769683,
+    "publicationTimestamp": 1795122769683,
+    "sourceType": "manual",
+    "sourceUrl": ""
+  },
+  {
+    "adminUserId": "breakingnewswala.com@gmail.com",
+    "adminRole": "superadmin",
+    "articleId": "s3_story_01",
+    "approvalStatus": "APPROVED",
     "approvalTimestamp": 1795049519255,
     "publicationTimestamp": 1795049519255,
     "sourceType": "manual",

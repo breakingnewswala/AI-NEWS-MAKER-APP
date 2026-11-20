@@ -15336,9 +15336,11 @@ function isArticleDeletedByTombstone(article, tombstones) {
 }
 function isDummyWirePost(p) {
   if (!p) return true;
-  const channel = String(p.channelName || p.source || "").toLowerCase();
+  const channel = String(p.sourceChannel || p.channelName || p.source || "").toLowerCase();
   const id = String(p.id || "").toLowerCase();
-  if (channel.includes("wire") || channel.includes("e2e") || id.includes("wire") || id.startsWith("test_")) {
+  const title = String(p.title || p.headline || "").toLowerCase();
+  const fullText = `${title} ${channel} ${id}`;
+  if (channel.includes("wire") || channel.includes("e2e") || id.includes("wire") || id.startsWith("test_") || fullText.includes("s3 wire") || fullText.includes("e2e wire") || fullText.includes("unreachable feed") || fullText.includes("ssrf feed") || fullText.includes("grand theft auto") || fullText.includes("voyager 1") || fullText.includes("russell brand") || fullText.includes("fantasy football")) {
     return true;
   }
   return false;
@@ -15631,7 +15633,7 @@ app.get("/api/news-posts", async (req, res) => {
       ) || Array.from(deletedSourceIds).some(
         (dId) => p.id.startsWith(`rss-${dId}-`) || p.id.startsWith(`web-${dId}-`) || dId.startsWith("src_") && (p.id.startsWith(`rss-${dId.replace(/^src_/, "")}-`) || p.id.startsWith(`web-${dId.replace(/^src_/, "")}-`))
       );
-      if (isExplicitlyDeleted && !isAdmin) {
+      if (isExplicitlyDeleted) {
         return false;
       }
       const hasExplicitAdminApproval = isServerApprovedAndPublished(p, editorialDb);
@@ -22457,14 +22459,67 @@ app.delete(["/api/admin/delete-rss-source/:id", "/api/admin/rss-sources/:id"], r
     } catch {
     }
     let posts = loadNewsDatabase();
+    const prevPostCount = posts.length;
     posts = posts.filter((p) => {
       if (p.id.startsWith(`rss-${id}`) || p.id.startsWith(`web-${id}`)) return false;
       if (p.id.startsWith(`rss-${matchedId}`) || p.id.startsWith(`web-${matchedId}`)) return false;
-      if (targetSource?.url && p.sourceUrl === targetSource.url) return false;
+      if (p.sourceId === id || p.sourceId === matchedId) return false;
+      if (targetSource?.url && (p.sourceFeedUrl === targetSource.url || p.sourceUrl === targetSource.url)) return false;
+      if (targetSource?.name && (p.sourceChannel === targetSource.name || p.channelName === targetSource.name)) return false;
       return true;
     });
     saveNewsDatabase(posts);
-    return res.json({ success: true, sources });
+    return res.json({ success: true, sources, cleanedPostsCount: prevPostCount - posts.length });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.post("/api/admin/purge-test-rss-sources", requireAdminMiddleware, async (req, res) => {
+  try {
+    if (!verifyIsAdminUser(req)) {
+      return res.status(403).json({ error: "\u0905\u0928\u0927\u093F\u0915\u0943\u0924: \u091F\u0947\u0938\u094D\u091F RSS \u092B\u093C\u0940\u0921\u094D\u0938 \u0938\u093E\u092B\u093C \u0915\u0930\u0928\u093E \u0915\u0947\u0935\u0932 \u090F\u0921\u092E\u093F\u0928 \u0915\u0947 \u0932\u093F\u090F \u0905\u0928\u0941\u092E\u0924 \u0939\u0948\u0964" });
+    }
+    let sources = loadRssSourcesDatabase();
+    const testKeywords = ["wire", "e2e", "s3 wire", "unreachable", "ssrf", "test_", "dummy", "voyager", "russell"];
+    const isTestSource = (s) => {
+      const name = String(s.name || "").toLowerCase();
+      const url = String(s.url || "").toLowerCase();
+      const id = String(s.id || "").toLowerCase();
+      return testKeywords.some((kw) => name.includes(kw) || url.includes(kw) || id.includes(kw));
+    };
+    const purgedSources = sources.filter(isTestSource);
+    sources = sources.filter((s) => !isTestSource(s));
+    for (const ps of purgedSources) {
+      recordDeletedRssSourceId(ps.id);
+      if (ps.url) recordDeletedRssSourceId(ps.url);
+      if (centralDb) {
+        try {
+          await centralDb.deleteRssSource(ps.id).catch(() => {
+          });
+          if (centralDb.cache?.rssSources) centralDb.cache.rssSources.delete(ps.id);
+        } catch {
+        }
+      }
+      try {
+        const adapter = require_server_firestore_adapter();
+        if (adapter && typeof adapter.firestoreDeleteDoc === "function") {
+          await adapter.firestoreDeleteDoc("rss_sources", ps.id).catch(() => {
+          });
+        }
+      } catch {
+      }
+    }
+    saveRssSourcesDatabase(sources);
+    let posts = loadNewsDatabase();
+    const prevCount = posts.length;
+    posts = posts.filter((p) => !isDummyWirePost(p));
+    saveNewsDatabase(posts);
+    return res.json({
+      success: true,
+      purgedSourcesCount: purgedSources.length,
+      purgedPostsCount: prevCount - posts.length,
+      sources
+    });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }

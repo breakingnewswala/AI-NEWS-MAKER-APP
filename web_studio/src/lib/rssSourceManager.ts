@@ -307,10 +307,43 @@ export function toggleAdminRssSource(id: string): AdminRssSource[] {
   return list;
 }
 
-export function deleteAdminRssSource(id: string): AdminRssSource[] {
+export function purgeDeletedRssSourcePostsLocal(id: string, url?: string, name?: string) {
+  if (typeof window === 'undefined') return;
+  const keys = ['app_news_posts_v2', 'ai_news_admin_synced_rss_posts_v1', 'ai_news_synced_rss_posts_v2'];
+  const normUrl = (url || '').toLowerCase().trim();
+  const normName = (name || '').toLowerCase().trim();
+  keys.forEach((key) => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return;
+      const filtered = parsed.filter((p: any) => {
+        if (!p) return false;
+        const pid = String(p.id || '');
+        if (pid.startsWith(`rss-${id}`) || pid.startsWith(`web-${id}`)) return false;
+        if (p.sourceId === id) return false;
+        if (normUrl && ((p.sourceFeedUrl && String(p.sourceFeedUrl).toLowerCase().trim() === normUrl) || (p.sourceUrl && String(p.sourceUrl).toLowerCase().trim() === normUrl))) return false;
+        if (normName && ((p.sourceChannel && String(p.sourceChannel).toLowerCase().trim() === normName) || (p.channelName && String(p.channelName).toLowerCase().trim() === normName))) return false;
+        return true;
+      });
+      if (filtered.length !== parsed.length) {
+        localStorage.setItem(key, JSON.stringify(filtered));
+      }
+    } catch {}
+  });
+}
+
+export function deleteAdminRssSource(id: string, url?: string, name?: string): AdminRssSource[] {
   addDeletedSourceId(id);
+  if (url) addDeletedSourceId(url);
+  const target = getAdminRssSources().find((s) => s.id === id);
+  const effectiveUrl = url || target?.url;
+  const effectiveName = name || target?.name;
   const list = getAdminRssSources().filter((s) => s.id !== id);
   saveAdminRssSources(list);
+  purgeDeletedRssSourcePostsLocal(id, effectiveUrl, effectiveName);
+
   getAdminAuthHeadersAsync().then((authHeaders) => {
     fetch(getApiUrl(`/api/admin/delete-rss-source/${encodeURIComponent(id)}`), {
       method: 'DELETE',
@@ -327,9 +360,15 @@ export function deleteAdminRssSource(id: string): AdminRssSource[] {
   return list;
 }
 
-export async function deleteAdminRssSourceAsync(id: string): Promise<AdminRssSource[]> {
+export async function deleteAdminRssSourceAsync(id: string, url?: string, name?: string): Promise<AdminRssSource[]> {
   addDeletedSourceId(id);
+  if (url) addDeletedSourceId(url);
+  const target = getAdminRssSources().find((s) => s.id === id);
+  const effectiveUrl = url || target?.url;
+  const effectiveName = name || target?.name;
   let list = getAdminRssSources().filter((s) => s.id !== id);
+  purgeDeletedRssSourcePostsLocal(id, effectiveUrl, effectiveName);
+
   try {
     const authHeaders = await getAdminAuthHeadersAsync();
     const token = await ensureAuthToken().catch(() => '');
@@ -358,6 +397,75 @@ export async function deleteAdminRssSourceAsync(id: string): Promise<AdminRssSou
     window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
   }
   return list;
+}
+
+export async function purgeAllTestRssSourcesAsync(): Promise<AdminRssSource[]> {
+  const testKeywords = ['wire', 'e2e', 's3 wire', 'unreachable', 'ssrf', 'test_', 'dummy', 'voyager', 'russell'];
+  const isWire = (val?: string) => {
+    const s = String(val || '').toLowerCase();
+    return testKeywords.some((kw) => s.includes(kw));
+  };
+
+  const currentSources = getAdminRssSources();
+  const purged = currentSources.filter((s) => isWire(s.name) || isWire(s.url) || isWire(s.id));
+  purged.forEach((s) => {
+    addDeletedSourceId(s.id);
+    if (s.url) addDeletedSourceId(s.url);
+    purgeDeletedRssSourcePostsLocal(s.id, s.url, s.name);
+  });
+
+  let remaining = currentSources.filter((s) => !isWire(s.name) && !isWire(s.url) && !isWire(s.id));
+  saveAdminRssSources(remaining);
+
+  // Clean local dummy posts across all storage keys
+  if (typeof window !== 'undefined') {
+    ['app_news_posts_v2', 'ai_news_admin_synced_rss_posts_v1', 'ai_news_synced_rss_posts_v2'].forEach((key) => {
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const list = JSON.parse(raw);
+          if (Array.isArray(list)) {
+            const cleaned = list.filter((p: any) => {
+              if (!p) return false;
+              const text = `${p.title || p.headline || ''} ${p.sourceChannel || p.channelName || ''} ${p.id || ''}`;
+              return !isWire(text) && /[\u0900-\u097F]/.test(p.title || p.headline || '');
+            });
+            localStorage.setItem(key, JSON.stringify(cleaned));
+          }
+        }
+      } catch {}
+    });
+  }
+
+  // Call backend purge endpoint
+  try {
+    const authHeaders = await getAdminAuthHeadersAsync();
+    const token = await ensureAuthToken().catch(() => '');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-user-role': 'admin',
+      ...authHeaders,
+    };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(getApiUrl('/api/admin/purge-test-rss-sources'), {
+      method: 'POST',
+      headers,
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => null);
+      if (data && data.success && Array.isArray(data.sources)) {
+        remaining = data.sources;
+        saveAdminRssSources(remaining);
+      }
+    }
+  } catch (e) {
+    console.warn('Backend purge-test-rss-sources warning:', e);
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+  }
+  return remaining;
 }
 
 const STORAGE_KEY_SYNCED_RSS_POSTS = 'ai_news_synced_rss_posts_v2';

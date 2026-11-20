@@ -179,15 +179,15 @@ function removeFakeCheckerboardFromCanvas(
 }
 
 export const HIGHLIGHT_COLOR_PRESETS = [
-  { label: 'डिफ़ॉल्ट पीला (Yellow)', value: '#FFE600' },
-  { label: 'लाल (Red)', value: '#EF4444' },
-  { label: 'सफेद (White)', value: '#FFFFFF' },
-  { label: 'सियान (Cyan)', value: '#06B6D4' },
-  { label: 'लाइम (Lime)', value: '#84CC16' },
-  { label: 'नारंगी (Orange)', value: '#F97316' },
-  { label: 'बैंगनी (Purple)', value: '#A855F7' },
-  { label: 'गुलाबी (Pink)', value: '#EC4899' },
-  { label: 'एमराल्ड (Emerald)', value: '#10B981' },
+  { color: '#FFE600', value: '#FFE600', label: 'पीला (Default)', bg: 'bg-[#FFE600]', text: 'text-neutral-900' },
+  { color: '#EF4444', value: '#EF4444', label: 'लाल (Red)', bg: 'bg-red-500', text: 'text-white' },
+  { color: '#FFFFFF', value: '#FFFFFF', label: 'सफ़ेद (White)', bg: 'bg-white', text: 'text-neutral-900' },
+  { color: '#06B6D4', value: '#06B6D4', label: 'आसमानी (Cyan)', bg: 'bg-cyan-500', text: 'text-white' },
+  { color: '#84CC16', value: '#84CC16', label: 'हरा (Lime)', bg: 'bg-lime-500', text: 'text-neutral-900' },
+  { color: '#F97316', value: '#F97316', label: 'नारंगी (Orange)', bg: 'bg-orange-500', text: 'text-white' },
+  { color: '#A855F7', value: '#A855F7', label: 'बैंगनी (Purple)', bg: 'bg-purple-500', text: 'text-white' },
+  { color: '#EC4899', value: '#EC4899', label: 'गुलाबी (Pink)', bg: 'bg-pink-500', text: 'text-white' },
+  { color: '#10B981', value: '#10B981', label: 'पन्ना (Emerald)', bg: 'bg-emerald-500', text: 'text-white' },
 ];
 
 interface DynamicFrameGeneratorModalProps {
@@ -2497,12 +2497,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
               badgeDrawn = true;
 
               const locText = dummyLocation || 'भोपाल';
-              let locColor = headerConfig.locationTextColor;
-              if (!locColor || locColor.toUpperCase() === '#FFFFFF') {
-                locColor = libBadge?.typographyConfig?.textColor || '#000000';
-              } else if (!locColor && badgeAsset) {
-                locColor = '#000000';
-              }
+              let locColor = headerConfig.locationTextColor || libBadge?.typographyConfig?.textColor || '#FFFFFF';
 
               // Text placed inside center stretchable compartment (never overlapping left pin)
               const tx = bx + leftDestW;
@@ -4541,7 +4536,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                                   <div className="absolute right-1.5 left-[28%] flex items-center justify-center overflow-hidden h-full">
                                     <span
                                       className="text-[9px] font-black truncate"
-                                      style={{ color: headerConfig.locationTextColor || '#000000' }}
+                                      style={{ color: headerConfig.locationTextColor || '#FFFFFF' }}
                                     >
                                       {dummyLocation || 'भोपाल'}
                                     </span>
@@ -6789,39 +6784,27 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-slate-400 block mb-0.5">प्राइमरी हाईलाइट रंग</label>
-                            <div className="flex items-center gap-1.5">
-                              <input
-                                type="color"
-                                value={textSlots[0]?.highlightColor || '#FFE600'}
-                                onChange={(e) => setTextSlots((prev) => prev.map((s, i) => (i === 0 ? { ...s, highlightColor: e.target.value } : s)))}
-                                className="w-10 h-8 bg-slate-900 rounded cursor-pointer shrink-0"
-                              />
-                              <input
-                                type="text"
-                                value={textSlots[0]?.highlightColor || '#FFE600'}
-                                onChange={(e) => setTextSlots((prev) => prev.map((s, i) => (i === 0 ? { ...s, highlightColor: e.target.value } : s)))}
-                                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white font-mono text-xs"
-                              />
-                            </div>
-                            {/* Centralized Highlight Color Chips (Part 5) */}
-                            <div className="flex flex-wrap gap-1 mt-1.5">
-                              {HIGHLIGHT_COLOR_PRESETS.map((p) => (
-                                <button
-                                  key={p.value}
-                                  type="button"
-                                  onClick={() => setTextSlots((prev) => prev.map((s, i) => (i === 0 ? { ...s, highlightColor: p.value } : s)))}
-                                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold flex items-center gap-1 border transition cursor-pointer ${
-                                    (textSlots[0]?.highlightColor || '#FFE600').toLowerCase() === p.value.toLowerCase()
-                                      ? 'border-amber-400 bg-amber-400/20 text-white font-black shadow'
-                                      : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500'
-                                  }`}
-                                  title={p.label}
-                                >
-                                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: p.value }} />
-                                  <span>{p.label.split(' ')[0]}</span>
-                                </button>
-                              ))}
+                            <label className="text-[10px] text-slate-300 font-bold block mb-1">प्राइमरी हाइलाइट रंग (Highlight Color Palette)</label>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {HIGHLIGHT_COLOR_PRESETS.map((hc) => {
+                                const isSel = (textSlots[0]?.highlightColor || '#FFE600').toUpperCase() === hc.color.toUpperCase();
+                                return (
+                                  <button
+                                    key={hc.color}
+                                    type="button"
+                                    onClick={() => setTextSlots((prev) => prev.map((s, i) => (i === 0 ? { ...s, highlightColor: hc.color } : s)))}
+                                    className={`px-2 py-1 rounded text-[10px] font-bold border transition cursor-pointer flex items-center gap-1 ${
+                                      isSel
+                                        ? 'ring-2 ring-amber-400 font-black scale-105 shadow-md border-amber-400'
+                                        : 'border-slate-700 opacity-80 hover:opacity-100 hover:border-slate-500'
+                                    } ${hc.bg} ${hc.text}`}
+                                    title={hc.label}
+                                  >
+                                    <span>{hc.label}</span>
+                                    {isSel && <span className="font-black text-xs">✓</span>}
+                                  </button>
+                                );
+                              })}
                             </div>
                           </div>
                           <div>
@@ -7064,29 +7047,31 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       </div>
 
                       <div>
-                        <label className="text-[10px] text-slate-400 block mb-0.5">प्राइमरी हाईलाइट रंग</label>
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="color"
-                            value={slot.highlightColor || '#FFE600'}
-                            onChange={(e) =>
-                              setTextSlots((prev) =>
-                                prev.map((s) => (s.id === slot.id ? { ...s, highlightColor: e.target.value } : s))
-                              )
-                            }
-                            className="w-10 h-8 bg-slate-900 rounded cursor-pointer shrink-0"
-                          />
-                          <input
-                            type="text"
-                            value={slot.highlightColor || '#FFE600'}
-                            onChange={(e) =>
-                              setTextSlots((prev) =>
-                                prev.map((s) => (s.id === slot.id ? { ...s, highlightColor: e.target.value } : s))
-                              )
-                            }
-                            placeholder="#FFE600"
-                            className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white font-mono text-xs"
-                          />
+                        <label className="text-[10px] text-slate-300 font-bold block mb-1">हाइलाइट रंग (Highlight Color Palette)</label>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {HIGHLIGHT_COLOR_PRESETS.map((hc) => {
+                            const isSel = (slot.highlightColor || '#FFE600').toUpperCase() === hc.color.toUpperCase();
+                            return (
+                              <button
+                                key={hc.color}
+                                type="button"
+                                onClick={() =>
+                                  setTextSlots((prev) =>
+                                    prev.map((s) => (s.id === slot.id ? { ...s, highlightColor: hc.color } : s))
+                                  )
+                                }
+                                className={`px-2 py-1 rounded text-[10px] font-bold border transition cursor-pointer flex items-center gap-1 ${
+                                  isSel
+                                    ? 'ring-2 ring-amber-400 font-black scale-105 shadow-md border-amber-400'
+                                    : 'border-slate-700 opacity-80 hover:opacity-100 hover:border-slate-500'
+                                } ${hc.bg} ${hc.text}`}
+                                title={hc.label}
+                              >
+                                <span>{hc.label}</span>
+                                {isSel && <span className="font-black text-xs">✓</span>}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
 
@@ -7702,9 +7687,7 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                                 <span
                                   className="text-[8px] font-black truncate shadow-xs"
                                   style={{
-                                    color: (headerConfig.locationTextColor && headerConfig.locationTextColor.toUpperCase() !== '#FFFFFF')
-                                      ? headerConfig.locationTextColor
-                                      : '#000000',
+                                    color: headerConfig.locationTextColor || '#FFFFFF',
                                   }}
                                 >
                                   {dummyLocation || 'भोपाल'}
@@ -8470,20 +8453,27 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                       </div>
                     </div>
                     <div>
-                      <label className="text-[10px] text-slate-400 block mb-1">हाईलाइट रंग</label>
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="color"
-                          value={slot.highlightColor || '#FFE600'}
-                          onChange={(e) => updateSlot({ highlightColor: e.target.value })}
-                          className="w-7 h-7 bg-slate-900 rounded cursor-pointer shrink-0"
-                        />
-                        <input
-                          type="text"
-                          value={slot.highlightColor || '#FFE600'}
-                          onChange={(e) => updateSlot({ highlightColor: e.target.value })}
-                          className="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-white font-mono text-[11px]"
-                        />
+                      <label className="text-[10px] text-slate-300 font-bold block mb-1.5">हाइलाइट रंग (Highlight Color Palette)</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {HIGHLIGHT_COLOR_PRESETS.map((hc) => {
+                          const isSel = (slot.highlightColor || '#FFE600').toUpperCase() === hc.color.toUpperCase();
+                          return (
+                            <button
+                              key={hc.color}
+                              type="button"
+                              onClick={() => updateSlot({ highlightColor: hc.color })}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                                isSel
+                                  ? 'ring-2 ring-amber-400 font-black scale-105 shadow-md border-amber-400'
+                                  : 'border-slate-700 opacity-80 hover:opacity-100 hover:border-slate-500'
+                              } ${hc.bg} ${hc.text}`}
+                              title={hc.label}
+                            >
+                              <span>{hc.label}</span>
+                              {isSel && <span className="font-black text-xs">✓</span>}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                     <div>

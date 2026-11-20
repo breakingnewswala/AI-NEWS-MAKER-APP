@@ -3324,7 +3324,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 सर्वर से प्राधिकृत समाचार प्राप्त किए जा रहे हैं।
               </p>
             </div>
-          ) : feedStatus === 'error' ? (
+          ) : (feedStatus === 'error' && filteredPosts.length === 0) ? (
             <div className="flex flex-col items-center justify-center py-16 px-6 text-center bg-rose-950/20 border border-rose-800/40 rounded-2xl shadow-inner my-4">
               <div className="w-16 h-16 rounded-full bg-rose-900/30 border border-rose-700/50 flex items-center justify-center mb-4 text-rose-400">
                 <AlertCircle className="w-8 h-8" />

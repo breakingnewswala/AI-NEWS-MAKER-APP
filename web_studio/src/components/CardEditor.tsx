@@ -411,7 +411,15 @@ export const CardEditor: React.FC<CardEditorProps> = ({
         if (card.frameDesign && !card.customDynamicFrame) {
           const match = dfs.find((d) => d.id === card.frameDesign || d.name === card.frameDesign) || getDynamicFrameById(card.frameDesign);
           if (match) {
-            onChange({ customDynamicFrame: normalizeDynamicFrame(match) });
+            const extra: any = { customDynamicFrame: normalizeDynamicFrame(match) };
+            if (match.headerConfig?.locationTextColor && !card.locationTextColor) extra.locationTextColor = match.headerConfig.locationTextColor;
+            if (match.headerConfig?.locationBgColor && !card.locationBgColor) extra.locationBgColor = match.headerConfig.locationBgColor;
+            if (match.headerConfig?.showLocation !== undefined && card.showLocation === undefined) extra.showLocation = match.headerConfig.showLocation !== false;
+            if (match.fullStoryCalloutConfig?.enabled && !card.showCallout) {
+              extra.showCallout = true;
+              if (match.fullStoryCalloutConfig.text) extra.calloutTag = match.fullStoryCalloutConfig.text;
+            }
+            onChange(extra);
           }
         }
       }
@@ -1990,6 +1998,15 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         updates.selectedLocationBadgeId = locBadgeId;
                         const locAsset = match?.headerConfig?.manualLocationAsset || (match?.headerConfig as any)?.locationBadgeAssetUrl || (match?.headerConfig as any)?.locationBadgeUrl;
                         if (locAsset) updates.customLocationBadgeUrl = locAsset;
+                        if (match?.headerConfig?.locationTextColor) {
+                          updates.locationTextColor = match.headerConfig.locationTextColor;
+                        }
+                        if (match?.headerConfig?.locationBgColor) {
+                          updates.locationBgColor = match.headerConfig.locationBgColor;
+                        }
+                        if (match?.headerConfig?.showLocation !== undefined) {
+                          updates.showLocation = match.headerConfig.showLocation !== false;
+                        }
 
                         if (match?.footerConfig?.footerWidthPct) {
                           updates.footerWidthPct = match.footerConfig.footerWidthPct;
@@ -2268,6 +2285,15 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         updates.selectedLocationBadgeId = locBadgeId;
                         const locAsset = match?.headerConfig?.manualLocationAsset || (match?.headerConfig as any)?.locationBadgeAssetUrl || (match?.headerConfig as any)?.locationBadgeUrl;
                         if (locAsset) updates.customLocationBadgeUrl = locAsset;
+                        if (match?.headerConfig?.locationTextColor) {
+                          updates.locationTextColor = match.headerConfig.locationTextColor;
+                        }
+                        if (match?.headerConfig?.locationBgColor) {
+                          updates.locationBgColor = match.headerConfig.locationBgColor;
+                        }
+                        if (match?.headerConfig?.showLocation !== undefined) {
+                          updates.showLocation = match.headerConfig.showLocation !== false;
+                        }
 
                         if (match?.footerConfig?.footerWidthPct) {
                           updates.footerWidthPct = match.footerConfig.footerWidthPct;
