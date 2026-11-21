@@ -1658,6 +1658,25 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
         const img = new Image();
         img.onload = () => {
           setPrimaryBgDimensions({ width: img.naturalWidth, height: img.naturalHeight });
+          // Optimize oversized artwork (>1080w or >1920h) to standard canvas HD dimensions for instant loading
+          if (img.naturalWidth > 1080 || img.naturalHeight > 1920) {
+            try {
+              const maxW = 1080;
+              const maxH = 1920;
+              const ratio = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
+              const optCanvas = document.createElement('canvas');
+              optCanvas.width = Math.round(img.naturalWidth * ratio);
+              optCanvas.height = Math.round(img.naturalHeight * ratio);
+              const optCtx = optCanvas.getContext('2d');
+              if (optCtx) {
+                optCtx.drawImage(img, 0, 0, optCanvas.width, optCanvas.height);
+                const optDataUrl = optCanvas.toDataURL('image/png');
+                setPrimaryBackgroundAsset(optDataUrl);
+              }
+            } catch (optErr) {
+              console.warn('Canvas artwork optimization fallback:', optErr);
+            }
+          }
           try {
             const canvas = document.createElement('canvas');
             canvas.width = Math.min(img.naturalWidth, 150);

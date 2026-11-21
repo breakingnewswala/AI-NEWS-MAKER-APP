@@ -2864,10 +2864,12 @@ export default function App() {
         fallbackLogo;
 
       // 3. Defensively preserve dynamic frame and location badge config
-      const nextCustomDynamicFrame =
-        updates.customDynamicFrame !== undefined
-          ? updates.customDynamicFrame
-          : prev.customDynamicFrame;
+      let nextCustomDynamicFrame = prev.customDynamicFrame;
+      if ('customDynamicFrame' in updates) {
+        nextCustomDynamicFrame = updates.customDynamicFrame || null;
+      } else if (updates.frameDesign && (updates.frameDesign.startsWith('graphic_') || updates.frameDesign === 'jacket-default')) {
+        nextCustomDynamicFrame = null;
+      }
 
       const nextFrameDesign = updates.frameDesign || prev.frameDesign || 'graphic_001';
 

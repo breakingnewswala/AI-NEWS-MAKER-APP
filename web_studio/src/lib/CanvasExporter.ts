@@ -532,6 +532,11 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
 
   // Load custom logo image if provided, falling back to channel logo or default logo
   let customLogoImg: HTMLImageElement | undefined;
+  const savedProf = typeof getSavedChannelProfile === 'function' ? getSavedChannelProfile() : null;
+  const profileLogo =
+    savedProf?.channelLogoPngUrl ||
+    (savedProf?.channelLogoUrl?.endsWith('.gif') ? '' : savedProf?.channelLogoUrl);
+
   const effectiveLogoUrl =
     card.testLogoUrl ||
     card.customLogoPngUrl ||
@@ -539,6 +544,7 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
     card.channelLogoPngUrl ||
     card.channelLogoUrl ||
     card.activeLogoUrl ||
+    profileLogo ||
     (card as any).channelLogo ||
     (card as any).logoUrl ||
     '/assets/breaking_news_wala_logo.png';
@@ -546,12 +552,12 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
     try {
       customLogoImg = await loadImage(effectiveLogoUrl);
       if (!customLogoImg || customLogoImg.naturalWidth <= 1) {
-        customLogoImg = await loadImage('/assets/ai_news_maker_logo.png').catch(() => undefined);
+        customLogoImg = await loadImage('/assets/breaking_news_wala_logo.png').catch(() => undefined);
       }
     } catch (logoErr) {
       console.warn('Logo load warning:', logoErr);
       try {
-        customLogoImg = await loadImage('/assets/ai_news_maker_logo.png');
+        customLogoImg = await loadImage('/assets/breaking_news_wala_logo.png');
       } catch {}
     }
   }
@@ -1986,14 +1992,17 @@ async function drawAuthoritativeDynamicFrameCanvas(
   // LAYER 2: PANEL B ORIGINAL PNG ARTWORK OVERLAY (Preserving transparency & natural curves)
   const bgArtworkUrl = df.primaryBackgroundAsset;
   if (bgArtworkUrl) {
-    const bgImg = await loadImage(bgArtworkUrl, {
-      isMandatory: true,
-      assetName: 'फ्रेम आर्टवर्क',
-    });
-    if (!bgImg || bgImg.naturalWidth <= 1 || bgImg.naturalHeight <= 1) {
-      throw new Error('अनिवार्य फ्रेम आर्टवर्क लोड नहीं हो सका। कृपया नेटवर्क कनेक्शन जांचें या फ्रेम पुनः चुनें।');
+    try {
+      const bgImg = await loadImage(bgArtworkUrl, {
+        isMandatory: false,
+        assetName: 'फ्रेम आर्टवर्क',
+      });
+      if (bgImg && bgImg.naturalWidth > 1 && bgImg.naturalHeight > 1) {
+        ctx.drawImage(bgImg, 0, 0, width, height);
+      }
+    } catch (bgErr) {
+      console.warn('Dynamic frame artwork overlay load warning, continuing canvas render:', bgErr);
     }
-    ctx.drawImage(bgImg, 0, 0, width, height);
   }
 
   // 2.5 TRANSPARENT OVERLAY ASSET (If configured separately)
@@ -2014,6 +2023,11 @@ async function drawAuthoritativeDynamicFrameCanvas(
     const ly = (lRect.y / 100) * height;
     const lw = (lRect.width / 100) * width;
     const lh = (lRect.height / 100) * height;
+    const savedProf = typeof getSavedChannelProfile === 'function' ? getSavedChannelProfile() : null;
+    const profileLogo =
+      savedProf?.channelLogoPngUrl ||
+      (savedProf?.channelLogoUrl?.endsWith('.gif') ? '' : savedProf?.channelLogoUrl);
+
     const resolvedLogoUrl =
       card.testLogoUrl ||
       card.customLogoPngUrl ||
@@ -2021,10 +2035,11 @@ async function drawAuthoritativeDynamicFrameCanvas(
       card.channelLogoPngUrl ||
       card.channelLogoUrl ||
       card.activeLogoUrl ||
+      profileLogo ||
       (card as any).channelLogo ||
       (card as any).logoUrl ||
       '/assets/breaking_news_wala_logo.png';
-    const logoToDraw = customLogoImg || (resolvedLogoUrl ? await loadImage(resolvedLogoUrl).catch(() => null) : null) || await loadImage('/assets/ai_news_maker_logo.png').catch(() => null);
+    const logoToDraw = customLogoImg || (resolvedLogoUrl ? await loadImage(resolvedLogoUrl).catch(() => null) : null) || await loadImage('/assets/breaking_news_wala_logo.png').catch(() => null);
     if (logoToDraw) {
       ctx.save();
       if (df.headerConfig.logoOpacity !== undefined) {
@@ -2108,17 +2123,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
             ? Math.max(Math.round(width * 0.30), Math.round(rightEdge - dynamicBw))
             : Math.round(bx);
 
-          // Draw custom background color ONLY if explicitly set by user or frame
-          const bgCol = card.locationBgColor || df.headerConfig.locationBgColor;
-          if (bgCol) {
-            ctx.save();
-            ctx.fillStyle = bgCol;
-            ctx.beginPath();
-            ctx.roundRect(actualBx, by, dynamicBw, bh, df.headerConfig.locationStyle === 'box' ? 6 : bh / 2);
-            ctx.fill();
-            ctx.restore();
-          }
-
+          // Do not draw red or solid background behind SVG badge asset: SVG badge contains its own background and curves
           ctx.drawImage(badgeImg, 0, 0, pinW, nh, actualBx, by, leftDestW, bh);
           ctx.drawImage(badgeImg, pinW, 0, midW, nh, actualBx + leftDestW, by, finalCenterW, bh);
           ctx.drawImage(badgeImg, nw - capW, 0, capW, nh, actualBx + leftDestW + finalCenterW, by, rightDestW, bh);
@@ -2127,7 +2132,12 @@ async function drawAuthoritativeDynamicFrameCanvas(
           ctx.fillStyle = locColor;
           ctx.textBaseline = 'middle';
           ctx.textAlign = 'center';
-          ctx.fillText(cleanLocText, textCenterX, by + bh / 2 + 1);
+          const metrics = ctx.measureText(cleanLocText);
+          const ascent = metrics.actualBoundingBoxAscent || (fontSize * 0.7);
+          const descent = metrics.actualBoundingBoxDescent || (fontSize * 0.2);
+          const verticalOffset = (ascent - descent) / 2;
+          const textCenterY = Math.round(by + bh / 2 + verticalOffset);
+          ctx.fillText(cleanLocText, textCenterX, textCenterY);
           ctx.restore();
           badgeDrawn = true;
         }
@@ -2966,16 +2976,7 @@ async function drawGraphic001Canvas(
           const rightEdge = Math.round(width * 0.95);
           const actualBx = Math.max(Math.round(width * 0.30), Math.round(rightEdge - dynamicBw));
 
-          // Draw custom background color ONLY if explicitly set
-          if (card.locationBgColor) {
-            ctx.save();
-            ctx.fillStyle = card.locationBgColor;
-            ctx.beginPath();
-            ctx.roundRect(actualBx, by, dynamicBw, bh, bh / 2);
-            ctx.fill();
-            ctx.restore();
-          }
-
+          // Do not draw red or solid background behind SVG badge asset
           ctx.drawImage(badgeImg, 0, 0, pinW, nh, actualBx, by, leftDestW, bh);
           ctx.drawImage(badgeImg, pinW, 0, midW, nh, actualBx + leftDestW, by, finalCenterW, bh);
           ctx.drawImage(badgeImg, nw - capW, 0, capW, nh, actualBx + leftDestW + finalCenterW, by, rightDestW, bh);
@@ -2984,7 +2985,12 @@ async function drawGraphic001Canvas(
           ctx.fillStyle = card.locationTextColor || '#FFFFFF';
           ctx.textBaseline = 'middle';
           ctx.textAlign = 'center';
-          ctx.fillText(cleanLoc, textCenterX, by + bh / 2 + 1);
+          const metrics = ctx.measureText(cleanLoc);
+          const ascent = metrics.actualBoundingBoxAscent || (fontSize * 0.7);
+          const descent = metrics.actualBoundingBoxDescent || (fontSize * 0.2);
+          const verticalOffset = (ascent - descent) / 2;
+          const textCenterY = Math.round(by + bh / 2 + verticalOffset);
+          ctx.fillText(cleanLoc, textCenterX, textCenterY);
           ctx.restore();
           badgeDrawn = true;
         }

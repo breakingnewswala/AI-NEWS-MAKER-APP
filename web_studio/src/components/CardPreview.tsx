@@ -68,6 +68,10 @@ const DynamicLocationBadgePreview: React.FC<{
   yPct: number;
   rotation?: number;
   isRightAnchored?: boolean;
+  dynamicBw?: number;
+  bh?: number;
+  leftDestW?: number;
+  rightDestW?: number;
 }> = ({
   cleanLoc,
   badgeAsset,
@@ -85,10 +89,20 @@ const DynamicLocationBadgePreview: React.FC<{
   yPct,
   rotation,
   isRightAnchored,
+  dynamicBw,
+  bh,
+  leftDestW,
+  rightDestW,
 }) => {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const [imgLoaded, setImgLoaded] = React.useState(false);
   const [imgError, setImgError] = React.useState(false);
+  const leftSlicePct = sliceConfig?.leftWidthPct ?? 0.28;
+  const rightSlicePct = sliceConfig?.rightWidthPct ?? 0.15;
+  const [offsets, setOffsets] = React.useState({
+    leftPct: leftSlicePct * 100,
+    rightPct: rightSlicePct * 100,
+  });
 
   React.useEffect(() => {
     if (!badgeAsset) {
@@ -134,26 +148,29 @@ const DynamicLocationBadgePreview: React.FC<{
 
       ctx.clearRect(0, 0, cw, ch);
 
-      const leftSlicePct = sliceConfig?.leftWidthPct ?? 0.28;
-      const rightSlicePct = sliceConfig?.rightWidthPct ?? 0.15;
       const pinW = Math.round(nw * leftSlicePct);
       const capW = Math.round(nw * rightSlicePct);
       const midW = Math.max(1, nw - pinW - capW);
 
-      const leftDestW = (pinW / nh) * ch;
-      const rightDestW = (capW / nh) * ch;
-      const midDestW = Math.max(1, cw - leftDestW - rightDestW);
+      const lDestW = leftDestW || (pinW / nh) * ch;
+      const rDestW = rightDestW || (capW / nh) * ch;
+      const midDestW = Math.max(1, cw - lDestW - rDestW);
 
-      ctx.drawImage(img, 0, 0, pinW, nh, 0, 0, leftDestW, ch);
-      ctx.drawImage(img, pinW, 0, midW, nh, leftDestW, 0, midDestW, ch);
-      ctx.drawImage(img, nw - capW, 0, capW, nh, leftDestW + midDestW, 0, rightDestW, ch);
+      ctx.drawImage(img, 0, 0, pinW, nh, 0, 0, lDestW, ch);
+      ctx.drawImage(img, pinW, 0, midW, nh, lDestW, 0, midDestW, ch);
+      ctx.drawImage(img, nw - capW, 0, capW, nh, lDestW + midDestW, 0, rDestW, ch);
+
+      if (cw > 0) {
+        const lp = Number(((lDestW / cw) * 100).toFixed(2));
+        const rp = Number(((rDestW / cw) * 100).toFixed(2));
+        setOffsets({ leftPct: lp, rightPct: rp });
+      }
     };
     img.src = safeUrl;
-  }, [badgeAsset, imgLoaded, sliceConfig, widthPct, heightPct]);
+  }, [badgeAsset, imgLoaded, leftSlicePct, rightSlicePct, widthPct, heightPct, dynamicBw, bh, leftDestW, rightDestW]);
 
   const isBox = styleMode === 'box' || styleMode === 'compact_chip';
   const borderRadius = isBox ? '6px' : '9999px';
-  const fallbackBg = locBgColor && locBgColor !== 'transparent' ? locBgColor : '#DC2626';
 
   const positionStyle: React.CSSProperties = isRightAnchored
     ? {
@@ -184,30 +201,29 @@ const DynamicLocationBadgePreview: React.FC<{
         <div className="relative flex items-center justify-center h-full w-full overflow-hidden" style={{ borderRadius }}>
           <canvas
             ref={canvasRef}
-            width={480}
-            height={60}
+            width={Math.round(dynamicBw || 400)}
+            height={Math.round(bh || 54)}
             className="absolute inset-0 w-full h-full pointer-events-none"
           />
           {!imgLoaded && (
             <div
-              className="absolute inset-0 w-full h-full"
-              style={{ backgroundColor: fallbackBg, borderRadius }}
+              className="absolute inset-0 w-full h-full bg-slate-800/30 animate-pulse pointer-events-none"
+              style={{ borderRadius }}
             />
           )}
           <div
-            className="relative z-10 w-full h-full flex items-center justify-center text-center overflow-hidden"
+            className="absolute inset-y-0 flex items-center justify-center text-center overflow-hidden z-10"
             style={{
-              paddingLeft: `${Math.round(((sliceConfig?.leftWidthPct ?? 0.28) * 100))}%`,
-              paddingRight: `${Math.round(((sliceConfig?.rightWidthPct ?? 0.15) * 100))}%`,
+              left: `${offsets.leftPct}%`,
+              right: `${offsets.rightPct}%`,
             }}
           >
             <span
-              className="truncate drop-shadow-sm font-black tracking-wide"
+              className="truncate drop-shadow-sm font-black tracking-wide leading-none"
               style={{
                 color: locColor,
                 fontFamily: `"${fontFamily}", "Noto Sans Devanagari", sans-serif`,
                 fontSize: `${Math.max(9, Math.round(fontSize * previewScale))}px`,
-                lineHeight: 1,
               }}
             >
               {cleanLoc}
@@ -1008,7 +1024,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         return (
           <div className="absolute inset-0 z-12 overflow-hidden pointer-events-none select-none">
             <img
-              src={bgUrl}
+              src={getProxiedImageUrl(bgUrl)}
               alt="Dynamic Frame Artwork Overlay"
               className="w-full h-full object-contain pointer-events-none select-none"
             />
@@ -1668,12 +1684,25 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   }}
                 >
                   <img
-                    src={getProxiedImageUrl(card.testLogoUrl || card.customLogoUrl || (card as any).channelLogo || '/assets/ai_news_maker_logo.png')}
+                    src={getProxiedImageUrl(
+                      card.testLogoUrl ||
+                      card.customLogoPngUrl ||
+                      card.customLogoUrl ||
+                      card.channelLogoPngUrl ||
+                      card.channelLogoUrl ||
+                      card.activeLogoUrl ||
+                      getSavedChannelProfile()?.channelLogoPngUrl ||
+                      (getSavedChannelProfile()?.channelLogoUrl?.endsWith('.gif') ? '' : getSavedChannelProfile()?.channelLogoUrl) ||
+                      '/assets/breaking_news_wala_logo.png'
+                    )}
                     alt="Channel Logo"
                     onError={(e) => {
                       const target = e.currentTarget as HTMLImageElement;
-                      if (!target.src.includes('/assets/ai_news_maker_logo.png') && !target.src.includes('/assets/breaking_news_wala_logo.png')) {
-                        target.src = '/assets/ai_news_maker_logo.png';
+                      const fallback = (card.channelNameEn?.includes('AI News Maker') || card.brandName?.includes('एआई न्यूज़'))
+                        ? '/assets/ai_news_maker_logo.png'
+                        : '/assets/breaking_news_wala_logo.png';
+                      if (!target.src.includes(fallback)) {
+                        target.src = fallback;
                       }
                     }}
                     className="max-w-full max-h-full object-contain"
@@ -1691,10 +1720,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   const item = getAssetLibraryItemById(badgeId);
                   if (item && item.url) badgeAsset = item.url;
                 }
+                const fallbackBadgeItem = getAssetLibraryItemById('loc_style_classic_ribbon_pin') || getAssetLibraryItemById('loc_style_split_duotone');
+                const effectiveBadgeAsset = badgeAsset || fallbackBadgeItem?.url;
                 const locColor = card.locationTextColor || df.headerConfig.locationTextColor || '#FFFFFF';
                 const styleMode = df.headerConfig?.locationBadgeAssetId || df.locationBadgeAssetId || df.headerConfig?.locationStyle;
                 const isDarkChip = styleMode === 'loc_style_compact_chip' || styleMode === 'compact_chip' || styleMode === 'box';
-                const locBgColor = card.locationBgColor || df.headerConfig.locationBgColor || (badgeAsset ? 'transparent' : (isDarkChip ? '#18181B' : '#DC2626'));
+                const locBgColor = card.locationBgColor || df.headerConfig.locationBgColor || (effectiveBadgeAsset ? 'transparent' : (isDarkChip ? '#18181B' : '#DC2626'));
                 const locBorderRadius = df.headerConfig.locationStyle === 'box' ? '6px' : '9999px';
 
                 const dynamicLoc = calculateDynamicLocationMetrics({
@@ -1703,7 +1734,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   sliceConfig: df.sliceConfig || df.headerConfig.sliceConfig,
                   typographyConfig: df.headerConfig.typographyConfig,
                   locationFontSize: df.headerConfig.locationFontSize,
-                  hasBadgeAsset: Boolean(badgeAsset),
+                  hasBadgeAsset: Boolean(effectiveBadgeAsset),
                 });
 
                 const xPct = df.headerConfig?.locationRect?.x ?? 68;
@@ -1711,12 +1742,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 const isRightAnchored = xPct > 45;
 
                 // Ensure toSafeSvgDataUrl(badgeAsset) is explicitly called for safe rendering
-                const safeBadgeUrl = toSafeSvgDataUrl(badgeAsset);
+                const safeBadgeUrl = toSafeSvgDataUrl(effectiveBadgeAsset);
 
                 return (
                   <DynamicLocationBadgePreview
                     cleanLoc={cleanLoc}
-                    badgeAsset={safeBadgeUrl || badgeAsset}
+                    badgeAsset={safeBadgeUrl || effectiveBadgeAsset}
                     sliceConfig={df.sliceConfig || df.headerConfig?.sliceConfig}
                     locColor={locColor}
                     locBgColor={locBgColor}
@@ -1731,6 +1762,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     yPct={yPct}
                     rotation={df.headerConfig.locationRotation}
                     isRightAnchored={isRightAnchored}
+                    dynamicBw={dynamicLoc.dynamicBw}
+                    bh={dynamicLoc.bh}
+                    leftDestW={dynamicLoc.leftDestW}
+                    rightDestW={dynamicLoc.rightDestW}
                   />
                 );
               })()}
@@ -2149,6 +2184,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   xPct={68}
                   yPct={6.6}
                   isRightAnchored={true}
+                  dynamicBw={dynamicLoc.dynamicBw}
+                  bh={dynamicLoc.bh}
+                  leftDestW={dynamicLoc.leftDestW}
+                  rightDestW={dynamicLoc.rightDestW}
                 />
               );
             }

@@ -201,9 +201,10 @@ export function getTemplateLayoutSpec(
     headlineSafeRight = 996;
     maxHeadlineW = headlineSafeRight - headlineSafeLeft; // 912px (expands to Action Safe while clearing chevrons)
 
-    headlineSafeTop = bannerY + 22;
-    headlineSafeBottom = bannerY + bannerH - 12;
-    maxHeadlineH = headlineSafeBottom - headlineSafeTop;
+    headlineSafeTop = bannerY + 12;
+    headlineSafeBottom = bannerY + bannerH - 8;
+    // Allow maxHeadlineH to accommodate 4-line expanded red banner (bannerHFraction = 0.35 -> ~472px)
+    maxHeadlineH = Math.max(headlineSafeBottom - headlineSafeTop, Math.round(height * 0.35) - 20);
 
     maxLines = 4;
     supportsFourLines = true;
@@ -804,8 +805,46 @@ export function computeCanonicalHeadlineLayout(options: HeadlineLayoutOptions): 
     fitsCleanly = false;
   }
 
-  // Strictest Boundary Guarantee: Never exceed maxH or maxLines
-  const maxAllowedLines = Math.max(1, Math.min(maxLines, Math.floor(maxH / bestLineH)));
+  // Safe-Zone Boundary Guarantee: Never crop words or drop lines.
+  // If lines exceed maxAllowedLines or totalH exceeds maxH, dynamically scale down font size
+  // iteratively until 100% of words fit cleanly without any cropping.
+  let maxAllowedLines = Math.max(1, Math.min(maxLines, Math.floor(maxH / bestLineH)));
+  if (bestLines.length > maxAllowedLines || bestTotalH > maxH) {
+    for (let s = bestFontSize - 1; s >= 14; s -= 1) {
+      const lineH = Math.round(s * 1.30);
+      const spaceW = measureTextWidth(' ', fontFam, s, '900', options.ctx);
+      const allTokens = parseHeadlineTokens(rawHeadline, effectiveHighlightWords);
+      const lines: WordToken[][] = [];
+      let curLine: WordToken[] = [];
+      let curWidth = 0;
+
+      for (const token of allTokens) {
+        const w = measureTextWidth(token.text, fontFam, s, '900', options.ctx);
+        const needed = curLine.length === 0 ? w : curWidth + spaceW + w;
+        if (needed > maxW && curLine.length > 0) {
+          lines.push(curLine);
+          curLine = [token];
+          curWidth = w;
+        } else {
+          curLine.push(token);
+          curWidth = needed;
+        }
+      }
+      if (curLine.length > 0) lines.push(curLine);
+      const totalH = lines.length * lineH;
+      const allowed = Math.max(1, Math.min(maxLines, Math.floor(maxH / lineH)));
+      if (lines.length <= allowed && totalH <= maxH) {
+        bestFontSize = s;
+        bestLines = lines;
+        bestLineH = lineH;
+        bestTotalH = totalH;
+        maxAllowedLines = allowed;
+        fitsCleanly = true;
+        break;
+      }
+    }
+  }
+
   if (bestLines.length > maxAllowedLines) {
     bestLines = bestLines.slice(0, maxAllowedLines);
     bestTotalH = bestLines.length * bestLineH;

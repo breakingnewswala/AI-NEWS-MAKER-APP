@@ -1973,7 +1973,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         const match = rawMatch ? normalizeDynamicFrame(rawMatch) : undefined;
                         const updates: any = {
                           frameDesign: f.id,
-                          customDynamicFrame: match || undefined,
+                          customDynamicFrame: match ? match : null,
                           aspectRatio: (match?.aspectRatio as any) || f.aspectRatio || card.aspectRatio || '4:5',
                           customFrameOverlayPng: undefined,
                           isTestMode: false,
@@ -2035,8 +2035,11 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         } else {
                           updates.selectedCalloutId = undefined;
                           updates.customCalloutAssetUrl = undefined;
-                          updates.selectedLocationBadgeId = undefined;
-                          updates.customLocationBadgeUrl = undefined;
+                          if (!card.selectedLocationBadgeId && !card.customLocationBadgeUrl) {
+                            updates.selectedLocationBadgeId = 'loc_style_classic_ribbon_pin';
+                            const ribbonItem = getAssetLibraryItemById('loc_style_classic_ribbon_pin');
+                            if (ribbonItem?.url) updates.customLocationBadgeUrl = ribbonItem.url;
+                          }
                           updates.showLocation = true;
                           updates.isTestMode = false;
                         }
@@ -2270,7 +2273,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         const match = rawMatch ? normalizeDynamicFrame(rawMatch) : undefined;
                         const updates: any = {
                           frameDesign: f.id,
-                          customDynamicFrame: match || undefined,
+                          customDynamicFrame: match ? match : null,
                           aspectRatio: (match?.aspectRatio as any) || f.aspectRatio || card.aspectRatio || '4:5',
                           customFrameOverlayPng: undefined,
                           isTestMode: false,
@@ -2329,8 +2332,11 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         } else {
                           updates.selectedCalloutId = undefined;
                           updates.customCalloutAssetUrl = undefined;
-                          updates.selectedLocationBadgeId = undefined;
-                          updates.customLocationBadgeUrl = undefined;
+                          if (!card.selectedLocationBadgeId && !card.customLocationBadgeUrl) {
+                            updates.selectedLocationBadgeId = 'loc_style_classic_ribbon_pin';
+                            const ribbonItem = getAssetLibraryItemById('loc_style_classic_ribbon_pin');
+                            if (ribbonItem?.url) updates.customLocationBadgeUrl = ribbonItem.url;
+                          }
                           updates.showLocation = true;
                           updates.isTestMode = false;
                         }
