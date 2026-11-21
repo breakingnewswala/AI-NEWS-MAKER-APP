@@ -21489,32 +21489,30 @@ function isValidNewsImage(url) {
   if (clean.includes("photo-1585829365295-ab7cd400c167") || clean.includes("placeholder_news_search_16x9") || clean.includes("typewriter") || clean.includes("olympia") || clean.includes("photo-1504711434969-e33886168f5c")) {
     return false;
   }
+  const AD_PATTERNS = [
+    /\/ads?\//i,
+    /[_-]ad[s]?[_-]/i,
+    /\/advertisement\//i,
+    /googleads/i,
+    /doubleclick/i,
+    /adservice/i,
+    /pagead/i,
+    /sponsor[_-]banner/i
+  ];
+  if (AD_PATTERNS.some((p) => p.test(clean))) return false;
   const invalidKeywords = [
     "logo",
     "favicon",
     "avatar",
-    "icon",
-    "advertisement",
-    "ad_",
-    "_ad",
-    "/ads/",
-    "banner",
     "pixel",
     "1x1",
     "tracking",
     "analytics",
-    "share",
-    "social",
-    "button",
-    "badge",
-    "sponsor",
-    "placeholder",
     "default_thumb",
     "spinner",
     "loader",
     "loading",
     "widget",
-    "counter",
     "wp-content/themes",
     "/themes/",
     "/static/images/logo"
@@ -21532,19 +21530,27 @@ async function extractBestNewsImage(itemXml, rawDesc, articleUrl, fallbackCatego
     const resolved = resolveUrl(m[1], articleUrl);
     if (resolved && isValidNewsImage(resolved)) return resolved;
   }
-  const enclosureMatches = itemXml.matchAll(/<enclosure[^>]+url=["']([^"']+)["'][^>]*type=["']image\/[^"']+["']/gi);
+  const enclosureMatches = itemXml.matchAll(/<enclosure[^>]+url=["']([^"']+)["'][^>]*>/gi);
   for (const m of enclosureMatches) {
+    const encStr = m[0].toLowerCase();
+    if (encStr.includes('type="audio') || encStr.includes('type="video') || encStr.includes("type='audio") || encStr.includes("type='video")) continue;
     const resolved = resolveUrl(m[1], articleUrl);
     if (resolved && isValidNewsImage(resolved)) return resolved;
   }
-  const enclosureAltMatches = itemXml.matchAll(/<enclosure[^>]+type=["']image\/[^"']+["'][^>]*url=["']([^"']+)["']/gi);
+  const enclosureAltMatches = itemXml.matchAll(/<enclosure[^>]+url=["']([^"']+)["']/gi);
   for (const m of enclosureAltMatches) {
     const resolved = resolveUrl(m[1], articleUrl);
     if (resolved && isValidNewsImage(resolved)) return resolved;
   }
+  const imgTagMatch = itemXml.match(/<(?:image|thumbnail|thumb)[^>]*>(?:<url>([^<]+)<\/url>|([^<]+))<\/(?:image|thumbnail|thumb)>/i);
+  if (imgTagMatch) {
+    const cand = (imgTagMatch[1] || imgTagMatch[2] || "").trim();
+    const resolved = resolveUrl(cand, articleUrl);
+    if (resolved && isValidNewsImage(resolved)) return resolved;
+  }
   const contentEncodedMatch = itemXml.match(/<content:encoded>(?:<!\[CDATA\[([\s\S]*?)\]\]>|([\s\S]*?))<\/content:encoded>/i);
-  const contentBody = (contentEncodedMatch ? contentEncodedMatch[1] || contentEncodedMatch[2] || "" : "") + " " + rawDesc;
-  const imgMatches = contentBody.matchAll(/<img[^>]+src=["']([^"']+)["'][^>]*>/gi);
+  const contentBody = (contentEncodedMatch ? contentEncodedMatch[1] || contentEncodedMatch[2] || "" : "") + " " + rawDesc + " " + itemXml;
+  const imgMatches = contentBody.matchAll(/<img[^>]+(?:src|data-src|data-original)=["']([^"']+)["'][^>]*>/gi);
   for (const m of imgMatches) {
     const resolved = resolveUrl(m[1], articleUrl);
     if (resolved && isValidNewsImage(resolved)) return resolved;
@@ -21553,19 +21559,21 @@ async function extractBestNewsImage(itemXml, rawDesc, articleUrl, fallbackCatego
     try {
       const resp = await fetch(articleUrl, {
         headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 AI-News-Maker/1.0"
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+          "Accept-Language": "hi,en-US;q=0.9,en;q=0.8"
         },
         redirect: "follow",
         signal: AbortSignal.timeout(6e3)
       });
       if (resp.ok) {
         const html = await resp.text();
-        const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+        const ogImageMatch = html.match(/<meta[^>]+(?:property|name)=["']og:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']og:image["']/i);
         if (ogImageMatch && ogImageMatch[1]) {
           const resolved = resolveUrl(ogImageMatch[1].trim().replace(/&amp;/g, "&"), articleUrl);
           if (isValidNewsImage(resolved)) return resolved;
         }
-        const twitterImageMatch = html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
+        const twitterImageMatch = html.match(/<meta[^>]+(?:name|property)=["']twitter:image["'][^>]+content=["']([^"']+)["']/i) || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:name|property)=["']twitter:image["']/i);
         if (twitterImageMatch && twitterImageMatch[1]) {
           const resolved = resolveUrl(twitterImageMatch[1].trim().replace(/&amp;/g, "&"), articleUrl);
           if (isValidNewsImage(resolved)) return resolved;
@@ -21578,9 +21586,15 @@ async function extractBestNewsImage(itemXml, rawDesc, articleUrl, fallbackCatego
             if (item) {
               let imgCandidate = "";
               if (typeof item.image === "string") imgCandidate = item.image;
-              else if (Array.isArray(item.image) && typeof item.image[0] === "string") imgCandidate = item.image[0];
-              else if (item.image?.url) imgCandidate = item.image.url;
-              else if (item.thumbnailUrl) imgCandidate = item.thumbnailUrl;
+              else if (Array.isArray(item.image)) {
+                const first = item.image[0];
+                if (typeof first === "string") imgCandidate = first;
+                else if (first && typeof first.url === "string") imgCandidate = first.url;
+              } else if (item.image && typeof item.image.url === "string") {
+                imgCandidate = item.image.url;
+              } else if (item.thumbnailUrl) {
+                imgCandidate = item.thumbnailUrl;
+              }
               if (imgCandidate) {
                 const resolved = resolveUrl(imgCandidate.trim().replace(/&amp;/g, "&"), articleUrl);
                 if (isValidNewsImage(resolved)) return resolved;
@@ -21589,7 +21603,7 @@ async function extractBestNewsImage(itemXml, rawDesc, articleUrl, fallbackCatego
           } catch {
           }
         }
-        const articleImgMatch = html.match(/<article[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) || html.match(/<figure[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) || html.match(/<img[^>]+data-(?:src|original|lazy-src)=["']([^"']+)["']/i);
+        const articleImgMatch = html.match(/<article[\s\S]*?<img[^>]+(?:src|data-src)=["']([^"']+)["']/i) || html.match(/<figure[\s\S]*?<img[^>]+(?:src|data-src)=["']([^"']+)["']/i) || html.match(/<img[^>]+data-(?:src|original|lazy-src)=["']([^"']+)["']/i) || html.match(/<(?:source|img)[^>]+srcset=["']([^"'\s,]+)/i);
         if (articleImgMatch && articleImgMatch[1]) {
           const resolved = resolveUrl(articleImgMatch[1].trim().replace(/&amp;/g, "&"), articleUrl);
           if (isValidNewsImage(resolved)) return resolved;

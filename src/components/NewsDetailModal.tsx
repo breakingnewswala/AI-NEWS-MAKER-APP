@@ -191,8 +191,14 @@ export const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
               src={thumbnailUrl}
               alt={headline}
               className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
               onError={(e) => {
-                (e.target as HTMLImageElement).src = '/assets/internet_photo_search_fallback.jpg';
+                const currentSrc = (e.target as HTMLImageElement).src || '';
+                if (thumbnailUrl && thumbnailUrl.startsWith('http') && !currentSrc.includes('/api/proxy-image')) {
+                  (e.target as HTMLImageElement).src = `/api/proxy-image?url=${encodeURIComponent(thumbnailUrl)}`;
+                } else {
+                  (e.target as HTMLImageElement).src = '/assets/internet_photo_search_fallback.jpg';
+                }
               }}
             />
           </div>

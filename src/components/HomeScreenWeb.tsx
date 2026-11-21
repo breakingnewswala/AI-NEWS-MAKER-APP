@@ -2840,8 +2840,15 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         alt={post.title}
                         className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-500"
                         loading="lazy"
+                        referrerPolicy="no-referrer"
                         onError={(e) => {
-                          (e.target as HTMLImageElement).src = '/assets/internet_photo_search_fallback.jpg';
+                          const currentSrc = (e.target as HTMLImageElement).src || '';
+                          const original = getPostThumbnail(post);
+                          if (original && original.startsWith('http') && !currentSrc.includes('/api/proxy-image')) {
+                            (e.target as HTMLImageElement).src = `/api/proxy-image?url=${encodeURIComponent(original)}`;
+                          } else {
+                            (e.target as HTMLImageElement).src = '/assets/internet_photo_search_fallback.jpg';
+                          }
                         }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent" />
@@ -3482,8 +3489,14 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         alt={post.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                         loading="lazy"
+                        referrerPolicy="no-referrer"
                         onError={(e) => {
-                          (e.target as HTMLImageElement).src = '/assets/internet_photo_search_fallback.jpg';
+                          const currentSrc = (e.target as HTMLImageElement).src || '';
+                          if (displayThumbnail && displayThumbnail.startsWith('http') && !currentSrc.includes('/api/proxy-image')) {
+                            (e.target as HTMLImageElement).src = `/api/proxy-image?url=${encodeURIComponent(displayThumbnail)}`;
+                          } else {
+                            (e.target as HTMLImageElement).src = '/assets/internet_photo_search_fallback.jpg';
+                          }
                         }}
                       />
                       {isFallbackThumbnail(displayThumbnail) && (
@@ -6013,8 +6026,15 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                   src={getPostThumbnail(pendingApprovalPost)}
                   alt=""
                   className="w-14 h-14 object-cover rounded-lg border border-slate-700 shrink-0"
+                  referrerPolicy="no-referrer"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = '/assets/internet_photo_search_fallback.jpg';
+                    const currentSrc = (e.target as HTMLImageElement).src || '';
+                    const original = getPostThumbnail(pendingApprovalPost);
+                    if (original && original.startsWith('http') && !currentSrc.includes('/api/proxy-image')) {
+                      (e.target as HTMLImageElement).src = `/api/proxy-image?url=${encodeURIComponent(original)}`;
+                    } else {
+                      (e.target as HTMLImageElement).src = '/assets/internet_photo_search_fallback.jpg';
+                    }
                   }}
                 />
                 <div className="min-w-0 flex-1">
