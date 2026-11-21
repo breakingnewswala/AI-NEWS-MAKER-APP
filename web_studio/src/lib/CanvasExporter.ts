@@ -369,7 +369,7 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
   if (typeof document !== 'undefined' && document.fonts) {
     try {
       await document.fonts.ready;
-      const targetFonts = [selectedFontFamily, 'Baloo 2', 'Noto Sans Devanagari', 'Poppins', 'Arial'];
+      const targetFonts = [selectedFontFamily, 'Baloo 2', 'Noto Sans Devanagari', 'Hind Sahitya', 'Poppins', 'Rajdhani', 'Khand', 'Yatra One', 'Rozha One', 'Arial'];
       const targetWeights = ['700', '800', '900'];
       for (const fam of targetFonts) {
         for (const w of targetWeights) {
@@ -1817,6 +1817,40 @@ async function drawAuthoritativeDynamicFrameCanvas(
     }
   }
 
+  // LAYER 1.2: DYNAMIC FRAME CIRCLE PHOTO OVERLAY (1 Photo + 1 Circle Overlay Photo)
+  if (card.layout === 'inset-circle' || card.showCirclePhoto || Boolean(card.images?.insetCircle) || Boolean(card.circlePhotoUrl)) {
+    const circleSrc = card.images?.insetCircle || card.circlePhotoUrl || card.images?.second || card.secondaryPhoto;
+    if (circleSrc) {
+      try {
+        const circleImg = await loadImage(circleSrc);
+        if (circleImg) {
+          const cx = ((card.insetPosition?.x ?? 72) / 100) * width;
+          const cy = ((card.insetPosition?.y ?? 28) / 100) * height;
+          const radius = (((card.circlePhotoScale || 28) / 100) * width) / 2;
+
+          ctx.save();
+          ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+          ctx.shadowBlur = 18;
+          ctx.shadowOffsetY = 6;
+
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius + 4, 0, Math.PI * 2);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+          ctx.clip();
+
+          drawImageCover(ctx, circleImg, cx - radius, cy - radius, radius * 2, radius * 2, 0.5, 0.5, 1, canvasFilterStr);
+          ctx.restore();
+        }
+      } catch (e) {
+        console.warn('Dynamic frame inset circle photo error:', e);
+      }
+    }
+  }
+
   // LAYER 1.5: DEDICATED TEXT WATERMARK (Priority 8: Strictly clipped to Photo Slots, drawn underneath PNG Artwork)
   const isImageWatermarkActive = Boolean(card.watermarkMode === 'image' || (card.watermarkType === 'image' && card.watermarkImage));
   const isTextWatermarkActive = (card.showTextWatermark === true || card.showSuperBreakingWatermark === true || card.watermarkMode === 'text') && !isImageWatermarkActive;
@@ -1826,11 +1860,13 @@ async function drawAuthoritativeDynamicFrameCanvas(
     // Clip strictly to photo slot bounds so watermark NEVER bleeds onto headline, footer or frame borders
     ctx.beginPath();
     if (effectivePhotoSlots && effectivePhotoSlots.length > 0) {
+      const maxHeadlineY = (df.textSlots?.[0]?.rect?.y ? (df.textSlots[0].rect.y / 100) * height : height * 0.6);
       effectivePhotoSlots.forEach(slot => {
         const sx = (slot.rect.x / 100) * width;
         const sy = (slot.rect.y / 100) * height;
         const sw = (slot.rect.width / 100) * width;
-        const sh = (slot.rect.height / 100) * height;
+        const rawH = (slot.rect.height / 100) * height;
+        const sh = Math.min(rawH, Math.max(0, maxHeadlineY - sy));
         ctx.rect(sx, sy, sw, sh);
       });
     } else {
@@ -2194,24 +2230,51 @@ async function drawAuthoritativeDynamicFrameCanvas(
         const drawX = Math.round(cx + (cw - drawW) / 2);
         const drawY = Math.round(cy + (ch - drawH) / 2);
         ctx.drawImage(cImg, drawX, drawY, drawW, drawH);
-      } else if (calloutText && df.fullStoryCalloutConfig?.bgColor) {
-        ctx.fillStyle = df.fullStoryCalloutConfig.bgColor;
-        ctx.strokeStyle = df.fullStoryCalloutConfig.borderColor || '#FACC15';
-        ctx.lineWidth = df.fullStoryCalloutConfig.borderWidth ?? 2;
-        ctx.beginPath();
-        ctx.roundRect(cx, cy, cw, ch, 6);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.fillStyle = df.fullStoryCalloutConfig.textColor || '#FFFFFF';
-        const fontSize = Math.round((df.fullStoryCalloutConfig.fontSize || 22) * (width / 1080));
+      } else if (calloutText) {
+        const cleanCallout = calloutText.replace('🔴', '').trim() || 'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें';
+        const fontSize = Math.round((df.fullStoryCalloutConfig?.fontSize || 22) * (width / 1080));
         ctx.font = `900 ${fontSize}px "Baloo 2", "Noto Sans Devanagari", sans-serif`;
-        const align = df.fullStoryCalloutConfig.align || 'center';
-        ctx.textAlign = align as CanvasTextAlign;
+        const textWidth = ctx.measureText(cleanCallout).width;
+        const showIcon = df.fullStoryCalloutConfig?.showIcon !== false;
+        const iconSize = Math.round(fontSize * 1.15);
+        const iconGap = Math.round(fontSize * 0.4);
+        const padX = Math.round(fontSize * 1.2);
+        const padY = Math.round(fontSize * 0.45);
+
+        const contentW = textWidth + (showIcon ? iconSize + iconGap : 0);
+        const pillW = Math.min(cw, contentW + padX * 2);
+        const pillH = Math.min(ch, fontSize + padY * 2);
+        const pillRadius = Math.min(pillH / 2, 14);
+        const pillX = Math.round(cx + (cw - pillW) / 2);
+        const pillY = Math.round(cy + (ch - pillH) / 2);
+
+        // Draw pill background with border
+        ctx.fillStyle = df.fullStoryCalloutConfig?.bgColor || '#DC2626';
+        ctx.strokeStyle = df.fullStoryCalloutConfig?.borderColor || '#FACC15';
+        ctx.lineWidth = df.fullStoryCalloutConfig?.borderWidth ?? 1.5;
+        ctx.beginPath();
+        ctx.roundRect(pillX, pillY, pillW, pillH, pillRadius);
+        ctx.fill();
+        if ((df.fullStoryCalloutConfig?.borderWidth ?? 1.5) > 0) {
+          ctx.stroke();
+        }
+
+        // Draw icon and text centered in the pill
+        let startX = pillX + (pillW - contentW) / 2;
+        const centerY = pillY + pillH / 2;
+        if (showIcon) {
+          ctx.font = `${iconSize}px "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif`;
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('📢', startX, centerY);
+          startX += iconSize + iconGap;
+        }
+
+        ctx.fillStyle = df.fullStoryCalloutConfig?.textColor || '#FFFFFF';
+        ctx.font = `900 ${fontSize}px "Baloo 2", "Noto Sans Devanagari", sans-serif`;
+        ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        const cleanCallout = calloutText.replace('🔴', '').trim();
-        const textX = align === 'left' ? cx + 24 : align === 'right' ? cx + cw - 24 : cx + cw / 2;
-        ctx.fillText(cleanCallout, textX, cy + ch / 2);
+        ctx.fillText(cleanCallout, startX, centerY);
       }
       ctx.restore();
     }

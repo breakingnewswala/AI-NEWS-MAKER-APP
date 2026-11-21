@@ -40,11 +40,12 @@ import {
   cleanHeadlineText,
   formatCaptionVariants,
   stripAllUrlsAndHyperlinks,
+  formatHeadlineWithKeywords,
 } from './lib/speakerUtils';
 import { calculateEditorProgress } from './lib/aiCoreRules';
 import { generateGraphicDownloadFileName, getFormattedHindiDate } from './lib/dateUtils';
 import { getProfileHeaderFooter, getPermanentUserLogo } from './lib/profileConfig';
-import { formatCleanLocationText, extractLocationFromNewsText } from './lib/locationUtils';
+import { formatCleanLocationText, extractLocationFromNewsText, resolveCityWithState } from './lib/locationUtils';
 import { getDynamicFrameById } from './lib/dynamicFramesManager';
 import { syncAllSourcesLive, syncAndMigrateLocalApprovals } from './lib/rssSourceManager';
 import { trackSpaPageView, trackEvent } from './lib/analyticsTracker';
@@ -1715,14 +1716,15 @@ export default function App() {
           headlineFontSize: parsed.headlineFontSize || 48,
           showDate: parsed.showDate !== undefined ? parsed.showDate : false,
           dateStr: parsed.dateStr || getFormattedHindiDate(),
+          isTestMode: false,
         };
       } else {
         // Default clean neutral slate for fresh studio session (Phase 2 & 3 specification)
         initial = {
           ...initial,
           headline: CANONICAL_DEFAULT_HEADLINE,
-          formattedHeadline: CANONICAL_DEFAULT_HEADLINE,
-          highlightWords: ['हेडलाइन', 'मुख्य खबर', 'खबर'],
+          formattedHeadline: 'कृपया स्टेप 3 [yellow]हेडलाइन[/yellow] में जाकर अपनी [yellow]मुख्य खबर[/yellow] का [yellow]शीर्षक[/yellow] दर्ज करें...',
+          highlightWords: ['हेडलाइन', 'मुख्य खबर', 'शीर्षक'],
           images: { main: '', second: '', third: '', fourth: '' },
           photoUrl: '',
           showDate: false,
@@ -2533,8 +2535,8 @@ export default function App() {
       aspectRatio: '4:5',
       customDynamicFrame: undefined,
       headline: CANONICAL_DEFAULT_HEADLINE,
-      formattedHeadline: CANONICAL_DEFAULT_HEADLINE,
-      highlightWords: ['हेडलाइन', 'मुख्य खबर', 'खबर'],
+      formattedHeadline: 'कृपया स्टेप 3 [yellow]हेडलाइन[/yellow] में जाकर अपनी [yellow]मुख्य खबर[/yellow] का [yellow]शीर्षक[/yellow] दर्ज करें...',
+      highlightWords: ['हेडलाइन', 'मुख्य खबर', 'शीर्षक'],
       headlineAlign: 'center',
       headlineFontSize: 48,
       location: formatCleanLocationText(savedProfile?.district || savedProfile?.city || savedProfile?.location || 'भोपाल'),
@@ -2637,7 +2639,6 @@ export default function App() {
 
     setActiveStep(1);
     setActiveMobileStep(1);
-    showToast('✨ स्टूडियो कार्यक्षेत्र रिफ्रेश हो गया है!');
     showAppSuccess('फोटो न्यूज़ स्टूडियो सफलतापूर्वक रीसेट हो गया है।', 'फोटो न्यूज़ स्टूडियो');
   };
 
@@ -3293,7 +3294,7 @@ export default function App() {
     const fallbackDistrict = userProf?.district || userProf?.defaultLocation || userProf?.location || '';
     const extractedNewsCity = extractLocationFromNewsText(post.title, post.summary);
     const rawLoc = (post.district && post.district.trim()) || (post.location && post.location.trim()) || (extractedNewsCity && extractedNewsCity.trim()) || fallbackDistrict || '';
-    const effectiveLoc = formatCleanLocationText(rawLoc);
+    const effectiveLoc = resolveCityWithState(rawLoc);
 
     setStudioMode('graphic');
 
@@ -3585,7 +3586,8 @@ export default function App() {
             showWatermark: Boolean((post as any).showTextWatermark === true || (post as any).showWatermark === true),
             showLocation: true,
             headline: initialHeadline,
-            formattedHeadline: initialHeadline,
+            formattedHeadline: formatHeadlineWithKeywords(initialHeadline).formattedHeadline,
+            highlightWords: formatHeadlineWithKeywords(initialHeadline).highlightWords,
             headlineOptions: approvedHeadlines,
             regenerationUsed: approvedHeadlines.length >= 10,
             regeneratedHeadlines: undefined,
@@ -3697,7 +3699,8 @@ export default function App() {
           showWatermark: Boolean((post as any).showTextWatermark === true || (post as any).showWatermark === true),
           showLocation: true,
           headline: baseTitle,
-          formattedHeadline: baseTitle,
+          formattedHeadline: formatHeadlineWithKeywords(baseTitle).formattedHeadline,
+          highlightWords: formatHeadlineWithKeywords(baseTitle).highlightWords,
           headlineOptions: [],
           regenerationUsed: false,
           regeneratedHeadlines: undefined,

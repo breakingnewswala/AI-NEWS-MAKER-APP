@@ -745,11 +745,12 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
       setLoading(false);
       autoFillNews.autoTrigger = false;
 
+      const autoHl = formatHeadlineWithKeywords(topHeadline);
       const editorialResult: AIAnalysisResult = {
         headline: topHeadline,
         headlineOptions: approvedOpts,
-        formattedHeadline: topHeadline,
-        highlightWords: [],
+        formattedHeadline: autoHl.formattedHeadline,
+        highlightWords: autoHl.highlightWords,
         location: cleanLocationField(autoFillNews.location || card.location || ''),
         category: cleanCategoryField(autoFillNews.category || card.category || ''),
         summary: formattedCaption,
@@ -764,7 +765,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
 
       onChange({
         headline: topHeadline,
-        formattedHeadline: topHeadline,
+        formattedHeadline: autoHl.formattedHeadline,
+        highlightWords: autoHl.highlightWords,
         headlineOptions: approvedOpts,
         regenerationUsed: isAlreadyAtMax10,
         location: editorialResult.location,
@@ -1058,16 +1060,20 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         effectiveLink || url
       );
 
+      const autoHl = (res.highlightWords && res.highlightWords.length > 0)
+        ? { formattedHeadline: res.formattedHeadline || finalHeadline, highlightWords: res.highlightWords }
+        : formatHeadlineWithKeywords(finalHeadline);
+
       onChange({
         headline: finalHeadline,
-        formattedHeadline: res.formattedHeadline || finalHeadline,
+        formattedHeadline: autoHl.formattedHeadline,
         headlineOptions: finalOpts,
         sourcePublisherNames: effectivePubNames,
         publisherName: res.publisherName || extraData?.publisherName || (card as any).publisherName,
         headlineValidation: res.headlineValidation,
         regenerationUsed: false,
         regeneratedHeadlines: undefined,
-        highlightWords: res.highlightWords || [],
+        highlightWords: autoHl.highlightWords,
         location: finalLoc,
         summary: effectiveCaption,
         images: {

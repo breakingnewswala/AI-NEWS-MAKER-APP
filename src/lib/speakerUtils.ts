@@ -2682,7 +2682,7 @@ export function formatHeadlineWithKeywords(
     }
   }
 
-  const finalHighlights = selectedWords.slice(0, 4);
+  const finalHighlights = selectedWords.slice(0, 3);
 
   if (finalHighlights.length === 0) {
     return { formattedHeadline: rawHeadline, highlightWords: [] };

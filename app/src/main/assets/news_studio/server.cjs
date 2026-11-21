@@ -13083,7 +13083,7 @@ function formatHeadlineWithKeywords(headline, existingHighlights) {
       }
     }
   }
-  const finalHighlights = selectedWords.slice(0, 4);
+  const finalHighlights = selectedWords.slice(0, 3);
   if (finalHighlights.length === 0) {
     return { formattedHeadline: rawHeadline, highlightWords: [] };
   }
@@ -24465,19 +24465,6 @@ var DUMMY_ASSET_IDS = /* @__PURE__ */ new Set([
 function getDefaultAssetLibraries() {
   return [
     {
-      id: "asset_1794132101671_u0g9s",
-      name: "Red Map Pin Badge with Divider",
-      category: "general",
-      type: "location_badge",
-      url: "/assets/location_white_icon.png",
-      enabled: true,
-      createdAt: 1794132101671,
-      updatedAt: 1794132144005,
-      sliceConfig: { leftWidthPct: 0.28, rightWidthPct: 0.15, centerMinPct: 0.57 },
-      textRegion: { x: 32, y: 24, width: 58, height: 55 },
-      typographyConfig: { fontFamily: "Mukta", fontSize: 50, fontWeight: "bold", textColor: "#000000", textAlign: "center" }
-    },
-    {
       id: "callout_bully_forward_story",
       name: "\u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u0935\u093F\u0935\u0930\u0923 \u0915\u0949\u0932\u0906\u0909\u091F (Full Story Callout)",
       category: "general",
@@ -24638,7 +24625,6 @@ function getDefaultAssetLibraries() {
 }
 var DELETED_ASSETS_TOMBSTONE_FILE = process.env.DELETED_ASSETS_TOMBSTONE_FILE || import_path2.default.join(process.cwd(), "deleted_assets_tombstone.json");
 var PROTECTED_BUILTIN_ASSET_IDS = /* @__PURE__ */ new Set([
-  "asset_1794132101671_u0g9s",
   "callout_bully_forward_story",
   "footer_regular_gold",
   "footer_branding_navy",

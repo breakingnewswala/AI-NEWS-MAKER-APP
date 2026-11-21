@@ -661,10 +661,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       <Camera className="w-6 h-6 text-slate-300 stroke-[1.75]" />
                     </div>
                     <span className="text-xs sm:text-sm font-bold text-white font-['Noto_Sans_Devanagari'] drop-shadow-md">
-                      फोटो जोड़ने के लिए स्टेप 4 पर जाएँ
+                      फोटो टच करने के लिए स्टेप 4 पर जाएं
                     </span>
                     <span className="text-[10px] sm:text-[11px] text-slate-300 font-['Noto_Sans_Devanagari'] mt-0.5 drop-shadow-sm">
-                      (यहाँ आपकी चुनी गई खबर की फोटो प्रदर्शित होगी)
+                      (यहां आपकी चुनी हुई फोटो प्रदर्शित होगी)
                     </span>
                   </div>
                 );
@@ -702,6 +702,35 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         );
       })()}
 
+      {/* 0B1. DYNAMIC FRAME CIRCLE PHOTO OVERLAY (1 Photo + 1 Circle Overlay Photo) */}
+      {df && (card.layout === 'inset-circle' || card.showCirclePhoto || Boolean(card.images?.insetCircle) || Boolean(card.circlePhotoUrl)) && (
+        <div
+          className="absolute z-15 pointer-events-none"
+          style={{
+            left: `${card.insetPosition?.x ?? 72}%`,
+            top: `${card.insetPosition?.y ?? 28}%`,
+            width: `${card.circlePhotoScale || 28}%`,
+            aspectRatio: '1/1',
+            transform: 'translate(-50%, -50%)',
+          }}
+        >
+          <div className="w-full h-full rounded-full border-[3px] sm:border-[4px] border-white shadow-2xl overflow-hidden bg-neutral-900 relative">
+            {(card.images?.insetCircle || card.circlePhotoUrl || card.images?.second || card.secondaryPhoto) ? (
+              <img
+                src={card.images?.insetCircle || card.circlePhotoUrl || card.images?.second || card.secondaryPhoto}
+                alt="Circle Overlay"
+                className="w-full h-full object-cover"
+                onError={handleImgError}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-slate-900/90 text-[10px] text-white">
+                सर्कल फोटो
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 0B2. DYNAMIC FRAME TEXT WATERMARK (Layer 3: Strictly clipped to Photo Slots, drawn underneath PNG Artwork) */}
       {df && (card.showTextWatermark === true || card.showSuperBreakingWatermark === true || card.watermarkMode === 'text' || card.watermarkMode === 'image') && (() => {
         const primarySlot = df.photoSlots?.[0]?.rect;
@@ -709,7 +738,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         const topPct = primarySlot ? primarySlot.y : 0;
         const widthPct = primarySlot ? primarySlot.width : 100;
         const maxHeadlineY = df.textSlots?.[0]?.rect ? Math.max(30, df.textSlots[0].rect.y) : 60;
-        const heightPct = primarySlot ? primarySlot.height : (df.photoSlots?.[0]?.rect?.height ? ((df.photoSlots[0].rect.y || 0) + df.photoSlots[0].rect.height) : maxHeadlineY);
+        const heightPct = primarySlot ? Math.min(primarySlot.height, maxHeadlineY - topPct) : (df.photoSlots?.[0]?.rect?.height ? Math.min(((df.photoSlots[0].rect.y || 0) + df.photoSlots[0].rect.height), maxHeadlineY) : maxHeadlineY);
 
         return (
           <div
@@ -1204,10 +1233,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               <Camera className="w-7 h-7 text-slate-300 stroke-[1.75]" />
             </div>
             <span className="text-sm sm:text-base font-bold text-white font-['Noto_Sans_Devanagari'] drop-shadow-md">
-              फोटो जोड़ने के लिए स्टेप 4 पर जाएँ
+              फोटो टच करने के लिए स्टेप 4 पर जाएं
             </span>
             <span className="text-[11px] text-slate-300 font-['Noto_Sans_Devanagari'] mt-1 drop-shadow-sm">
-              (यहाँ आपकी चुनी गई खबर की फोटो प्रदर्शित होगी)
+              (यहां आपकी चुनी हुई फोटो प्रदर्शित होगी)
             </span>
           </div>
         )}

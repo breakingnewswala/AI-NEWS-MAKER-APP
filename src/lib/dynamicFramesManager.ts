@@ -1091,34 +1091,6 @@ export function getDefaultAssetLibrariesFallback(type?: string): AssetLibraryIte
     }
   },
   {
-    "id": "asset_1794132101671_u0g9s",
-    "name": "Red Map Pin Badge with Divider",
-    "type": "location_badge",
-    "category": "general",
-    "url": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='360' height='72' viewBox='0 0 360 72'><rect x='3' y='4' width='354' height='64' rx='32' fill='%23DC2626' stroke='%23FFFFFF' stroke-width='2.5'/><circle cx='38' cy='36' r='16' fill='%23FFFFFF'/><path d='M38 27 C34 27 31 30 31 34 C31 39 38 45 38 45 C38 45 45 39 45 34 C45 30 42 27 38 27 Z' fill='%23DC2626'/><circle cx='38' cy='34' r='2.5' fill='%23FFFFFF'/><line x1='64' y1='16' x2='64' y2='56' stroke='%23FFFFFF' stroke-width='2'/></svg>",
-    "enabled": true,
-    "createdAt": 1794132101671,
-    "updatedAt": 1794132144005,
-    "textRegion": {
-      "x": 32,
-      "y": 24,
-      "width": 58,
-      "height": 55
-    },
-    "typographyConfig": {
-      "fontFamily": "Mukta",
-      "fontSize": 50,
-      "fontWeight": "bold",
-      "textColor": "#FFFFFF",
-      "textAlign": "center"
-    },
-    "sliceConfig": {
-      "leftWidthPct": 0.28,
-      "rightWidthPct": 0.15,
-      "centerMinPct": 0.57
-    }
-  },
-  {
     "id": "callout_bully_forward_story",
     "name": "पूरी खबर विवरण कॉलआउट (Full Story Callout)",
     "category": "general",

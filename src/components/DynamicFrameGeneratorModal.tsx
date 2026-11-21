@@ -7527,8 +7527,8 @@ export const DynamicFrameGeneratorModal: React.FC<DynamicFrameGeneratorModalProp
                             ) : (
                               <div className="w-full h-full bg-slate-800/90 border border-dashed border-slate-600 flex flex-col items-center justify-center p-2 text-center text-slate-400">
                                 <Camera className="w-5 h-5 mb-1 text-slate-500" />
-                                <span className="text-[9px] font-bold">फोटो स्लॉट {idx + 1}</span>
-                                <span className="text-[8px] text-slate-500">(सैंपल फोटो अपलोड करें)</span>
+                                <span className="text-[9px] font-bold">फोटो टच करने के लिए स्टेप 4 पर जाएं</span>
+                                <span className="text-[8px] text-slate-500">(यहां आपकी चुनी हुई फोटो प्रदर्शित होगी)</span>
                               </div>
                             )}
                           </div>

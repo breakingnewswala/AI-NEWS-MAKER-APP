@@ -29,6 +29,35 @@ export function extractLocationFromNewsText(title?: string, summary?: string): s
   return '';
 }
 
+const MP_CITIES = new Set([
+  'मुरैना', 'ग्वालियर', 'भोपाल', 'इंदौर', 'जबलपुर', 'उज्जैन', 'रीवा', 'सागर', 'सतना', 'रतलाम',
+  'छतरपुर', 'शिवपुरी', 'भिंड', 'दतिया', 'गुना', 'मंदसौर', 'नीमच', 'खंडवा', 'खरगोन', 'बड़वानी',
+  'झाबुआ', 'धार', 'देवास', 'शाजापुर', 'आगर मालवा', 'सीहोर', 'रायसेन', 'राजगढ़', 'विदिशा', 'बैतूल',
+  'हरदा', 'होशंगाबाद', 'नर्मदापुरम', 'कटनी', 'नरसिंहपुर', 'छिंदवाड़ा', 'सिवनी', 'मंडला', 'डिंडोरी', 'बालाघाट',
+  'शहडोल', 'अनूपपुर', 'उमरिया', 'सीधी', 'सिंगरौली', 'पन्ना', 'दमोह', 'टीकमगढ़', 'निवाड़ी', 'अशोकनगर',
+  'श्योपुर', 'बुरहानपुर', 'मैहर', 'पांढुर्ना', 'मऊगंज'
+]);
+
+const UP_CITIES = new Set([
+  'लखनऊ', 'वाराणसी', 'प्रयागराज', 'कानपुर', 'आगरा', 'मेरठ', 'नोएडा', 'गाजियाबाद', 'अयोध्या'
+]);
+
+export function resolveCityWithState(rawLocation?: string | null): string {
+  if (!rawLocation || typeof rawLocation !== 'string') return '';
+  const trimmed = rawLocation.trim();
+  if (!trimmed || trimmed === 'लोकेशन') return 'लोकेशन';
+  if (trimmed.includes(',') || trimmed.includes('/') || trimmed.includes('|')) {
+    return formatCleanLocationText(trimmed);
+  }
+  if (MP_CITIES.has(trimmed)) {
+    return `${trimmed}, म.प्र.`;
+  }
+  if (UP_CITIES.has(trimmed)) {
+    return `${trimmed}, उ.प्र.`;
+  }
+  return trimmed;
+}
+
 export function formatCleanLocationText(rawLocation?: string | null): string {
   if (!rawLocation || typeof rawLocation !== 'string') return '';
   let cleaned = rawLocation

@@ -4839,52 +4839,113 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             </div>
           )}
 
-          {/* Location Box Soft Color Selector (Bug Group C4: Conditional only if supported) */}
+          {/* Location Controls:
+              1. If default theme ('jacket-default' or 'graphic_001' with no dynamic frame): Show Location Color Presets.
+              2. If dynamic or custom frame: Hide color box presets and show the 12 Location Badges in a horizontal scroll (left-to-right)!
+          */}
           {(() => {
             const activeDf = currentDynamicFrame || getDynamicFrameById(card.frameDesign || '');
-            const isStaticImage = activeDf?.headerConfig?.locationBadgeMode === 'static_image' || (activeDf?.headerConfig as any)?.locationStyle === 'static_image';
-            const supportsBg = activeDf
-              ? (!isStaticImage && activeDf?.headerConfig?.supportsLocationBadgeBackgroundColor !== false && (activeDf as any)?.supportsLocationBadgeBackgroundColor !== false)
-              : true;
-            if (!supportsBg) return null;
+            const isDefaultTheme = !activeDf && !card.customDynamicFrame && (card.frameDesign === 'jacket-default' || card.frameDesign === 'graphic_001');
 
+            if (isDefaultTheme) {
+              return (
+                <div className="pt-2 border-t border-neutral-800 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <label className="text-neutral-300 font-bold text-[11px] flex items-center gap-1.5">
+                      <span>🎨</span>
+                      <span>लोकेशन बॉक्स बैकग्राउंड रंग:</span>
+                    </label>
+                    <span className="text-[10px] text-neutral-400 font-mono">
+                      {card.locationBgColor || '#FFFFFF'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-1.5">
+                    {LOCATION_BG_PRESETS.map((p) => {
+                      const isSel = (card.locationBgColor || '#FFFFFF').toUpperCase() === p.color.toUpperCase();
+                      return (
+                        <button
+                          key={p.color}
+                          type="button"
+                          onClick={() => onChange({ locationBgColor: p.color })}
+                          className={`py-1.5 px-1 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center gap-1 ${
+                            isSel
+                              ? 'border-yellow-400 ring-2 ring-yellow-400/50 shadow-md'
+                              : 'border-neutral-700 hover:border-neutral-500'
+                          }`}
+                          style={{ backgroundColor: p.color }}
+                          title={`${p.nameHi} (${p.name}) - ${p.color}`}
+                        >
+                          <div className="w-full flex items-center justify-center">
+                            {isSel ? (
+                              <span className="text-[10px] font-black text-neutral-950">✓</span>
+                            ) : (
+                              <span className="w-2 h-2 rounded-full border border-neutral-400/60" />
+                            )}
+                          </div>
+                          <span className="text-[9px] font-bold text-neutral-800 truncate max-w-full px-0.5">
+                            {p.nameHi.split(' ')[0]}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }
+
+            // For dynamic / custom / non-default frames: show 12 location badges in horizontal scroll
             return (
               <div className="pt-2 border-t border-neutral-800 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <label className="text-neutral-300 font-bold text-[11px] flex items-center gap-1.5">
-                    <span>🎨</span>
-                    <span>लोकेशन बॉक्स बैकग्राउंड रंग:</span>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-neutral-200 font-bold flex items-center gap-1.5">
+                    <span>📍</span>
+                    <span>स्थान बैज चुनें (Location Badge Library): ({libraryLocationBadges.length} स्टाइल उपलब्ध)</span>
                   </label>
-                  <span className="text-[10px] text-neutral-400 font-mono">
-                    {card.locationBgColor || '#FFFFFF'}
+                  <span className="text-[10px] text-amber-400 font-mono font-bold">
+                    {card.selectedLocationBadgeId || 'डिफ़ॉल्ट बैज'}
                   </span>
                 </div>
-                <div className="grid grid-cols-5 gap-1.5">
-                  {LOCATION_BG_PRESETS.map((p) => {
-                    const isSel = (card.locationBgColor || '#FFFFFF').toUpperCase() === p.color.toUpperCase();
+                <p className="text-[10px] text-neutral-400">
+                  बाएं से दाएं स्क्रॉल करके अपनी पसंद का स्थान बैज चुनें। टच करने पर लाइव ग्राफ़िक में बैज तुरंत अपडेट होगा:
+                </p>
+
+                <div className="flex items-center gap-2.5 overflow-x-auto pb-2 scrollbar-thin pt-1">
+                  {libraryLocationBadges.map((badge: any) => {
+                    const isSelected = card.selectedLocationBadgeId === badge.id ||
+                      (!card.selectedLocationBadgeId && card.customLocationBadgeUrl === (badge.url || badge.assetUrl));
+
                     return (
                       <button
-                        key={p.color}
+                        key={badge.id}
                         type="button"
-                        onClick={() => onChange({ locationBgColor: p.color })}
-                        className={`py-1.5 px-1 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center gap-1 ${
-                          isSel
-                            ? 'border-yellow-400 ring-2 ring-yellow-400/50 shadow-md'
-                            : 'border-neutral-700 hover:border-neutral-500'
+                        onClick={() => {
+                          onChange({
+                            selectedLocationBadgeId: badge.id,
+                            customLocationBadgeUrl: badge.url || badge.assetUrl,
+                            locationTextColor: badge.typographyConfig?.textColor || '#FFFFFF',
+                            locationBadgeConfig: badge,
+                            showLocation: true,
+                          });
+                        }}
+                        className={`p-2 rounded-xl text-left border transition-all cursor-pointer flex flex-col gap-1.5 shrink-0 w-36 sm:w-40 relative ${
+                          isSelected
+                            ? 'bg-amber-950/60 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
+                            : 'bg-neutral-900 border-neutral-800 hover:border-neutral-700'
                         }`}
-                        style={{ backgroundColor: p.color }}
-                        title={`${p.nameHi} (${p.name}) - ${p.color}`}
                       >
-                        <div className="w-full flex items-center justify-center">
-                          {isSel ? (
-                            <span className="text-[10px] font-black text-neutral-950">✓</span>
-                          ) : (
-                            <span className="w-2 h-2 rounded-full border border-neutral-400/60" />
+                        <div className="flex items-center justify-between text-[11px] font-bold text-neutral-200">
+                          <span className="truncate">{badge.name || badge.id}</span>
+                          {isSelected && (
+                            <span className="text-[10px] font-black text-amber-400 shrink-0">✓</span>
                           )}
                         </div>
-                        <span className="text-[9px] font-bold text-neutral-800 truncate max-w-full px-0.5">
-                          {p.nameHi.split(' ')[0]}
-                        </span>
+                        <div className="h-8 w-full bg-neutral-950 rounded border border-neutral-800 flex items-center justify-center p-1 overflow-hidden">
+                          {badge.url || badge.assetUrl ? (
+                            <img src={toSafeSvgDataUrl(badge.url || badge.assetUrl)} alt={badge.name} className="h-full w-full object-contain pointer-events-none" />
+                          ) : (
+                            <span className="text-[9px] text-neutral-400">स्थान बैज</span>
+                          )}
+                        </div>
                       </button>
                     );
                   })}
@@ -4896,64 +4957,6 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           <p className="text-[10px] text-neutral-400">
             * लोकेशन OFF करने पर चैनल लोगो या कोई फिक्स्ड एलिमेंट अपनी जगह से नहीं हिलेगा (दाएं कोने पर सुरक्षित रहेगा)।
           </p>
-
-          {/* Location Badge Library Grid */}
-          <div className="pt-3 border-t border-neutral-800 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <label className="text-xs text-neutral-200 font-bold flex items-center gap-1.5">
-                <span>📍</span>
-                <span>स्थान बैज चुनें (Location Badge Library):</span>
-              </label>
-              <span className="text-[10px] text-amber-400 font-mono font-bold">
-                {card.selectedLocationBadgeId || 'डिफ़ॉल्ट बैज'}
-              </span>
-            </div>
-            <p className="text-[10px] text-neutral-400">
-              अपनी पसंद का स्थान बैज स्टाइल चुनें। यह ग्राफिक में आपके शहर/जिले के साथ प्रदर्शित होगा।
-            </p>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-56 overflow-y-auto pr-1">
-              {libraryLocationBadges.map((badge: any) => {
-                const isSelected = card.selectedLocationBadgeId === badge.id ||
-                  (!card.selectedLocationBadgeId && card.customLocationBadgeUrl === (badge.url || badge.assetUrl));
-
-                return (
-                  <button
-                    key={badge.id}
-                    type="button"
-                    onClick={() => {
-                      onChange({
-                        selectedLocationBadgeId: badge.id,
-                        customLocationBadgeUrl: badge.url || badge.assetUrl,
-                        locationTextColor: badge.typographyConfig?.textColor || '#FFFFFF',
-                        locationBadgeConfig: badge,
-                        showLocation: true,
-                      });
-                    }}
-                    className={`p-2 rounded-xl text-left border transition-all cursor-pointer flex flex-col gap-1.5 relative ${
-                      isSelected
-                        ? 'bg-amber-950/60 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
-                        : 'bg-neutral-900 border-neutral-800 hover:border-neutral-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between text-[11px] font-bold text-neutral-200">
-                      <span className="truncate">{badge.name || badge.id}</span>
-                      {isSelected && (
-                        <span className="text-[10px] font-black text-amber-400 shrink-0">✓ चयनित</span>
-                      )}
-                    </div>
-                    <div className="h-8 w-full bg-neutral-950 rounded border border-neutral-800 flex items-center justify-center p-1 overflow-hidden">
-                      {badge.url || badge.assetUrl ? (
-                        <img src={toSafeSvgDataUrl(badge.url || badge.assetUrl)} alt={badge.name} className="h-full w-full object-contain" />
-                      ) : (
-                        <span className="text-[9px] text-neutral-400">स्थान बैज</span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
         </div>
 
         {/* Date Stamp */}
@@ -5981,7 +5984,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 const plans = lf.allowedPlans || lf.footerConfig?.allowedPlans;
                 const planHierarchy: Record<string, number> = { BASIC: 1, ADVANCED: 2, PRO: 3, PROFESSIONAL: 3, 'VIP DESK': 4, VIP: 4, ULTRA: 4 };
                 const userTierRank = effectiveAdmin ? 99 : (effectiveTier === 'ultra' ? 4 : (effectiveTier === 'professional' ? 3 : (effectiveTier === 'advanced' ? 2 : 1)));
-                const isAllowed = effectiveAdmin || !plans || !Array.isArray(plans) || plans.length === 0 || plans.some((p: string) => (planHierarchy[p.toUpperCase()] || 1) <= userTierRank);
+                // Custom footers strictly restricted to PRO and VIP DESK plans (or Admin)
+                const isAllowed = effectiveAdmin || (userTierRank >= 3);
 
                 return (
                   <button
@@ -5995,7 +5999,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       onChange({
                         selectedCustomFooterId: lf.id,
                         customFooterConfig: lf.footerConfig,
-                        customFooterPng: lf.assetUrl || lf.url || undefined,
+                        customFooterPng: (lf.assetUrl && String(lf.assetUrl).startsWith('http')) || (lf.url && String(lf.url).startsWith('http')) ? (lf.assetUrl || lf.url) : undefined,
                         footerBgColor: lf.footerConfig?.footerBgColor || card.footerBgColor,
                         footerTextColor: lf.footerConfig?.footerTextColor || card.footerTextColor,
                       });
@@ -6078,73 +6082,39 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   </div>
                 )}
 
-                {effectiveTier === 'basic' && !effectiveAdmin ? (
-                  <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-800 text-[11px] text-neutral-300 flex items-center gap-2">
-                    <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span>🔒 बेसिक पैकेज में फुटर बैकग्राउंड सफ़ेद निर्धारित है। अन्य रंगों के लिए एडवांस/प्रो/वीआईपी डेस्क चुनें।</span>
-                  </div>
-                ) : (
-                  <>
-                    {/* Primary Colors — First 5 options displayed prominently */}
-                    <div className="space-y-1">
-                      <span className="text-[10px] text-neutral-400 block font-semibold">1. मुख्य प्राथमिक रंग (Primary 5):</span>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                        {FOOTER_BG_PRIMARY_PRESETS.map((p) => {
-                          const isSel = (card.footerBgColor || '#FFFFFF').toUpperCase() === p.color.toUpperCase();
-                          const activeDf = currentDynamicFrame || getDynamicFrameById(card.frameDesign || '');
-                          const isColorBanned = Boolean(
-                            activeDf && (
-                              (activeDf.footerConfig?.bannedFooterColor && activeDf.footerConfig.bannedFooterColor.toUpperCase() === p.color.toUpperCase()) ||
-                              (activeDf.footerConfig?.reserveWhiteBand && p.color.toUpperCase() === '#FFFFFF')
-                            )
-                          );
-                          return (
-                            <button
-                              key={p.color}
-                              type="button"
-                              disabled={isColorBanned}
-                              onClick={() => {
-                                if (isColorBanned) return;
-                                onChange({ footerBgColor: p.color, selectedCustomFooterId: undefined, customFooterConfig: undefined, customFooterPng: undefined });
-                              }}
-                              className={`px-2 py-1.5 rounded-lg text-left text-xs font-bold border flex items-center justify-between gap-1.5 transition-all ${
-                                isColorBanned
-                                  ? 'opacity-40 cursor-not-allowed bg-neutral-900 border-neutral-800'
-                                  : isSel
-                                    ? 'ring-2 ring-yellow-400 scale-[1.02] shadow-md border-yellow-400 cursor-pointer'
-                                    : 'hover:border-neutral-500 cursor-pointer'
-                              } ${p.border}`}
-                              style={{ backgroundColor: p.color, color: '#0F172A' }}
-                              title={isColorBanned ? '🚫 इस फ्रेम में यह रंग आरक्षित है' : `${p.nameHi} - ${p.color}`}
-                            >
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="w-3.5 h-3.5 rounded-full border border-neutral-400/60 shrink-0 shadow-inner" style={{ backgroundColor: p.color }} />
-                                <span className="text-[10.5px] truncate">{p.nameHi}</span>
-                              </div>
-                              {isColorBanned ? (
-                                <span className="font-mono text-[8px] text-red-600 font-black shrink-0">🚫 आरक्षित</span>
-                              ) : (
-                                <span className="font-mono text-[9px] text-neutral-600 shrink-0">{p.color}</span>
-                              )}
-                            </button>
-                          );
-                        })}
+                {(() => {
+                  const activeDf = currentDynamicFrame || getDynamicFrameById(card.frameDesign || '');
+                  const frameDefaultFooterBg = activeDf && ((activeDf as any).footerBrandingConfig?.footerBgColor || activeDf.footerConfig?.footerBgColor);
+                  if (frameDefaultFooterBg) {
+                    return (
+                      <div className="p-3 bg-neutral-900/90 border border-neutral-800 rounded-xl text-[11px] text-amber-300 flex items-center gap-2">
+                        <span>ℹ️</span>
+                        <span>इस फ्रेम का फ़ुटर रंग फ्रेम डिज़ाइन के अनुसार निर्धारित है ({frameDefaultFooterBg})।</span>
                       </div>
-                    </div>
+                    );
+                  }
 
-                    {/* Remaining 9 Colors — Visible to Pro, VIP, and Admin */}
-                    {(effectiveAdmin || effectiveTier === 'professional' || effectiveTier === 'ultra') && (
-                      <div className="space-y-1 pt-1">
-                        <span className="text-[10px] text-neutral-400 block font-semibold">2. अतिरिक्त रंग पैलेट (Remaining 9):</span>
-                        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-                          {FOOTER_BG_SECONDARY_PRESETS.map((p) => {
+                  if (effectiveTier === 'basic' && !effectiveAdmin) {
+                    return (
+                      <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-800 text-[11px] text-neutral-300 flex items-center gap-2">
+                        <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span>🔒 बेसिक पैकेज में फुटर बैकग्राउंड सफ़ेद निर्धारित है। अन्य रंगों के लिए एडवांस/प्रो/वीआईपी डेस्क चुनें।</span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <>
+                      {/* Primary Colors — First 5 options displayed prominently */}
+                      <div className="space-y-1">
+                        <span className="text-[10px] text-neutral-400 block font-semibold">1. मुख्य प्राथमिक रंग (Primary 5):</span>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                          {FOOTER_BG_PRIMARY_PRESETS.map((p) => {
                             const isSel = (card.footerBgColor || '#FFFFFF').toUpperCase() === p.color.toUpperCase();
-                            const activeDf = currentDynamicFrame || getDynamicFrameById(card.frameDesign || '');
                             const isColorBanned = Boolean(
                               activeDf && (
                                 (activeDf.footerConfig?.bannedFooterColor && activeDf.footerConfig.bannedFooterColor.toUpperCase() === p.color.toUpperCase()) ||
-                                (activeDf.footerConfig?.reserveWhiteBand && p.color.toUpperCase() === '#FFFFFF') ||
-                                (activeDf.bannedFooterColor && activeDf.bannedFooterColor.toUpperCase() === p.color.toUpperCase())
+                                (activeDf.footerConfig?.reserveWhiteBand && p.color.toUpperCase() === '#FFFFFF')
                               )
                             );
                             return (
@@ -6156,78 +6126,126 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                                   if (isColorBanned) return;
                                   onChange({ footerBgColor: p.color, selectedCustomFooterId: undefined, customFooterConfig: undefined, customFooterPng: undefined });
                                 }}
-                                className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 shrink-0 transition-all ${
+                                className={`px-2 py-1.5 rounded-lg text-left text-xs font-bold border flex items-center justify-between gap-1.5 transition-all ${
                                   isColorBanned
                                     ? 'opacity-40 cursor-not-allowed bg-neutral-900 border-neutral-800'
                                     : isSel
-                                      ? 'ring-2 ring-yellow-400 scale-105 shadow-md border-yellow-400 cursor-pointer'
+                                      ? 'ring-2 ring-yellow-400 scale-[1.02] shadow-md border-yellow-400 cursor-pointer'
                                       : 'hover:border-neutral-500 cursor-pointer'
                                 } ${p.border}`}
                                 style={{ backgroundColor: p.color, color: '#0F172A' }}
-                                title={isColorBanned ? '🚫 इस फ्रेम में यह रंग आरक्षित है' : `${p.nameHi} (${p.name}) - ${p.color}`}
+                                title={isColorBanned ? '🚫 इस फ्रेम में यह रंग आरक्षित है' : `${p.nameHi} - ${p.color}`}
                               >
-                                <span className="w-3 h-3 rounded-full border border-neutral-400/60 shadow-inner" style={{ backgroundColor: p.color }} />
-                                <span className="text-[10px] whitespace-nowrap">{p.nameHi}</span>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className="w-3.5 h-3.5 rounded-full border border-neutral-400/60 shrink-0 shadow-inner" style={{ backgroundColor: p.color }} />
+                                  <span className="text-[10.5px] truncate">{p.nameHi}</span>
+                                </div>
                                 {isColorBanned ? (
                                   <span className="font-mono text-[8px] text-red-600 font-black shrink-0">🚫 आरक्षित</span>
                                 ) : (
-                                  <span className="font-mono text-[9px] text-neutral-600">{p.color}</span>
+                                  <span className="font-mono text-[9px] text-neutral-600 shrink-0">{p.color}</span>
                                 )}
                               </button>
                             );
                           })}
                         </div>
                       </div>
-                    )}
 
-                    {/* Custom Color Option for Footer Background — strictly for VIP Desk and Admin */}
-                    {(effectiveAdmin || effectiveTier === 'ultra') && (
-                      <div className="flex items-center justify-between p-2 bg-neutral-900 rounded-lg border border-neutral-800">
-                        <span className="text-[11px] text-neutral-300 font-semibold flex items-center gap-1.5">
-                          <span>🖌️</span>
-                          <span>कस्टम बैकग्राउंड रंग (VIP Desk):</span>
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {(() => {
-                            const activeDf = currentDynamicFrame || getDynamicFrameById(card.frameDesign || '');
-                            const bannedFooterColor = activeDf?.footerConfig?.bannedFooterColor || (activeDf as any)?.bannedFooterColor;
-                            return (
-                              <>
-                                <input
-                                  type="color"
-                                  value={card.footerBgColor || '#FFFFFF'}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    if (bannedFooterColor && val.toUpperCase() === bannedFooterColor.toUpperCase()) {
-                                      alert(`यह रंग (${val}) मास्टर एडमिन द्वारा इस फ्रेम में प्रतिबंधित है।`);
-                                      return;
-                                    }
-                                    onChange({ footerBgColor: val, selectedCustomFooterId: undefined, customFooterConfig: undefined, customFooterPng: undefined });
+                      {/* Remaining 9 Colors — Visible to Pro, VIP, and Admin */}
+                      {(effectiveAdmin || effectiveTier === 'professional' || effectiveTier === 'ultra') && (
+                        <div className="space-y-1 pt-1">
+                          <span className="text-[10px] text-neutral-400 block font-semibold">2. अतिरिक्त रंग पैलेट (Remaining 9):</span>
+                          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                            {FOOTER_BG_SECONDARY_PRESETS.map((p) => {
+                              const isSel = (card.footerBgColor || '#FFFFFF').toUpperCase() === p.color.toUpperCase();
+                              const isColorBanned = Boolean(
+                                activeDf && (
+                                  (activeDf.footerConfig?.bannedFooterColor && activeDf.footerConfig.bannedFooterColor.toUpperCase() === p.color.toUpperCase()) ||
+                                  (activeDf.footerConfig?.reserveWhiteBand && p.color.toUpperCase() === '#FFFFFF') ||
+                                  (activeDf.bannedFooterColor && activeDf.bannedFooterColor.toUpperCase() === p.color.toUpperCase())
+                                )
+                              );
+                              return (
+                                <button
+                                  key={p.color}
+                                  type="button"
+                                  disabled={isColorBanned}
+                                  onClick={() => {
+                                    if (isColorBanned) return;
+                                    onChange({ footerBgColor: p.color, selectedCustomFooterId: undefined, customFooterConfig: undefined, customFooterPng: undefined });
                                   }}
-                                  className="w-7 h-7 rounded cursor-pointer border-0 bg-transparent p-0"
-                                  title="कस्टम बैकग्राउंड रंग चुनें"
-                                />
-                                <input
-                                  type="text"
-                                  value={card.footerBgColor || '#FFFFFF'}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    if (bannedFooterColor && val.toUpperCase() === bannedFooterColor.toUpperCase()) {
-                                      alert(`यह रंग (${val}) मास्टर एडमिन द्वारा इस फ्रेम में प्रतिबंधित है।`);
-                                      return;
-                                    }
-                                    onChange({ footerBgColor: val, selectedCustomFooterId: undefined, customFooterConfig: undefined, customFooterPng: undefined });
-                                  }}
-                                  className="w-20 bg-neutral-950 border border-neutral-700 rounded px-1.5 py-0.5 text-[11px] font-mono text-white uppercase text-center"
-                                />
-                              </>
-                            );
-                          })()}
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 shrink-0 transition-all ${
+                                    isColorBanned
+                                      ? 'opacity-40 cursor-not-allowed bg-neutral-900 border-neutral-800'
+                                      : isSel
+                                        ? 'ring-2 ring-yellow-400 scale-105 shadow-md border-yellow-400 cursor-pointer'
+                                        : 'hover:border-neutral-500 cursor-pointer'
+                                  } ${p.border}`}
+                                  style={{ backgroundColor: p.color, color: '#0F172A' }}
+                                  title={isColorBanned ? '🚫 इस फ्रेम में यह रंग आरक्षित है' : `${p.nameHi} (${p.name}) - ${p.color}`}
+                                >
+                                  <span className="w-3 h-3 rounded-full border border-neutral-400/60 shadow-inner" style={{ backgroundColor: p.color }} />
+                                  <span className="text-[10px] whitespace-nowrap">{p.nameHi}</span>
+                                  {isColorBanned ? (
+                                    <span className="font-mono text-[8px] text-red-600 font-black shrink-0">🚫 आरक्षित</span>
+                                  ) : (
+                                    <span className="font-mono text-[9px] text-neutral-600">{p.color}</span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </>
-                )}
+                      )}
+
+                      {/* Custom Color Option for Footer Background — strictly for VIP Desk and Admin */}
+                      {(effectiveAdmin || effectiveTier === 'ultra') && (
+                        <div className="flex items-center justify-between p-2 bg-neutral-900 rounded-lg border border-neutral-800">
+                          <span className="text-[11px] text-neutral-300 font-semibold flex items-center gap-1.5">
+                            <span>🖌️</span>
+                            <span>कस्टम बैकग्राउंड रंग (VIP Desk):</span>
+                          </span>
+                          <div className="flex items-center gap-2">
+                            {(() => {
+                              const bannedFooterColor = activeDf?.footerConfig?.bannedFooterColor || (activeDf as any)?.bannedFooterColor;
+                              return (
+                                <>
+                                  <input
+                                    type="color"
+                                    value={card.footerBgColor || '#FFFFFF'}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      if (bannedFooterColor && val.toUpperCase() === bannedFooterColor.toUpperCase()) {
+                                        alert(`यह रंग (${val}) मास्टर एडमिन द्वारा इस फ्रेम में प्रतिबंधित है।`);
+                                        return;
+                                      }
+                                      onChange({ footerBgColor: val, selectedCustomFooterId: undefined, customFooterConfig: undefined, customFooterPng: undefined });
+                                    }}
+                                    className="w-7 h-7 rounded cursor-pointer border-0 bg-transparent p-0"
+                                    title="कस्टम बैकग्राउंड रंग चुनें"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={card.footerBgColor || '#FFFFFF'}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      if (bannedFooterColor && val.toUpperCase() === bannedFooterColor.toUpperCase()) {
+                                        alert(`यह रंग (${val}) मास्टर एडमिन द्वारा इस फ्रेम में प्रतिबंधित है।`);
+                                        return;
+                                      }
+                                      onChange({ footerBgColor: val, selectedCustomFooterId: undefined, customFooterConfig: undefined, customFooterPng: undefined });
+                                    }}
+                                    className="w-20 bg-neutral-950 border border-neutral-700 rounded px-1.5 py-0.5 text-[11px] font-mono text-white uppercase text-center"
+                                  />
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Part I: Independent Footer Text Color Picker (Default #000000 Black) */}

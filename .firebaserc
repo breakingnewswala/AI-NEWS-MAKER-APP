@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "gen-lang-client-0130460668"
+    "default": "ai-news-maker-app",
+    "gemini": "gen-lang-client-0130460668"
   }
 }

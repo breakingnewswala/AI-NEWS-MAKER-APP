@@ -13988,19 +13988,6 @@ function getDefaultAssetLibraries(): any[] {
   // Pure genuine assets only: Location Badges, Story Callouts, Custom Footers
   return [
     {
-      id: "asset_1794132101671_u0g9s",
-      name: "Red Map Pin Badge with Divider",
-      category: "general",
-      type: "location_badge",
-      url: "/assets/location_white_icon.png",
-      enabled: true,
-      createdAt: 1794132101671,
-      updatedAt: 1794132144005,
-      sliceConfig: { leftWidthPct: 0.28, rightWidthPct: 0.15, centerMinPct: 0.57 },
-      textRegion: { x: 32, y: 24, width: 58, height: 55 },
-      typographyConfig: { fontFamily: "Mukta", fontSize: 50, fontWeight: "bold", textColor: "#000000", textAlign: "center" },
-    },
-    {
       id: "callout_bully_forward_story",
       name: "पूरी खबर विवरण कॉलआउट (Full Story Callout)",
       category: "general",
@@ -14162,7 +14149,6 @@ function getDefaultAssetLibraries(): any[] {
 
 const DELETED_ASSETS_TOMBSTONE_FILE = process.env.DELETED_ASSETS_TOMBSTONE_FILE || path.join(process.cwd(), "deleted_assets_tombstone.json");
 export const PROTECTED_BUILTIN_ASSET_IDS = new Set<string>([
-  'asset_1794132101671_u0g9s',
   'callout_bully_forward_story',
   'footer_regular_gold',
   'footer_branding_navy',
