@@ -26,6 +26,7 @@ import {
   ExternalLink,
   MapPin,
   Calendar,
+  Camera,
   Filter,
   Trash2,
   Youtube,
@@ -1090,11 +1091,12 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                     >
                       {/* Photo Slot Sample Photo (Layer 0, underneath frame overlay) */}
                       {(() => {
-                        const samplePhoto = df.samplePhotoUrl || df.photoSlots?.[0]?.defaultAssetUrl || '/assets/placeholder_news_photo.jpg';
+                        const samplePhoto = df.samplePhotoUrl || df.photoSlots?.[0]?.defaultAssetUrl;
+                        const hasRealPhoto = Boolean(samplePhoto && !samplePhoto.includes('placeholder_news_photo') && samplePhoto.trim().length > 0);
                         const slotRect = df.photoSlots?.[0]?.rect || { x: 0, y: 0, width: 100, height: 75 };
                         return (
                           <div
-                            className="absolute z-0 overflow-hidden bg-slate-900"
+                            className="absolute z-0 overflow-hidden bg-slate-950 flex items-center justify-center"
                             style={{
                               left: `${slotRect.x ?? 0}%`,
                               top: `${slotRect.y ?? 0}%`,
@@ -1102,17 +1104,28 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
                               height: `${slotRect.height ?? 75}%`,
                             }}
                           >
-                            <img
-                              src={samplePhoto}
-                              alt="Sample Photo"
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                const target = e.currentTarget as HTMLImageElement;
-                                if (!target.src.includes('placeholder_news_photo')) {
-                                  target.src = '/assets/placeholder_news_photo.jpg';
-                                }
-                              }}
-                            />
+                            {hasRealPhoto ? (
+                              <img
+                                src={samplePhoto}
+                                alt="Sample Photo"
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center select-none bg-slate-950/60 backdrop-blur-xs">
+                                <div className="w-11 h-11 rounded-full bg-slate-900/90 border border-slate-700 flex items-center justify-center mb-2 shadow-lg">
+                                  <Camera className="w-5 h-5 text-slate-300 stroke-[1.75]" />
+                                </div>
+                                <span className="text-[11px] sm:text-xs font-bold text-white font-['Noto_Sans_Devanagari'] drop-shadow-md">
+                                  फोटो टच करने के लिए स्टेप 4 पर जाएं
+                                </span>
+                                <span className="text-[9.5px] text-slate-300 font-['Noto_Sans_Devanagari'] mt-0.5 drop-shadow-sm">
+                                  (यहां आपकी चुनी हुई फोटो प्रदर्शित होगी)
+                                </span>
+                              </div>
+                            )}
                           </div>
                         );
                       })()}

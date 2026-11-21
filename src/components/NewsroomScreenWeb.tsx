@@ -402,10 +402,14 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
           ? `${generatedScript.subHeadline}\n\n${generatedScript.fullStory}`
           : generatedScript.fullStory;
 
+      const hls = (generatedScript.socialHeadlines && generatedScript.socialHeadlines.length > 0)
+        ? generatedScript.socialHeadlines
+        : [generatedScript.headline];
+
       saveDraft(
         {
           templateId: 'graphic_001',
-          frameDesign: 'classic_breaking',
+          frameDesign: 'graphic_001',
           headline: generatedScript.headline,
           formattedHeadline: generatedScript.headline,
           highlightWords: [],
@@ -413,6 +417,11 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
           location: '',
           date: 'आज की ताज़ा ख़बर',
           summary: summaryText,
+          customCaption: summaryText,
+          headlineOptions: hls,
+          customHeadlines: hls,
+          layout: 'single',
+          images: { main: '' },
           photoUrl: '',
         } as any,
         {
@@ -428,6 +437,71 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
     } catch (err) {
       console.error('Failed to save script as draft:', err);
     }
+  };
+
+  const handleApplyScriptToStudio = () => {
+    if (!generatedScript) return;
+    const summaryText =
+      generatedScript.mode === 'social'
+        ? `${generatedScript.socialDescription || ''}\n\n${(generatedScript.hashtags || []).join(' ')}`
+        : generatedScript.subHeadline
+        ? `${generatedScript.subHeadline}\n\n${generatedScript.fullStory}`
+        : generatedScript.fullStory;
+
+    const hls = (generatedScript.socialHeadlines && generatedScript.socialHeadlines.length > 0)
+      ? generatedScript.socialHeadlines
+      : [generatedScript.headline];
+
+    saveDraft(
+      {
+        templateId: 'graphic_001',
+        frameDesign: 'graphic_001',
+        headline: generatedScript.headline,
+        formattedHeadline: generatedScript.headline,
+        highlightWords: [],
+        category: 'संपादकीय',
+        location: '',
+        date: 'आज की ताज़ा ख़बर',
+        summary: summaryText,
+        customCaption: summaryText,
+        headlineOptions: hls,
+        customHeadlines: hls,
+        layout: 'single',
+        images: { main: '' },
+        photoUrl: '',
+      } as any,
+      {
+        title: generatedScript.headline,
+        anchorScript: generatedScript.fullStory || summaryText,
+        tags: generatedScript.hashtags || ['#AIScriptMaker', '#NewsStory', '#AINewsMaker'],
+      }
+    );
+    setDrafts(getSavedDrafts());
+    refreshHistory();
+
+    onOpenStudioWithDraft({
+      id: `script_${Date.now()}`,
+      title: generatedScript.headline,
+      summary: summaryText,
+      category: 'संपादकीय',
+      cardData: {
+        templateId: 'graphic_001',
+        frameDesign: 'graphic_001',
+        headline: generatedScript.headline,
+        formattedHeadline: generatedScript.headline,
+        highlightWords: [],
+        category: 'संपादकीय',
+        location: '',
+        date: 'आज की ताज़ा ख़बर',
+        summary: summaryText,
+        customCaption: summaryText,
+        headlineOptions: hls,
+        customHeadlines: hls,
+        layout: 'single',
+        images: { main: '' },
+        photoUrl: '',
+      } as any,
+    } as any);
   };
 
   // Load and sync drafts & inquiries on mount
@@ -948,10 +1022,10 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                   <span className="text-[11px] text-slate-400">शीर्षक पर क्लिक करके पसंदीदा हेडलाइन चुनें</span>
                 </div>
 
-                {/* 1. Distinct Social Headlines (3-4 Options) */}
+                {/* 1. Distinct Social Headlines (5 Options) */}
                 <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 space-y-3">
                   <label className="text-xs font-black text-amber-300 uppercase tracking-wide flex items-center justify-between">
-                    <span>1. सोशल मीडिया हेडलाइंस विकल्प (3-4 आकर्षक ऑप्शंस)</span>
+                    <span>1. सोशल मीडिया हेडलाइंस विकल्प (5 आकर्षक ऑप्शंस)</span>
                     <span className="text-[10px] text-slate-400 font-normal">क्लिक करके प्राथमिक शीर्षक चुनें</span>
                   </label>
                   <div className="space-y-2">
@@ -1082,22 +1156,31 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                   <div className="flex items-center gap-2 flex-wrap">
                     <button
                       type="button"
+                      onClick={handleApplyScriptToStudio}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 text-xs font-black shadow-md transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                      title="इन सभी 5 हेडलाइंस व कैप्शन को सीधे फोटो न्यूज़ स्टूडियो में ले जाएं"
+                    >
+                      <Sparkles className="w-4 h-4 text-slate-950" />
+                      <span>✨ इस खबर से ग्राफिक बनाएं</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() =>
                         handleCopyScriptField(
                           'social_all',
                           `${generatedScript.headline}\n\n${generatedScript.socialDescription || ''}\n\n${(generatedScript.hashtags || []).join(' ')}`
                         )
                       }
-                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 text-xs font-black shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                      className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 shadow-sm transition flex items-center gap-1.5 cursor-pointer"
                     >
                       {scriptCopiedField === 'social_all' ? (
                         <>
-                          <Check className="w-4 h-4 text-slate-950" />
+                          <Check className="w-4 h-4 text-emerald-400" />
                           <span>पूरा सोशल पोस्ट कॉपी हो गया!</span>
                         </>
                       ) : (
                         <>
-                          <Copy className="w-4 h-4 text-slate-950" />
+                          <Copy className="w-4 h-4 text-amber-400" />
                           <span>पूरा सोशल पोस्ट कॉपी करें</span>
                         </>
                       )}

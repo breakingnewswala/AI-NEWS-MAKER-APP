@@ -10873,7 +10873,7 @@ ${cleanInput}
 
 कृपया सोशल मीडिया (Instagram, Facebook, X, WhatsApp Status) के लिए अत्यधिक वायरल, आकर्षक और पठनीय न्यूज़ पैकेज तैयार करें।
 कड़े संपादकीय नियम:
-1. सोशल हेडलाइंस विकल्प (socialHeadlines): 3 से 4 बिल्कुल अलग-अलग, अत्यधिक आकर्षक, तथ्यात्मक व क्लिक-योग्य हेडलाइंस। ध्यान रहे: "प्रेस नोट", "स-नोट", "कार्यालय" जैसे प्रशासनिक शब्दों को शीर्षक न बनाएं। समाचार का मुख्य घटनाक्रम व विषय ही शीर्षक होना चाहिए।
+1. सोशल हेडलाइंस विकल्प (socialHeadlines): अनिवार्य रूप से 5 बिल्कुल अलग-अलग, अत्यधिक आकर्षक, तथ्यात्मक व क्लिक-योग्य हेडलाइंस। ध्यान रहे: "प्रेस नोट", "स-नोट", "कार्यालय" जैसे प्रशासनिक शब्दों को शीर्षक न बनाएं। समाचार का मुख्य घटनाक्रम व विषय ही शीर्षक होना चाहिए।
 2. सोशल डिस्क्रिप्शन / कैप्शन (socialDescription): 2 से 3 संक्षिप्त, प्रवाहमयी व प्रभावशाली वाक्य (60-120 शब्द) जो पाठकों को तुरंत आकर्षित करें।
 3. हैशटैग्स (hashtags): उपयुक्त हैशटैग्स की क्रमबद्ध सूची। पहला हैशटैग #${userHandle} हो, फिर खबर के अनुसार 3-5 विषयगत हैशटैग्स (उदा. #BreakingNews #CrimeNews #PoliceAction), और अंत में अनिवार्य रूप से #AINewsMaker हो।
 
@@ -10883,7 +10883,8 @@ ${cleanInput}
     "हेडलाइन विकल्प 1",
     "हेडलाइन विकल्प 2",
     "हेडलाइन विकल्प 3",
-    "हेडलाइन विकल्प 4"
+    "हेडलाइन विकल्प 4",
+    "हेडलाइन विकल्प 5"
   ],
   "socialDescription": "सोशल मीडिया कैप्शन...",
   "hashtags": [
@@ -10923,8 +10924,18 @@ ${cleanInput}
                 return [`#${cleanUserHandle}`, ...middle.slice(0, 4), "#AINewsMaker"];
               };
               const tags = formatOrderedHashtags(Array.isArray(parsed.hashtags) ? parsed.hashtags : [])
+              const fill5Headlines = (hls: string[]): string[] => {
+                const list = [...hls];
+                const base = parsedSubject.title || "ताजा समाचार अपडेट";
+                if (list.length < 1) list.push(base);
+                if (list.length < 2) list.push(`बड़ी खबर: ${base}`);
+                if (list.length < 3) list.push(`${base} — जानें पूरी खबर और घटनाक्रम`);
+                if (list.length < 4) list.push(`डिजिटल बुलेटिन: ${base}`);
+                if (list.length < 5) list.push(`विशेष रिपोर्ट: ${base}`);
+                return list.slice(0, 5);
+              };
               return {
-                socialHeadlines: cleanHls.length >= 2 ? cleanHls : [parsedSubject.title, `बड़ी खबर: ${parsedSubject.title}`, `${parsedSubject.title} — जानें पूरा मामला`],
+                socialHeadlines: fill5Headlines(cleanHls),
                 socialDescription: String(parsed.socialDescription || "").trim(),
                 hashtags: tags,
               };
@@ -13623,26 +13634,38 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       isProfileComplete: (isMasterAdminEmail || isSubAdminEmail) ? true : isProfileComplete,
       profileStatus: (isMasterAdminEmail || isSubAdminEmail) ? "active" : (isProfileComplete ? "active" : "incomplete"),
       email: profile.email || existing.email || "",
-      state: (profile.state !== undefined && profile.state !== null && String(profile.state).trim() !== "")
-        ? String(profile.state).trim()
-        : (existing.state || (isSubAdminEmail || isMasterAdminEmail ? "मध्य प्रदेश" : "")),
-      district: (profile.district !== undefined && profile.district !== null && String(profile.district).trim() !== "" && String(profile.district).trim() !== "हेडक्वार्टर सेंट्रल डेस्क")
-        ? String(profile.district).trim()
-        : ((existing.district && existing.district !== "हेडक्वार्टर सेंट्रल डेस्क") ? existing.district : (isSubAdminEmail || isMasterAdminEmail ? "भोपाल" : "")),
-      city: (profile.city !== undefined && profile.city !== null && String(profile.city).trim() !== "")
-        ? String(profile.city).trim()
-        : (existing.city || (isSubAdminEmail ? "भोपाल" : "")),
-      location: (profile.location !== undefined && profile.location !== null && String(profile.location).trim() !== "" && String(profile.location).trim() !== "हेडक्वार्टर सेंट्रल डेस्क")
-        ? String(profile.location).trim()
-        : ((existing.location && existing.location !== "हेडक्वार्टर सेंट्रल डेस्क") ? existing.location : (isSubAdminEmail || isMasterAdminEmail ? "भोपाल" : "")),
+      state: (() => {
+        const val = (profile.state !== undefined && profile.state !== null && String(profile.state).trim() !== "")
+          ? String(profile.state).trim()
+          : (existing.state || (isSubAdminEmail || isMasterAdminEmail ? "मध्य प्रदेश" : ""));
+        return (val.includes("à¤") || val.includes("Ã")) ? "मध्य प्रदेश" : val;
+      })(),
+      district: (() => {
+        const val = (profile.district !== undefined && profile.district !== null && String(profile.district).trim() !== "" && String(profile.district).trim() !== "हेडक्वार्टर सेंट्रल डेस्क")
+          ? String(profile.district).trim()
+          : ((existing.district && existing.district !== "हेडक्वार्टर सेंट्रल डेस्क") ? existing.district : (isSubAdminEmail || isMasterAdminEmail ? "भोपाल" : ""));
+        return (val.includes("à¤") || val.includes("Ã")) ? "भोपाल" : val;
+      })(),
+      city: (() => {
+        const val = (profile.city !== undefined && profile.city !== null && String(profile.city).trim() !== "")
+          ? String(profile.city).trim()
+          : (existing.city || (isSubAdminEmail ? "भोपाल" : ""));
+        return (val.includes("à¤") || val.includes("Ã")) ? "भोपाल" : val;
+      })(),
+      location: (() => {
+        const val = (profile.location !== undefined && profile.location !== null && String(profile.location).trim() !== "" && String(profile.location).trim() !== "हेडक्वार्टर सेंट्रल डेस्क")
+          ? String(profile.location).trim()
+          : ((existing.location && existing.location !== "हेडक्वार्टर सेंट्रल डेस्क") ? existing.location : (isSubAdminEmail || isMasterAdminEmail ? "भोपाल" : ""));
+        return (val.includes("à¤") || val.includes("Ã")) ? "भोपाल" : val;
+      })(),
       channelNameHi: (() => {
         const raw = profile.channelNameHi || profile.channelName || existing.channelNameHi || "";
         if (typeof raw === "string" && (raw.includes("à¤") || raw.includes("Ã") || raw.trim() === "")) {
-          return "ब्रेकिंग न्यूज़ वाला";
+          return isSubAdminEmail ? "एआई न्यूज़ मेकर" : "ब्रेकिंग न्यूज़ वाला";
         }
-        return raw;
+        return raw || (isSubAdminEmail ? "एआई न्यूज़ मेकर" : (isMasterAdminEmail ? "ब्रेकिंग न्यूज़ वाला" : ""));
       })(),
-      channelNameEn: profile.channelNameEn || existing.channelNameEn || "",
+      channelNameEn: profile.channelNameEn || existing.channelNameEn || (isSubAdminEmail ? "AI News Maker" : (isMasterAdminEmail ? "BREAKING NEWS WALA" : "")),
       channelLogoUrl: profile.channelLogoUrl || existing.channelLogoUrl || (isMasterAdminEmail ? '/assets/breaking_news_wala_logo.png' : isSubAdminEmail ? '/assets/ai_news_maker_logo.png' : ""),
       channelLogoPngUrl: profile.channelLogoPngUrl || profile.channelLogoUrl || existing.channelLogoPngUrl || existing.channelLogoUrl || (isMasterAdminEmail ? '/assets/breaking_news_wala_logo.png' : isSubAdminEmail ? '/assets/ai_news_maker_logo.png' : ""),
       channelLogoGifUrl: profile.channelLogoGifUrl || existing.channelLogoGifUrl,

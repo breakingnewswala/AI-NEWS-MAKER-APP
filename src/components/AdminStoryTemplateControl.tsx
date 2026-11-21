@@ -550,26 +550,26 @@ export const AdminStoryTemplateControl: React.FC<AdminStoryTemplateControlProps>
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Smartphone className="w-5 h-5 text-purple-400" />
-            <h3 className="text-lg font-black text-white">📱 स्टोरी टेम्पलेट कंट्रोल (9:16 Social Story Control)</h3>
+            <h3 className="text-lg font-black text-white">📱 स्टोरी टेम्पलेट कंट्रोल</h3>
             <span className="px-2.5 py-0.5 text-[11px] bg-purple-500/20 text-purple-300 font-bold rounded-full border border-purple-500/40">
-              मास्टर एडमिन कंट्रोल
+              मास्टर एडमिन
             </span>
           </div>
-          <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-            इंस्टाग्राम, फेसबुक व व्हाट्सएप स्टोरीज के लिए 9:16 वर्टिकल न्यूज़ लेआउट्स। हेडर में चैनल लोगो व लोकेशन, 50% स्क्रीन स्पेस में समाचार फोटो, 30-45% में बड़ी हेडलाइन व सब-हेडलाइन, और नीचे स्थायी चैनल फुटर।
+          <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
+            इंस्टाग्राम, फेसबुक व व्हाट्सएप हेतु 9:16 वर्टिकल स्टोरी टेम्पलेट्स व लेआउट नियंत्रण।
           </p>
         </div>
 
         {/* CTA: Create New 9:16 Story Frame */}
-        <div className="flex items-center gap-2 self-stretch md:self-auto">
+        <div className="flex items-center gap-2 self-stretch md:self-auto shrink-0">
           {onNewStoryFrame && (
             <button
               type="button"
               onClick={onNewStoryFrame}
-              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md cursor-pointer transition active:scale-95"
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md cursor-pointer transition active:scale-95 whitespace-nowrap shrink-0"
             >
-              <Plus className="w-4 h-4 text-white" />
-              <span>+ नई 9:16 स्टोरी बनाएं</span>
+              <Plus className="w-4 h-4 text-white shrink-0" />
+              <span className="whitespace-nowrap">+ नई 9:16 स्टोरी</span>
             </button>
           )}
 

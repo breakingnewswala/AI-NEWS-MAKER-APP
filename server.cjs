@@ -21922,7 +21922,7 @@ ${cleanInput}
 
 \u0915\u0943\u092A\u092F\u093E \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E (Instagram, Facebook, X, WhatsApp Status) \u0915\u0947 \u0932\u093F\u090F \u0905\u0924\u094D\u092F\u0927\u093F\u0915 \u0935\u093E\u092F\u0930\u0932, \u0906\u0915\u0930\u094D\u0937\u0915 \u0914\u0930 \u092A\u0920\u0928\u0940\u092F \u0928\u094D\u092F\u0942\u091C\u093C \u092A\u0948\u0915\u0947\u091C \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964
 \u0915\u0921\u093C\u0947 \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0928\u093F\u092F\u092E:
-1. \u0938\u094B\u0936\u0932 \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938 \u0935\u093F\u0915\u0932\u094D\u092A (socialHeadlines): 3 \u0938\u0947 4 \u092C\u093F\u0932\u094D\u0915\u0941\u0932 \u0905\u0932\u0917-\u0905\u0932\u0917, \u0905\u0924\u094D\u092F\u0927\u093F\u0915 \u0906\u0915\u0930\u094D\u0937\u0915, \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0935 \u0915\u094D\u0932\u093F\u0915-\u092F\u094B\u0917\u094D\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938\u0964 \u0927\u094D\u092F\u093E\u0928 \u0930\u0939\u0947: "\u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F", "\u0938-\u0928\u094B\u091F", "\u0915\u093E\u0930\u094D\u092F\u093E\u0932\u092F" \u091C\u0948\u0938\u0947 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u094B \u0936\u0940\u0930\u094D\u0937\u0915 \u0928 \u092C\u0928\u093E\u090F\u0902\u0964 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u093E \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0935 \u0935\u093F\u0937\u092F \u0939\u0940 \u0936\u0940\u0930\u094D\u0937\u0915 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F\u0964
+1. \u0938\u094B\u0936\u0932 \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938 \u0935\u093F\u0915\u0932\u094D\u092A (socialHeadlines): \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 5 \u092C\u093F\u0932\u094D\u0915\u0941\u0932 \u0905\u0932\u0917-\u0905\u0932\u0917, \u0905\u0924\u094D\u092F\u0927\u093F\u0915 \u0906\u0915\u0930\u094D\u0937\u0915, \u0924\u0925\u094D\u092F\u093E\u0924\u094D\u092E\u0915 \u0935 \u0915\u094D\u0932\u093F\u0915-\u092F\u094B\u0917\u094D\u092F \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938\u0964 \u0927\u094D\u092F\u093E\u0928 \u0930\u0939\u0947: "\u092A\u094D\u0930\u0947\u0938 \u0928\u094B\u091F", "\u0938-\u0928\u094B\u091F", "\u0915\u093E\u0930\u094D\u092F\u093E\u0932\u092F" \u091C\u0948\u0938\u0947 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u094B \u0936\u0940\u0930\u094D\u0937\u0915 \u0928 \u092C\u0928\u093E\u090F\u0902\u0964 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u093E \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0935 \u0935\u093F\u0937\u092F \u0939\u0940 \u0936\u0940\u0930\u094D\u0937\u0915 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F\u0964
 2. \u0938\u094B\u0936\u0932 \u0921\u093F\u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u0936\u0928 / \u0915\u0948\u092A\u094D\u0936\u0928 (socialDescription): 2 \u0938\u0947 3 \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924, \u092A\u094D\u0930\u0935\u093E\u0939\u092E\u092F\u0940 \u0935 \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0935\u093E\u0915\u094D\u092F (60-120 \u0936\u092C\u094D\u0926) \u091C\u094B \u092A\u093E\u0920\u0915\u094B\u0902 \u0915\u094B \u0924\u0941\u0930\u0902\u0924 \u0906\u0915\u0930\u094D\u0937\u093F\u0924 \u0915\u0930\u0947\u0902\u0964
 3. \u0939\u0948\u0936\u091F\u0948\u0917\u094D\u0938 (hashtags): \u0909\u092A\u092F\u0941\u0915\u094D\u0924 \u0939\u0948\u0936\u091F\u0948\u0917\u094D\u0938 \u0915\u0940 \u0915\u094D\u0930\u092E\u092C\u0926\u094D\u0927 \u0938\u0942\u091A\u0940\u0964 \u092A\u0939\u0932\u093E \u0939\u0948\u0936\u091F\u0948\u0917 #${userHandle} \u0939\u094B, \u092B\u093F\u0930 \u0916\u092C\u0930 \u0915\u0947 \u0905\u0928\u0941\u0938\u093E\u0930 3-5 \u0935\u093F\u0937\u092F\u0917\u0924 \u0939\u0948\u0936\u091F\u0948\u0917\u094D\u0938 (\u0909\u0926\u093E. #BreakingNews #CrimeNews #PoliceAction), \u0914\u0930 \u0905\u0902\u0924 \u092E\u0947\u0902 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 #AINewsMaker \u0939\u094B\u0964
 
@@ -21932,7 +21932,8 @@ ${cleanInput}
     "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A 1",
     "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A 2",
     "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A 3",
-    "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A 4"
+    "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A 4",
+    "\u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A 5"
   ],
   "socialDescription": "\u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u0948\u092A\u094D\u0936\u0928...",
   "hashtags": [
@@ -21970,8 +21971,18 @@ ${cleanInput}
                 return [`#${cleanUserHandle}`, ...middle.slice(0, 4), "#AINewsMaker"];
               };
               const tags = formatOrderedHashtags(Array.isArray(parsed.hashtags) ? parsed.hashtags : []);
+              const fill5Headlines = (hls) => {
+                const list = [...hls];
+                const base = parsedSubject.title || "\u0924\u093E\u091C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0905\u092A\u0921\u0947\u091F";
+                if (list.length < 1) list.push(base);
+                if (list.length < 2) list.push(`\u092C\u0921\u093C\u0940 \u0916\u092C\u0930: ${base}`);
+                if (list.length < 3) list.push(`${base} \u2014 \u091C\u093E\u0928\u0947\u0902 \u092A\u0942\u0930\u0940 \u0916\u092C\u0930 \u0914\u0930 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E`);
+                if (list.length < 4) list.push(`\u0921\u093F\u091C\u093F\u091F\u0932 \u092C\u0941\u0932\u0947\u091F\u093F\u0928: ${base}`);
+                if (list.length < 5) list.push(`\u0935\u093F\u0936\u0947\u0937 \u0930\u093F\u092A\u094B\u0930\u094D\u091F: ${base}`);
+                return list.slice(0, 5);
+              };
               return {
-                socialHeadlines: cleanHls.length >= 2 ? cleanHls : [parsedSubject.title, `\u092C\u0921\u093C\u0940 \u0916\u092C\u0930: ${parsedSubject.title}`, `${parsedSubject.title} \u2014 \u091C\u093E\u0928\u0947\u0902 \u092A\u0942\u0930\u093E \u092E\u093E\u092E\u0932\u093E`],
+                socialHeadlines: fill5Headlines(cleanHls),
                 socialDescription: String(parsed.socialDescription || "").trim(),
                 hashtags: tags
               };
@@ -24144,18 +24155,30 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       isProfileComplete: isMasterAdminEmail || isSubAdminEmail ? true : isProfileComplete,
       profileStatus: isMasterAdminEmail || isSubAdminEmail ? "active" : isProfileComplete ? "active" : "incomplete",
       email: profile.email || existing.email || "",
-      state: profile.state !== void 0 && profile.state !== null && String(profile.state).trim() !== "" ? String(profile.state).trim() : existing.state || (isSubAdminEmail || isMasterAdminEmail ? "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936" : ""),
-      district: profile.district !== void 0 && profile.district !== null && String(profile.district).trim() !== "" && String(profile.district).trim() !== "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" ? String(profile.district).trim() : existing.district && existing.district !== "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" ? existing.district : isSubAdminEmail || isMasterAdminEmail ? "\u092D\u094B\u092A\u093E\u0932" : "",
-      city: profile.city !== void 0 && profile.city !== null && String(profile.city).trim() !== "" ? String(profile.city).trim() : existing.city || (isSubAdminEmail ? "\u092D\u094B\u092A\u093E\u0932" : ""),
-      location: profile.location !== void 0 && profile.location !== null && String(profile.location).trim() !== "" && String(profile.location).trim() !== "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" ? String(profile.location).trim() : existing.location && existing.location !== "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" ? existing.location : isSubAdminEmail || isMasterAdminEmail ? "\u092D\u094B\u092A\u093E\u0932" : "",
+      state: (() => {
+        const val = profile.state !== void 0 && profile.state !== null && String(profile.state).trim() !== "" ? String(profile.state).trim() : existing.state || (isSubAdminEmail || isMasterAdminEmail ? "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936" : "");
+        return val.includes("\xE0\xA4") || val.includes("\xC3") ? "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936" : val;
+      })(),
+      district: (() => {
+        const val = profile.district !== void 0 && profile.district !== null && String(profile.district).trim() !== "" && String(profile.district).trim() !== "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" ? String(profile.district).trim() : existing.district && existing.district !== "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" ? existing.district : isSubAdminEmail || isMasterAdminEmail ? "\u092D\u094B\u092A\u093E\u0932" : "";
+        return val.includes("\xE0\xA4") || val.includes("\xC3") ? "\u092D\u094B\u092A\u093E\u0932" : val;
+      })(),
+      city: (() => {
+        const val = profile.city !== void 0 && profile.city !== null && String(profile.city).trim() !== "" ? String(profile.city).trim() : existing.city || (isSubAdminEmail ? "\u092D\u094B\u092A\u093E\u0932" : "");
+        return val.includes("\xE0\xA4") || val.includes("\xC3") ? "\u092D\u094B\u092A\u093E\u0932" : val;
+      })(),
+      location: (() => {
+        const val = profile.location !== void 0 && profile.location !== null && String(profile.location).trim() !== "" && String(profile.location).trim() !== "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" ? String(profile.location).trim() : existing.location && existing.location !== "\u0939\u0947\u0921\u0915\u094D\u0935\u093E\u0930\u094D\u091F\u0930 \u0938\u0947\u0902\u091F\u094D\u0930\u0932 \u0921\u0947\u0938\u094D\u0915" ? existing.location : isSubAdminEmail || isMasterAdminEmail ? "\u092D\u094B\u092A\u093E\u0932" : "";
+        return val.includes("\xE0\xA4") || val.includes("\xC3") ? "\u092D\u094B\u092A\u093E\u0932" : val;
+      })(),
       channelNameHi: (() => {
         const raw = profile.channelNameHi || profile.channelName || existing.channelNameHi || "";
         if (typeof raw === "string" && (raw.includes("\xE0\xA4") || raw.includes("\xC3") || raw.trim() === "")) {
-          return "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E";
+          return isSubAdminEmail ? "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" : "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E";
         }
-        return raw;
+        return raw || (isSubAdminEmail ? "\u090F\u0906\u0908 \u0928\u094D\u092F\u0942\u091C\u093C \u092E\u0947\u0915\u0930" : isMasterAdminEmail ? "\u092C\u094D\u0930\u0947\u0915\u093F\u0902\u0917 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u093E\u0932\u093E" : "");
       })(),
-      channelNameEn: profile.channelNameEn || existing.channelNameEn || "",
+      channelNameEn: profile.channelNameEn || existing.channelNameEn || (isSubAdminEmail ? "AI News Maker" : isMasterAdminEmail ? "BREAKING NEWS WALA" : ""),
       channelLogoUrl: profile.channelLogoUrl || existing.channelLogoUrl || (isMasterAdminEmail ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : ""),
       channelLogoPngUrl: profile.channelLogoPngUrl || profile.channelLogoUrl || existing.channelLogoPngUrl || existing.channelLogoUrl || (isMasterAdminEmail ? "/assets/breaking_news_wala_logo.png" : isSubAdminEmail ? "/assets/ai_news_maker_logo.png" : ""),
       channelLogoGifUrl: profile.channelLogoGifUrl || existing.channelLogoGifUrl,

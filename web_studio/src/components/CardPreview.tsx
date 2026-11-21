@@ -1048,10 +1048,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       {/* 1. BACKGROUND PHOTOS ACCORDING TO USER'S SELECTED LAYOUT */}
       {card.frameDesign === 'jacket-morning' ? (
         <div className="absolute inset-0 z-0 bg-neutral-950 overflow-hidden">
-          {(card.morningCustomBgUrl || (card.images.main && card.images.main.trim().length > 0)) ? (
+          {(card.morningCustomBgUrl || (card.images?.main && card.images.main.trim().length > 0)) ? (
             <div className="w-full h-full relative">
               <img
-                src={card.morningCustomBgUrl || card.images.main}
+                src={card.morningCustomBgUrl || card.images?.main || ''}
                 alt="Morning Background"
                 className="w-full h-full object-cover transform scale-105"
                 crossOrigin="anonymous"
@@ -1572,8 +1572,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           ) : null
         ) : getActiveHeaderPng(card) ? (
           <HeaderGraphic customHeaderPng={getActiveHeaderPng(card)} />
-        ) : (Boolean(currentDynamicFrame) || Boolean(card.customDynamicFrame) || card.frameDesign === 'graphic_001' || card.frameDesign === 'graphic_002' || card.frameDesign === 'graphic_003' || card.frameDesign === 'graphic_004' || card.frameDesign === 'jacket-default' || (card.frameDesign && card.frameDesign.startsWith('df_'))) ? (
-          /* Dynamic frames and canonical graphic templates have their own dedicated header and logo elements */
+        ) : (Boolean(currentDynamicFrame) || Boolean(card.customDynamicFrame) || card.frameDesign === 'graphic_001' || card.frameDesign === 'graphic_002' || card.frameDesign === 'graphic_003' || card.frameDesign === 'graphic_004' || card.frameDesign === 'jacket-default' || (card.frameDesign && card.frameDesign.startsWith('df_')) || card.frameDesign === 'classic_breaking' || Boolean(card.channelLogoUrl || card.channelLogoPngUrl)) ? (
+          /* Dynamic frames, canonical graphic templates, and frames with channel logos have their own dedicated header and logo elements */
           null
         ) : card.frameDesign === 'custom-png' ? (
           !card.hideDefaultHeaderInCustomFrame && (
@@ -3552,7 +3552,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               };
 
               // 1. Layout: 1_below_highlights (Left: 100% full story height; Right: Highlights on top + Photo 1 below)
-              if (layout === '1_below_highlights' && card.images.main) {
+              if (layout === '1_below_highlights' && card.images?.main) {
                 return (
                   <div className="flex-1 grid grid-cols-12 gap-2 overflow-hidden text-neutral-800" style={{ fontFamily: epaperFontFamily }}>
                     <div
@@ -3598,7 +3598,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               }
 
               // 2. Layout: 1_thumb_left (Left: compact thumbnail with story below; Right: full highlights box OR highlights on top + Ad on bottom)
-              if (layout === '1_thumb_left' && card.images.main) {
+              if (layout === '1_thumb_left' && card.images?.main) {
                 const showRightAd = card.epaperAd?.showAd && (card.epaperAd.placement === 'auto_fill' || card.epaperAd.placement === 'right_column');
                 return (
                   <div className="flex-1 grid grid-cols-12 gap-2 overflow-hidden text-neutral-800" style={{ fontFamily: epaperFontFamily }}>
@@ -3663,7 +3663,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       <div className="flex flex-col bg-neutral-100 border border-neutral-300 rounded p-1 shadow-sm">
                         <div className="w-full h-14 sm:h-18 overflow-hidden rounded-sm bg-neutral-200">
                           <img
-                            src={card.images.second || card.images.main}
+                            src={card.images?.second || card.images?.main || ''}
                             alt="Photo 1"
                             className="w-full h-full object-cover transition-transform"
                             style={getCropStyle(secondCrop)}
@@ -3684,7 +3684,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       <div className="flex flex-col bg-neutral-100 border border-neutral-300 rounded p-1 shadow-sm">
                         <div className="w-full h-14 sm:h-18 overflow-hidden rounded-sm bg-neutral-200">
                           <img
-                            src={card.images.third || card.images.second || card.images.main}
+                            src={card.images?.third || card.images?.second || card.images?.main || ''}
                             alt="Photo 2"
                             className="w-full h-full object-cover transition-transform"
                             style={getCropStyle(thirdCrop)}
@@ -3711,7 +3711,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               return (
                 <div className="flex-1 flex flex-col justify-between overflow-hidden" style={{ fontFamily: epaperFontFamily }}>
                   {/* Top Photo Section */}
-                  {card.images.main && layout !== '0_none' && (
+                  {card.images?.main && layout !== '0_none' && (
                     <div className="w-full mb-1.5 shrink-0">
                       {layout === '1_top' && (
                         <div className="flex flex-col bg-neutral-100 border border-neutral-300 rounded p-1 shadow-sm">
@@ -3763,7 +3763,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                           <div className="flex flex-col bg-neutral-100 border border-neutral-300 rounded p-1 shadow-sm">
                             <div className={`w-full ${heightClass} overflow-hidden rounded-sm bg-neutral-200`}>
                               <img
-                                src={card.images.second || card.images.main}
+                                src={card.images?.second || card.images?.main || ''}
                                 alt="Photo 2"
                                 className="w-full h-full object-cover transition-transform"
                                 style={getCropStyle(secondCrop)}
@@ -3789,7 +3789,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                           <div className="col-span-7 flex flex-col bg-neutral-100 border border-neutral-300 rounded p-1 shadow-sm">
                             <div className={`w-full ${heightClass} overflow-hidden rounded-sm bg-neutral-200`}>
                               <img
-                                src={card.images.main}
+                                src={card.images?.main || ''}
                                 alt="Photo 1"
                                 className="w-full h-full object-cover transition-transform"
                                 style={getCropStyle(mainCrop)}
@@ -3811,7 +3811,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                             <div className="flex-1 flex flex-col bg-neutral-100 border border-neutral-300 rounded p-1 shadow-sm">
                               <div className="w-full h-11 sm:h-14 overflow-hidden rounded-sm bg-neutral-200">
                                 <img
-                                  src={card.images.second || card.images.main}
+                                  src={card.images?.second || card.images?.main || ''}
                                   alt="Photo 2"
                                   className="w-full h-full object-cover transition-transform"
                                   style={getCropStyle(secondCrop)}
@@ -3821,7 +3821,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                             <div className="flex-1 flex flex-col bg-neutral-100 border border-neutral-300 rounded p-1 shadow-sm">
                               <div className="w-full h-11 sm:h-14 overflow-hidden rounded-sm bg-neutral-200">
                                 <img
-                                  src={card.images.third || card.images.main}
+                                  src={card.images?.third || card.images?.main || ''}
                                   alt="Photo 3"
                                   className="w-full h-full object-cover transition-transform"
                                   style={getCropStyle(thirdCrop)}
@@ -3836,7 +3836,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                         <div className="flex flex-col bg-neutral-100 border border-neutral-300 rounded p-1 shadow-sm">
                           <div className="w-full h-16 sm:h-20 overflow-hidden rounded-sm bg-neutral-200">
                             <img
-                              src={card.images.main}
+                              src={card.images?.main || ''}
                               alt="Top Photo"
                               className="w-full h-full object-cover transition-transform"
                               style={getCropStyle(mainCrop)}
@@ -3866,7 +3866,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       <div className="flex flex-col bg-neutral-100 border border-neutral-300 rounded p-0.5">
                         <div className="w-full h-11 sm:h-13 overflow-hidden rounded bg-neutral-200">
                           <img
-                            src={card.images.second || card.images.main}
+                            src={card.images?.second || card.images?.main || ''}
                             alt="Bottom Photo 1"
                             className="w-full h-full object-cover"
                             style={getCropStyle(secondCrop)}
@@ -3881,7 +3881,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       <div className="flex flex-col bg-neutral-100 border border-neutral-300 rounded p-0.5">
                         <div className="w-full h-11 sm:h-13 overflow-hidden rounded bg-neutral-200">
                           <img
-                            src={card.images.third || card.images.second || card.images.main}
+                            src={card.images?.third || card.images?.second || card.images?.main || ''}
                             alt="Bottom Photo 2"
                             className="w-full h-full object-cover"
                             style={getCropStyle(thirdCrop)}

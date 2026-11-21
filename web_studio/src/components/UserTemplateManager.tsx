@@ -1565,7 +1565,7 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                 }`}
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span className="text-[9.5px] font-bold leading-tight">E. AI फ्रेम</span>
+                <span className="text-[9.5px] font-bold leading-tight">E. सेंट्रल एसेट</span>
               </button>
             </div>
 
@@ -1625,8 +1625,8 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
               </div>
             )}
             {isFrameGenExpanded && (
-              <div className="p-3 bg-slate-950/80 border border-pink-500/40 rounded-xl animate-in fade-in space-y-4">
-                {renderFrameGeneratorSection()}
+              <div className="p-3 bg-slate-950/80 border border-emerald-500/40 rounded-xl animate-in fade-in space-y-4">
+                <AdminAssetLibrariesManager />
               </div>
             )}
           </div>
@@ -1645,8 +1645,8 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                   <Layout className="w-5 h-5 text-purple-400" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-base font-black text-white">A. Graphic Template Control</h4>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-base font-black text-white">A. ग्राफिक टेम्पलेट कंट्रोल</h4>
                     <span className="px-2 py-0.5 text-[10px] bg-purple-500/20 text-purple-300 font-bold rounded-full border border-purple-500/40">
                       8 श्रेणियाँ • टियर एक्सेस
                     </span>
@@ -1656,8 +1656,25 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                   </p>
                 </div>
               </div>
-              <div className="p-1.5 rounded-lg bg-slate-800 text-slate-300">
-                {isGraphicsExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              <div className="flex items-center gap-2">
+                {isMasterAdmin && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedEditFrame(null);
+                      setSelectedGeneratorMode('photo');
+                      setIsDynamicFrameModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer transition active:scale-95 whitespace-nowrap shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-white shrink-0" />
+                    <span>+ नया फोटो फ्रेम बनाएं</span>
+                  </button>
+                )}
+                <div className="p-1.5 rounded-lg bg-slate-800 text-slate-300">
+                  {isGraphicsExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                </div>
               </div>
             </button>
             {isGraphicsExpanded && (
@@ -1687,8 +1704,8 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                   <Film className="w-5 h-5 text-amber-400" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-base font-black text-white">B. Video Template Control</h4>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-base font-black text-white">B. वीडियो टेम्पलेट कंट्रोल</h4>
                     <span className="px-2 py-0.5 text-[10px] bg-amber-500/20 text-amber-300 font-bold rounded-full border border-amber-500/40">
                       9:16, 1:1, 4:3, 4:5 • कॉइन व टियर
                     </span>
@@ -1698,8 +1715,25 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                   </p>
                 </div>
               </div>
-              <div className="p-1.5 rounded-lg bg-slate-800 text-slate-300">
-                {isVideoExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              <div className="flex items-center gap-2">
+                {isMasterAdmin && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedEditFrame(null);
+                      setSelectedGeneratorMode('video');
+                      setIsDynamicFrameModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer transition active:scale-95 whitespace-nowrap shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-white shrink-0" />
+                    <span>+ नया वीडियो फ्रेम बनाएं</span>
+                  </button>
+                )}
+                <div className="p-1.5 rounded-lg bg-slate-800 text-slate-300">
+                  {isVideoExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                </div>
               </div>
             </button>
             {isVideoExpanded && (
@@ -1728,8 +1762,8 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                   <Smartphone className="w-5 h-5 text-pink-400" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-base font-black text-white">C. Story Template Control (स्टोरी टेम्पलेट कंट्रोल)</h4>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-base font-black text-white">C. स्टोरी टेम्पलेट कंट्रोल</h4>
                     <span className="px-2 py-0.5 text-[10px] bg-pink-500/20 text-pink-300 font-bold rounded-full border border-pink-500/40">
                       9:16 वर्टिकल स्टोरीज़ • मास्टर एडमिन
                     </span>
@@ -1739,8 +1773,25 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                   </p>
                 </div>
               </div>
-              <div className="p-1.5 rounded-lg bg-slate-800 text-slate-300">
-                {isStoryExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              <div className="flex items-center gap-2">
+                {isMasterAdmin && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedEditFrame(null);
+                      setSelectedGeneratorMode('photo');
+                      setIsDynamicFrameModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer transition active:scale-95 whitespace-nowrap shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-white shrink-0" />
+                    <span>+ नई 9:16 स्टोरी</span>
+                  </button>
+                )}
+                <div className="p-1.5 rounded-lg bg-slate-800 text-slate-300">
+                  {isStoryExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                </div>
               </div>
             </button>
             {isStoryExpanded && (
@@ -1774,8 +1825,8 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                   <Layers className="w-5 h-5 text-indigo-400" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-base font-black text-white">D. Custom Ad Reporter Approval</h4>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-base font-black text-white">D. रिपोर्टर कस्टम विज्ञापन अप्रूवल</h4>
                     <span className="px-2 py-0.5 text-[10px] bg-indigo-500/20 text-indigo-300 font-bold rounded-full border border-indigo-500/40">
                       PRO & VIP DESK अप्रूवल
                     </span>
@@ -2276,29 +2327,29 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
               )}
             </div>
 
-            {/* 15.4 SECTION D: AI Frame Generator (Master Admin Only) */}
-            <div id="admin-ai-frame-generator-section" className="border border-pink-500/30 rounded-2xl overflow-hidden bg-slate-900/60 shadow-xl">
+            {/* 15.5 SECTION E: Central Asset Libraries */}
+            <div id="admin-asset-libraries-section" className="border border-emerald-500/30 rounded-2xl overflow-hidden bg-slate-900/60 shadow-xl">
               <button
                 type="button"
                 onClick={() => setIsFrameGenExpanded(!isFrameGenExpanded)}
-                className="w-full p-4 bg-gradient-to-r from-pink-950/80 via-slate-900 to-rose-950/80 flex items-center justify-between text-left hover:bg-slate-800/80 transition cursor-pointer"
+                className="w-full p-4 bg-gradient-to-r from-emerald-950/80 via-slate-900 to-teal-950/80 flex items-center justify-between text-left hover:bg-slate-800/80 transition cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <div className="p-2.5 rounded-xl bg-gradient-to-tr from-pink-600 to-rose-600 text-white shadow-md">
+                  <div className="p-2.5 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-600 text-white shadow-md">
                     <Sparkles className="w-5 h-5 text-amber-300" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-base font-black text-white">E. AI Frame Generator</h4>
-                      <span className="px-2 py-0.5 text-[10px] bg-pink-500/20 text-pink-300 font-bold rounded-full border border-pink-500/40">
-                        4:5 व 9:16 • Gemini AI विज़न
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-base font-black text-white">E. सेंट्रल एसेट लाइब्रेरीज़</h4>
+                      <span className="px-2 py-0.5 text-[10px] bg-emerald-500/20 text-emerald-300 font-bold rounded-full border border-emerald-500/40">
+                        लोकेशन बैज • स्टोरी कॉलआउट • सुविचार • कस्टम फुटर
                       </span>
                       <span className="px-2 py-0.5 text-[9px] bg-red-600/40 text-red-200 font-black rounded border border-red-500/50">
                         MASTER ADMIN
                       </span>
                     </div>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      सैंपल डिज़ाइन अपलोड, Gemini AI विज़न एनालिसिस, 4:5 व 9:16 डायनामिक फ्रेम क्रिएशन व पब्लिशिंग
+                      सभी टेम्पलेट्स हेतु लोकेशन बैज, स्टोरी कॉलआउट, सुविचार व कस्टम फुटर एसेट्स का केंद्रीय प्रबंधन
                     </p>
                   </div>
                 </div>
@@ -2307,8 +2358,8 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                 </div>
               </button>
               {isFrameGenExpanded && (
-                <div className="p-4 sm:p-6 border-t border-pink-500/20 bg-slate-950/40 animate-in fade-in space-y-6">
-                  {renderFrameGeneratorSection()}
+                <div className="p-4 sm:p-6 border-t border-emerald-500/20 bg-slate-950/40 animate-in fade-in space-y-6">
+                  <AdminAssetLibrariesManager />
                 </div>
               )}
             </div>

@@ -4086,7 +4086,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       </span>
                     </div>
 
-                    {card.images.main ? (
+                    {card.images?.main ? (
                       <div className="flex items-center gap-2.5 bg-neutral-900/80 p-2 rounded border border-neutral-800">
                         <img
                           src={card.images.main}
@@ -4108,7 +4108,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
                     <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-yellow-400/80 hover:border-yellow-300 rounded-lg cursor-pointer text-xs font-bold text-yellow-300 hover:text-white bg-yellow-500/15 hover:bg-yellow-500/25 transition-all">
                       <Upload className="w-3.5 h-3.5 text-yellow-400" />
-                      <span>{card.images.main ? 'मुख्य फोटो बदलें' : 'मुख्य फोटो अपलोड'}</span>
+                      <span>{card.images?.main ? 'मुख्य फोटो बदलें' : 'मुख्य फोटो अपलोड'}</span>
                       <input
                         type="file"
                         accept="image/*"
@@ -4182,7 +4182,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               )}
 
               {/* SINGLE PHOTO WORKSPACE: Exactly 1 Photo Slot */}
-              {(card.layout === 'single' || card.layout === 'full' || (card.frameDesign as string) === 'jacket-quote') && card.layout !== 'inset-circle' && !card.showCirclePhoto && (
+              {(!card.layout || card.layout === 'single' || card.layout === 'full' || (card.frameDesign as string) === 'jacket-quote') && card.layout !== 'inset-circle' && !card.showCirclePhoto && (
                 <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3.5 space-y-3">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-neutral-200 flex items-center gap-1.5">
@@ -4194,7 +4194,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     </span>
                   </div>
 
-                  {card.images.main ? (
+                  {card.images?.main ? (
                     <div className="flex items-center gap-3 bg-neutral-900/80 p-2.5 rounded-lg border border-neutral-800">
                       <img
                         src={card.images.main}
@@ -4217,7 +4217,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
                   <label className="flex items-center justify-center gap-2 p-2.5 border-2 border-dashed border-yellow-400/80 hover:border-yellow-300 rounded-xl cursor-pointer text-xs sm:text-sm font-black text-yellow-300 hover:text-white bg-yellow-500/15 hover:bg-yellow-500/25 transition-all shadow-sm">
                     <Upload className="w-4 h-4 text-yellow-400" />
-                    <span>{card.images.main ? 'नई फोटो अपलोड / बदलें' : 'मुख्य फोटो अपलोड करें'}</span>
+                    <span>{card.images?.main ? 'नई फोटो अपलोड / बदलें' : 'मुख्य फोटो अपलोड करें'}</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -4246,7 +4246,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       </span>
                     </div>
 
-                    {card.images.main ? (
+                    {card.images?.main ? (
                       <div className="flex items-center gap-2.5 bg-neutral-900/80 p-2 rounded border border-neutral-800">
                         <img
                           src={card.images.main}
@@ -4268,7 +4268,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
                     <label className="flex items-center justify-center gap-1.5 p-2 border-2 border-dashed border-yellow-400/80 hover:border-yellow-300 rounded-lg cursor-pointer text-xs font-bold text-yellow-300 bg-yellow-500/15 hover:bg-yellow-500/25 transition-all">
                       <Upload className="w-3.5 h-3.5 text-yellow-400" />
-                      <span>{card.images.main ? 'फोटो 1 बदलें' : 'फोटो 1 अपलोड'}</span>
+                      <span>{card.images?.main ? 'फोटो 1 बदलें' : 'फोटो 1 अपलोड'}</span>
                       <input
                         data-testid="file-input-main"
                         type="file"
@@ -4294,7 +4294,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       </span>
                     </div>
 
-                    {card.images.second ? (
+                    {card.images?.second ? (
                       <div className="flex items-center gap-2.5 bg-neutral-900/80 p-2 rounded border border-neutral-800">
                         <img
                           src={card.images.second}
@@ -4317,7 +4317,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
                     <label className="flex items-center justify-center gap-1.5 p-2 border-2 border-dashed border-blue-400/80 hover:border-blue-300 rounded-lg cursor-pointer text-xs font-bold text-blue-300 bg-blue-500/15 hover:bg-blue-500/25 transition-all">
                       <Upload className="w-3.5 h-3.5 text-blue-400" />
-                      <span>{card.images.second ? 'फोटो 2 बदलें' : 'दूसरी फोटो अपलोड करें'}</span>
+                      <span>{card.images?.second ? 'फोटो 2 बदलें' : 'दूसरी फोटो अपलोड करें'}</span>
                       <input
                         data-testid="file-input-second"
                         type="file"
@@ -4342,7 +4342,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       <span>फोटो 1 (मुख्य)</span>
                       <span className="text-yellow-400 text-[10px] font-bold">स्लॉट 1</span>
                     </div>
-                    {card.images.main && (
+                    {card.images?.main && (
                       <div className="flex items-center gap-2 bg-neutral-900 p-2 rounded">
                         <img src={card.images.main} alt="Photo 1" className="w-10 h-10 object-cover rounded" onError={handleThumbnailImgError} />
                         <span className="text-[10px] text-green-400">सक्रिय</span>
@@ -4350,7 +4350,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     )}
                     <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-yellow-500/50 rounded-lg cursor-pointer text-xs text-yellow-300 font-bold">
                       <Upload className="w-3 h-3 text-yellow-400" />
-                      <span>{card.images.main ? 'फोटो 1 बदलें' : 'फोटो 1 अपलोड'}</span>
+                      <span>{card.images?.main ? 'फोटो 1 बदलें' : 'फोटो 1 अपलोड'}</span>
                       <input data-testid="file-input-main" type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload('main', f); }} />
                     </label>
                   </div>
@@ -4361,7 +4361,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       <span>फोटो 2</span>
                       <span className="text-blue-400 text-[10px] font-bold">स्लॉट 2</span>
                     </div>
-                    {card.images.second && (
+                    {card.images?.second && (
                       <div className="flex items-center gap-2 bg-neutral-900 p-2 rounded">
                         <img src={card.images.second} alt="Photo 2" className="w-10 h-10 object-cover rounded" onError={handleThumbnailImgError} />
                         <span className="text-[10px] text-green-400">सक्रिय</span>
@@ -4369,7 +4369,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     )}
                     <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-blue-500/50 rounded-lg cursor-pointer text-xs text-blue-300 font-bold">
                       <Upload className="w-3 h-3 text-blue-400" />
-                      <span>{card.images.second ? 'फोटो 2 बदलें' : 'फोटो 2 अपलोड'}</span>
+                      <span>{card.images?.second ? 'फोटो 2 बदलें' : 'फोटो 2 अपलोड'}</span>
                       <input data-testid="file-input-second" type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload('second', f); }} />
                     </label>
                   </div>
@@ -4380,7 +4380,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       <span>फोटो 3</span>
                       <span className="text-purple-400 text-[10px] font-bold">स्लॉट 3</span>
                     </div>
-                    {card.images.third && (
+                    {card.images?.third && (
                       <div className="flex items-center gap-2 bg-neutral-900 p-2 rounded">
                         <img src={card.images.third} alt="Photo 3" className="w-10 h-10 object-cover rounded" onError={handleThumbnailImgError} />
                         <span className="text-[10px] text-green-400">सक्रिय</span>
@@ -4388,7 +4388,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     )}
                     <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-purple-500/50 rounded-lg cursor-pointer text-xs text-purple-300 font-bold">
                       <Upload className="w-3 h-3 text-purple-400" />
-                      <span>{card.images.third ? 'फोटो 3 बदलें' : 'फोटो 3 अपलोड'}</span>
+                      <span>{card.images?.third ? 'फोटो 3 बदलें' : 'फोटो 3 अपलोड'}</span>
                       <input data-testid="file-input-third" type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload('third', f); }} />
                     </label>
                   </div>
@@ -4400,7 +4400,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         <span>फोटो 4</span>
                         <span className="text-emerald-400 text-[10px] font-bold">स्लॉट 4</span>
                       </div>
-                      {card.images.fourth && (
+                      {card.images?.fourth && (
                         <div className="flex items-center gap-2 bg-neutral-900 p-2 rounded">
                           <img src={card.images.fourth} alt="Photo 4" className="w-10 h-10 object-cover rounded" onError={handleThumbnailImgError} />
                           <span className="text-[10px] text-green-400">सक्रिय</span>
@@ -4408,7 +4408,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       )}
                       <label className="flex items-center justify-center gap-1.5 p-2 border border-dashed border-emerald-500/50 rounded-lg cursor-pointer text-xs text-emerald-300 font-bold">
                         <Upload className="w-3 h-3 text-emerald-400" />
-                        <span>{card.images.fourth ? 'फोटो 4 बदलें' : 'फोटो 4 अपलोड'}</span>
+                        <span>{card.images?.fourth ? 'फोटो 4 बदलें' : 'फोटो 4 अपलोड'}</span>
                         <input data-testid="file-input-fourth" type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload('fourth', f); }} />
                       </label>
                     </div>

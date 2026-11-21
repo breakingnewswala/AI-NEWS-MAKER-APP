@@ -66,7 +66,7 @@ console.log('✅ [PASS] 7. Graphic Template Control 9:16 exclusion verified');
 console.log('Testing 8: Story Template Control in Master Admin Profile...');
 const userTplContent = fs.readFileSync('src/components/UserTemplateManager.tsx', 'utf8');
 assert(userTplContent.includes('AdminStoryTemplateControl'), 'UserTemplateManager must import AdminStoryTemplateControl');
-assert(userTplContent.includes('C. Story Template Control (स्टोरी टेम्पलेट कंट्रोल)'), 'Section C must be Story Template Control');
+assert(userTplContent.includes('C. स्टोरी टेम्पलेट कंट्रोल') || userTplContent.includes('C. Story Template Control (स्टोरी टेम्पलेट कंट्रोल)'), 'Section C must be Story Template Control');
 assert(fs.existsSync('src/components/AdminStoryTemplateControl.tsx'), 'AdminStoryTemplateControl.tsx must exist');
 const storyCtrlContent = fs.readFileSync('src/components/AdminStoryTemplateControl.tsx', 'utf8');
 assert(storyCtrlContent.includes('STARTER_DUMMY_STORY_TEMPLATES'), 'Must contain starter dummy story templates');

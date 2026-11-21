@@ -294,8 +294,10 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           const cleanDist = (rawDist === 'सेंट्रल डेस्क / भोपाल' || rawDist === 'हेडक्वार्टर सेंट्रल डेस्क') ? 'भोपाल' : ((isBnwAdmin || isAinewsAdmin) ? (rawDist || 'भोपाल') : rawDist);
           if (cleanDist) setReporterDistrict(cleanDist);
 
-          if (cloudP.state) {
-            setReporterState(cloudP.state);
+          const rawState = (cloudP.state || '').trim();
+          const cleanState = (rawState && !rawState.includes('à¤') && !rawState.includes('Ã')) ? rawState : ((isBnwAdmin || isAinewsAdmin) ? 'मध्य प्रदेश' : rawState);
+          if (cleanState) {
+            setReporterState(cleanState);
           } else {
             const inf = inferStateFromDistrict(cleanDist);
             setReporterState(inf || ((isBnwAdmin || isAinewsAdmin) ? 'मध्य प्रदेश' : ''));
@@ -306,7 +308,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
             const merged = {
               ...prev,
               fullName: cloudP.fullName || cloudP.name || prev.fullName,
-              channelNameHi: cloudP.channelNameHi || cloudP.channelName || prev.channelNameHi || (isAinewsAdmin ? 'एआई न्यूज़ मेकर' : (isBnwAdmin ? 'ब्रेकिंग न्यूज़ वाला' : '')),
+              channelNameHi: (cloudP.channelNameHi && !cloudP.channelNameHi.includes('à¤')) ? cloudP.channelNameHi : (cloudP.channelName || prev.channelNameHi || (isAinewsAdmin ? 'एआई न्यूज़ मेकर' : (isBnwAdmin ? 'ब्रेकिंग न्यूज़ वाला' : ''))),
               channelNameEn: cloudP.channelNameEn || prev.channelNameEn || (isAinewsAdmin ? 'AI News Maker' : (isBnwAdmin ? 'BREAKING NEWS WALA' : '')),
               channelLogoUrl: resolvedLogo,
               channelLogoPngUrl: resolvedLogo,
@@ -319,14 +321,19 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               websiteUrl: cloudP.websiteUrl || prev.websiteUrl,
               district: (() => {
                 const rawDist = (cloudP.district || cloudP.location || prev.district || '').trim();
-                return (rawDist === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDist === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : rawDist;
+                const cd = (rawDist === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDist === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : rawDist;
+                return (cd.includes('à¤') || cd.includes('Ã')) ? 'भोपाल' : cd;
               })(),
               location: (() => {
                 const rawLoc = (cloudP.location || cloudP.district || prev.location || '').trim();
-                return (rawLoc === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawLoc === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : rawLoc;
+                const cl = (rawLoc === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawLoc === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : rawLoc;
+                return (cl.includes('à¤') || cl.includes('Ã')) ? 'भोपाल' : cl;
               })(),
-              state: cloudP.state || prev.state || '',
-              city: (cloudP.city || prev.city || '').trim(),
+              state: cleanState || prev.state || '',
+              city: (() => {
+                const c = (cloudP.city || prev.city || '').trim();
+                return (c.includes('à¤') || c.includes('Ã')) ? 'भोपाल' : c;
+              })(),
               address: cloudP.address || prev.address || '',
               pincode: cloudP.pincode || prev.pincode || '',
               socialIcons: (cloudP.socialIcons && Object.keys(cloudP.socialIcons).length > 0)
@@ -1872,9 +1879,22 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       const finalPhone = (channelProfile.whatsappNumber || channelProfile.mobileNumber || '').trim();
 
       const rawDistrict = (reporterDistrict || channelProfile.district || channelProfile.location || '').trim();
-      const finalDistrict = (rawDistrict === 'सेंट्रल डेस्क / भोपाल' || rawDistrict === 'हेडक्वार्टर सेंट्रल डेस्क') ? 'भोपाल' : (rawDistrict || ((isBnwAdmin || isAinewsAdmin) ? 'भोपाल' : ''));
-      const finalState = reporterState || channelProfile.state || ((isBnwAdmin || isAinewsAdmin) ? 'मध्य प्रदेश' : '');
-      const finalCity = (channelProfile.city || ((isBnwAdmin || isAinewsAdmin) ? 'भोपाल' : '')).trim();
+      const candidateDist = (rawDistrict === 'सेंट्रल डेस्क / भोपाल' || rawDistrict === 'हेडक्वार्टर सेंट्रल डेस्क') ? 'भोपाल' : (rawDistrict || ((isBnwAdmin || isAinewsAdmin) ? 'भोपाल' : ''));
+      const finalDistrict = (candidateDist.includes('à¤') || candidateDist.includes('Ã')) ? 'भोपाल' : candidateDist;
+      
+      const candidateState = reporterState || channelProfile.state || ((isBnwAdmin || isAinewsAdmin) ? 'मध्य प्रदेश' : '');
+      const finalState = (candidateState.includes('à¤') || candidateState.includes('Ã')) ? 'मध्य प्रदेश' : candidateState;
+      
+      const candidateCity = (channelProfile.city || ((isBnwAdmin || isAinewsAdmin) ? 'भोपाल' : '')).trim();
+      const finalCity = (candidateCity.includes('à¤') || candidateCity.includes('Ã')) ? 'भोपाल' : candidateCity;
+
+      const finalChannelHi = (channelProfile.channelNameHi && !channelProfile.channelNameHi.includes('à¤') && !channelProfile.channelNameHi.includes('Ã'))
+        ? channelProfile.channelNameHi
+        : (isAinewsAdmin ? 'एआई न्यूज़ मेकर' : (isBnwAdmin ? 'ब्रेकिंग न्यूज़ वाला' : (channelProfile.channelNameHi || '')));
+      const finalChannelEn = (channelProfile.channelNameEn && !channelProfile.channelNameEn.includes('Ã'))
+        ? channelProfile.channelNameEn
+        : (isAinewsAdmin ? 'AI News Maker' : (isBnwAdmin ? 'BREAKING NEWS WALA' : (channelProfile.channelNameEn || '')));
+
       const finalWhatsappDisplay = (channelProfile.whatsappDisplayNumber !== undefined && channelProfile.whatsappDisplayNumber.trim())
         ? channelProfile.whatsappDisplayNumber.trim()
         : finalPhone;
@@ -1891,6 +1911,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       const defaultLoc = finalDistrict ? `${finalDistrict}${finalState ? `, ${finalState}` : ''}` : (channelProfile.defaultLocation || finalDistrict);
       const updatedProfile = {
         ...channelProfile,
+        channelNameHi: finalChannelHi,
+        channelNameEn: finalChannelEn,
         accountType: channelProfile.accountType || 'channel',
         state: finalState,
         district: finalDistrict,

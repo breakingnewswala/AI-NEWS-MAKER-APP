@@ -2988,11 +2988,64 @@ export default function App() {
       navigateToTab('studio');
       return;
     }
-    if (draft.card) {
-      setCard(draft.card);
-    } else if (draft.cardData) {
-      setCard(draft.cardData);
-    }
+    const targetCard = draft.card || draft.cardData || {};
+    const rawHeadlines = targetCard.headlineOptions || targetCard.customHeadlines || (targetCard.headline ? [targetCard.headline] : (draft.title ? [draft.title] : []));
+    const effectiveHls = (Array.isArray(rawHeadlines) && rawHeadlines.length >= 5)
+      ? rawHeadlines
+      : generate5BalancedHeadlineOptions(targetCard.headline || draft.title || draft.headline || 'ताज़ा समाचार');
+    const cleanHeadline = targetCard.headline || draft.title || draft.headline || effectiveHls[0] || '';
+    const cleanSummary = targetCard.summary || draft.summary || targetCard.customCaption || '';
+
+    // Standardize to clean default template 'graphic_001' if unrecognized or classic_breaking
+    const safeFrameDesign = (!targetCard.frameDesign || targetCard.frameDesign === 'classic_breaking')
+      ? 'graphic_001'
+      : targetCard.frameDesign;
+    const safeTemplateId = (!targetCard.templateId || targetCard.templateId === 'classic_breaking')
+      ? 'graphic_001'
+      : targetCard.templateId;
+
+    const normalizedCard = {
+      ...targetCard,
+      templateId: safeTemplateId,
+      frameDesign: safeFrameDesign,
+      headline: cleanHeadline,
+      formattedHeadline: targetCard.formattedHeadline || cleanHeadline,
+      headlineOptions: effectiveHls,
+      customHeadlines: effectiveHls,
+      summary: cleanSummary,
+      customCaption: targetCard.customCaption || cleanSummary,
+      layout: targetCard.layout || 'single',
+      images: targetCard.images || { main: targetCard.photoUrl || '' },
+    };
+
+    setCard(normalizedCard);
+
+    // Sync autoFillNews so Step 1 radio options (1-5) and caption match this draft
+    const draftAutoFill: AutoFillNewsData = {
+      newsId: draft.id || `draft_${Date.now()}`,
+      title: cleanHeadline,
+      summary: cleanSummary,
+      headlineOptions: effectiveHls,
+      isApproved: true,
+      approvedHeadlines: effectiveHls,
+      captionDetailed: cleanSummary,
+      category: targetCard.category || draft.category || 'संपादकीय',
+      imageUrl: targetCard.images?.main || targetCard.photoUrl || '',
+    };
+    setAutoFillNews(draftAutoFill);
+
+    try {
+      localStorage.setItem('saved_ai_news_session', JSON.stringify({
+        newsId: draftAutoFill.newsId,
+        title: draftAutoFill.title,
+        summary: draftAutoFill.summary,
+        headlines: effectiveHls,
+        selectedHeadline: cleanHeadline,
+        timestamp: Date.now(),
+      }));
+      window.dispatchEvent(new CustomEvent('ai_news_session_updated'));
+    } catch {}
+
     setActiveDraftId(draft.id);
     updateStudioMode('graphic');
     navigateToTab('studio');

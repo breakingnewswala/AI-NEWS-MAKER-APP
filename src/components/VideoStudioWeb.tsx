@@ -2640,6 +2640,26 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const handleDownloadVideo = async () => {
     if (isExporting) return;
 
+    // If video is already rendered and ready, instantly download without re-rendering!
+    if (completedDownloadUrl) {
+      const filename = completedDownloadFilename || generateVideoDownloadFileName('mp4');
+      if ((window as any).AndroidBridge?.downloadVideo) {
+        (window as any).AndroidBridge.downloadVideo(completedDownloadUrl, filename);
+      } else {
+        const link = document.createElement('a');
+        link.href = completedDownloadUrl;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          if (link.parentNode) document.body.removeChild(link);
+        }, 1000);
+      }
+      showToast('✅ तैयार वीडियो पुनः डाउनलोड हो गया!');
+      return;
+    }
+
     // Strict Completion Validation (Section 7: No blank or incomplete video exports)
     if (!quickVideoValidation.isValid) {
       const firstMissing = quickVideoValidation.missingItems[0]?.label || 'अधूरे फील्ड भरें';
@@ -3193,9 +3213,6 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         };
 
         animId = requestAnimationFrame(renderFrame);
-        backupIntervalId = setInterval(() => {
-          renderFrame();
-        }, 33);
       });
 
       // Cancellation check before finalizing
@@ -3591,6 +3608,26 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               className={`relative w-full ${aspectClass} rounded-2xl overflow-hidden shadow-2xl bg-black border border-neutral-800 flex items-center justify-center group select-none`}
               onClick={togglePlay}
             >
+              {/* Still Overlay during video export to keep preview still and reduce CPU/GPU load */}
+              {isExporting && (
+                <div
+                  className="absolute inset-0 z-50 bg-slate-950/85 backdrop-blur-xs flex flex-col items-center justify-center p-4 text-center select-none pointer-events-auto"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Sparkles className="w-8 h-8 text-amber-400 animate-spin mb-3" />
+                  <span className="text-sm sm:text-base font-black text-white">🎬 वीडियो रेंडरिंग व एन्कोडिंग जारी है...</span>
+                  <span className="text-xs text-amber-300 font-bold mt-1.5">{videoExportProgress}% पूर्ण</span>
+                  <span className="text-[11px] text-slate-400 mt-1 max-w-[220px]">
+                    {videoExportStatus || 'रेंडरिंग के दौरान प्रीव्यू सुरक्षित पॉज़/स्टिल रखा गया है'}
+                  </span>
+                  <div className="w-44 bg-slate-800 rounded-full h-2 mt-3 overflow-hidden border border-slate-700">
+                    <div
+                      className="bg-gradient-to-r from-amber-400 via-yellow-400 to-emerald-400 h-full transition-all duration-300 rounded-full"
+                      style={{ width: `${Math.max(5, videoExportProgress)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
               {selectedFrameId === 'frame-custom-3line-4-5' ? (
                 // ==========================================
                 // FRAME 1: 3-Line Headline / 4:5 Video Window
@@ -4414,7 +4451,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     title={quickVideoValidation.isValid ? 'वीडियो डाउनलोड करें' : 'डाउनलोड के लिए सभी आवश्यक चरण पूरे करें'}
                   >
                     <Download className="w-4 h-4 shrink-0" />
-                    <span className="truncate">{isExporting ? 'रेंडरिंग जारी...' : 'वीडियो डाउनलोड'}</span>
+                    <span className="truncate">{isExporting ? 'रेंडरिंग जारी...' : completedDownloadUrl ? 'तैयार वीडियो डाउनलोड' : 'वीडियो डाउनलोड'}</span>
                   </button>
 
                   {/* Caption Button */}
@@ -5923,7 +5960,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white cursor-pointer shadow hover:from-emerald-500 hover:to-teal-400 transition flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Download className="w-4 h-4 text-white" />
-                    <span>{isExporting ? 'रेंडरिंग जारी...' : 'वीडियो डाउनलोड करें'}</span>
+                    <span>{isExporting ? 'रेंडरिंग जारी...' : completedDownloadUrl ? 'तैयार वीडियो डाउनलोड' : 'वीडियो डाउनलोड करें'}</span>
                   </button>
                 )}
               </div>
@@ -7015,7 +7052,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     className="px-6 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-extrabold text-xs cursor-pointer shadow hover:from-emerald-500 hover:to-teal-400 transition flex items-center gap-1.5 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Download className="w-4 h-4 text-white" />
-                    <span>{isExporting ? 'रेंडरिंग जारी...' : 'वीडियो डाउनलोड करें'}</span>
+                    <span>{isExporting ? 'रेंडरिंग जारी...' : completedDownloadUrl ? 'तैयार वीडियो डाउनलोड' : 'वीडियो डाउनलोड करें'}</span>
                   </button>
                 )}
               </div>
