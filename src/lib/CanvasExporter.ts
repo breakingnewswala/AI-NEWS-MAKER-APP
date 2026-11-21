@@ -137,6 +137,28 @@ export const loadImage = async (
   return fallback;
 };
 
+export const getDomImageFallback = (srcUrl?: string): HTMLImageElement | null => {
+  if (typeof document === 'undefined') return null;
+  try {
+    const rawClean = (srcUrl || '').trim();
+    const imgs = Array.from(document.querySelectorAll<HTMLImageElement>('#news-card-container img, [data-card-preview="true"] img, img'));
+    // 1. Exact or partial src match
+    for (const el of imgs) {
+      if (el.complete && el.naturalWidth > 1) {
+        if (rawClean && (el.src === rawClean || el.src.includes(rawClean) || rawClean.includes(el.src))) {
+          return el;
+        }
+      }
+    }
+    // 2. Photo slot match inside news-card-container
+    const photoImg = document.querySelector<HTMLImageElement>('#news-card-container img[alt*="Photo"], #news-card-container img[alt*="फोटो"], #news-card-container .overflow-hidden img');
+    if (photoImg && photoImg.complete && photoImg.naturalWidth > 1) {
+      return photoImg;
+    }
+  } catch {}
+  return null;
+};
+
 const loadImageSingle = async (
   src: string,
   options?: LoadImageOptions,
@@ -211,6 +233,13 @@ const loadImageSingle = async (
 
     const handleDecodeFailure = () => {
       clearTimeout(timeout);
+      // Attempt DOM image rescue before failing
+      const domImg = getDomImageFallback(effectiveSrc);
+      if (domImg && domImg.naturalWidth > 1 && domImg.naturalHeight > 1) {
+        finish(domImg);
+        return;
+      }
+
       if (options?.isMandatory) {
         if (!settled) {
           settled = true;
@@ -1785,9 +1814,24 @@ async function drawAuthoritativeDynamicFrameCanvas(
 
       try {
         const isMainRequired = sIdx === 0 && Boolean(rawMainPhoto);
-        const pImg = await loadImage(src, isMainRequired ? { isMandatory: true, assetName: 'समाचार फोटो' } : undefined);
+        let pImg: HTMLImageElement;
+        try {
+          pImg = await loadImage(src, isMainRequired ? { isMandatory: true, assetName: 'समाचार फोटो' } : undefined);
+        } catch (loadErr) {
+          const domFallback = getDomImageFallback(src);
+          if (domFallback && domFallback.naturalWidth > 1) {
+            pImg = domFallback;
+          } else {
+            throw loadErr;
+          }
+        }
         if (isMainRequired && (pImg.naturalWidth <= 1 || pImg.naturalHeight <= 1)) {
-          throw new Error('अनिवार्य समाचार फोटो लोड नहीं हो सका। कृपया नेटवर्क कनेक्शन जांचें या फोटो पुनः चुनें।');
+          const domFallback = getDomImageFallback(src);
+          if (domFallback && domFallback.naturalWidth > 1) {
+            pImg = domFallback;
+          } else {
+            throw new Error('अनिवार्य समाचार फोटो लोड नहीं हो सका। कृपया नेटवर्क कनेक्शन जांचें या फोटो पुनः चुनें।');
+          }
         }
         const slotX = (slot.rect.x / 100) * width;
         const slotY = (slot.rect.y / 100) * height;
@@ -1812,6 +1856,10 @@ async function drawAuthoritativeDynamicFrameCanvas(
         drawImageCover(ctx, pImg, slotX, slotY, slotW, slotH, cropX, cropY, zoom, canvasFilterStr);
         ctx.restore();
       } catch (e) {
+        if (sIdx === 0 && Boolean(rawMainPhoto)) {
+          console.warn('Main photo slot load error in canvas exporter:', e);
+          throw e;
+        }
         console.warn('Photo slot load error:', e);
       }
     }
@@ -1991,22 +2039,23 @@ async function drawAuthoritativeDynamicFrameCanvas(
     }
   }
 
-  // 4. LOCATION BADGE (Respects Photo News Studio card.showLocation toggle)
-  if (df.headerConfig?.showLocation && card.location && card.showLocation !== false) {
-    const locRect = df.headerConfig.locationRect || { x: 5, y: 13.5, width: 28, height: 4.5 };
+  // 4. LOCATION BADGE (Respects Photo News Studio card.showLocation toggle & selected location badge style)
+  if (card.showLocation !== false && (df.headerConfig?.showLocation !== false)) {
+    const targetHeightPct = df.headerConfig.locationRect?.height ? Math.min(df.headerConfig.locationRect.height, 3.8) : 3.8;
+    const locRect = df.headerConfig.locationRect
+      ? { ...df.headerConfig.locationRect, height: targetHeightPct }
+      : { x: 5, y: 13.5, width: 28, height: targetHeightPct };
     const bx = (locRect.x / 100) * width;
     const by = (locRect.y / 100) * height;
-    const bw = (locRect.width / 100) * width;
     const bh = (locRect.height / 100) * height;
 
-    let locAsset = card.customLocationBadgeUrl || df.headerConfig.manualLocationAsset || (df.headerConfig as any).locationBadgeAssetUrl || (df.headerConfig as any).locationBadgeUrl;
-    if (!locAsset) {
-      const badgeId = card.selectedLocationBadgeId || df.headerConfig.locationBadgeAssetId || df.locationBadgeAssetId;
-      if (badgeId) {
-        const item = getAssetLibraryItemById(badgeId);
-        if (item && item.url) {
-          locAsset = item.url;
-        }
+    const badgeId = card.selectedLocationBadgeId || df.headerConfig?.locationBadgeAssetId || df.locationBadgeAssetId;
+    const userSelectedBadge = card.selectedLocationBadgeId ? getAssetLibraryItemById(card.selectedLocationBadgeId) : undefined;
+    let locAsset = card.customLocationBadgeUrl || userSelectedBadge?.url || df.headerConfig?.manualLocationAsset || (df.headerConfig as any)?.locationBadgeAssetUrl;
+    if (!locAsset && badgeId) {
+      const item = getAssetLibraryItemById(badgeId);
+      if (item && item.url) {
+        locAsset = item.url;
       }
     }
 
@@ -2016,8 +2065,8 @@ async function drawAuthoritativeDynamicFrameCanvas(
         const safeLocAsset = toSafeSvgDataUrl(locAsset);
         const badgeImg = await loadImage(safeLocAsset);
         if (badgeImg && badgeImg.naturalWidth > 1 && badgeImg.naturalHeight > 1) {
-          const nw = badgeImg.naturalWidth || badgeImg.width || 400;
-          const nh = badgeImg.naturalHeight || badgeImg.height || 100;
+          const nw = badgeImg.naturalWidth || badgeImg.width || 360;
+          const nh = badgeImg.naturalHeight || badgeImg.height || 72;
 
           // Smart 3-Slice horizontal stretching: Left pin/divider fixed, center stretches, right cap fixed
           const leftSlicePct = df.sliceConfig?.leftWidthPct ?? df.headerConfig?.sliceConfig?.leftWidthPct ?? 0.28;
@@ -2031,20 +2080,28 @@ async function drawAuthoritativeDynamicFrameCanvas(
 
           ctx.save();
           const typo = df.headerConfig.typographyConfig;
-          let fontSize = Math.round((typo?.fontSize || df.headerConfig.locationFontSize || 20) * (width / 1080));
+          let fontSize = Math.round((typo?.fontSize || df.headerConfig.locationFontSize || 22) * (width / 1080));
           let locColor = card.locationTextColor || df.headerConfig.locationTextColor || typo?.color || '#FFFFFF';
           const cleanLocText = formatCleanLocationText(card.location || '');
           const locFontName = card.locationFont || typo?.fontFamily || 'Baloo 2';
           ctx.font = `${typo?.weight || 800} ${fontSize}px "${locFontName}", "Noto Sans Devanagari", sans-serif`;
           const measuredTextW = ctx.measureText(cleanLocText).width;
 
-          // Dynamic horizontal expansion: adapt width to actual text length (compact for Bhopal, wider for Bhopal, MP)
-          const maxBw = width - bx - 20;
+          // Dynamic horizontal expansion: adapt width to actual text length (expanded padding for Hindi matras)
+          const isRightAnchored = (locRect.x > 45);
+          const maxBw = isRightAnchored
+            ? Math.round(width * 0.65)
+            : Math.min(Math.round(width * 0.65), width - bx - 20);
           const minCenterW = 10;
-          const neededCenterW = Math.max(minCenterW, measuredTextW + 24);
-          const midDestW = Math.max(minCenterW, neededCenterW);
-          const dynamicBw = Math.min(maxBw, Math.max(80, leftDestW + midDestW + rightDestW));
+          const neededCenterW = Math.max(minCenterW, measuredTextW + 48);
+          const dynamicBw = Math.min(maxBw, Math.max(120, leftDestW + neededCenterW + rightDestW));
           const finalCenterW = Math.max(10, dynamicBw - leftDestW - rightDestW);
+
+          // If anchored on right, expanding to left keeps right margin intact
+          const rightEdge = ((locRect.x + locRect.width) / 100) * width;
+          const actualBx = isRightAnchored
+            ? Math.max(Math.round(width * 0.30), Math.round(rightEdge - dynamicBw))
+            : Math.round(bx);
 
           // Draw custom background color ONLY if explicitly set by user or frame
           const bgCol = card.locationBgColor || df.headerConfig.locationBgColor;
@@ -2052,36 +2109,20 @@ async function drawAuthoritativeDynamicFrameCanvas(
             ctx.save();
             ctx.fillStyle = bgCol;
             ctx.beginPath();
-            ctx.roundRect(bx, by, dynamicBw, bh, df.headerConfig.locationStyle === 'box' ? 6 : bh / 2);
+            ctx.roundRect(actualBx, by, dynamicBw, bh, df.headerConfig.locationStyle === 'box' ? 6 : bh / 2);
             ctx.fill();
             ctx.restore();
           }
 
-          ctx.drawImage(badgeImg, 0, 0, pinW, nh, bx, by, leftDestW, bh);
-          ctx.drawImage(badgeImg, pinW, 0, midW, nh, bx + leftDestW, by, finalCenterW, bh);
-          ctx.drawImage(badgeImg, nw - capW, 0, capW, nh, bx + leftDestW + finalCenterW, by, rightDestW, bh);
+          ctx.drawImage(badgeImg, 0, 0, pinW, nh, actualBx, by, leftDestW, bh);
+          ctx.drawImage(badgeImg, pinW, 0, midW, nh, actualBx + leftDestW, by, finalCenterW, bh);
+          ctx.drawImage(badgeImg, nw - capW, 0, capW, nh, actualBx + leftDestW + finalCenterW, by, rightDestW, bh);
 
-          const textReg = df.headerConfig.textRegion;
-          const tx = textReg ? bx + (textReg.x / 100) * dynamicBw : bx + leftDestW;
-          const ty = textReg ? by + (textReg.y / 100) * bh : by;
-          const tw = textReg ? (textReg.width / 100) * dynamicBw : finalCenterW;
-          const th = textReg ? (textReg.height / 100) * bh : bh;
-
+          const textCenterX = actualBx + leftDestW + finalCenterW / 2;
           ctx.fillStyle = locColor;
           ctx.textBaseline = 'middle';
-          const align = typo?.align || 'center';
-          ctx.textAlign = align === 'left' ? 'left' : align === 'right' ? 'right' : 'center';
-
-          // Auto text shrink only if badge hits max right margin
-          let measuredW = ctx.measureText(cleanLocText).width;
-          while (measuredW > tw - 4 && fontSize > 10) {
-            fontSize -= 1;
-            ctx.font = `${typo?.weight || 800} ${fontSize}px "${locFontName}", "Noto Sans Devanagari", sans-serif`;
-            measuredW = ctx.measureText(cleanLocText).width;
-          }
-
-          const drawTx = align === 'left' ? tx + 4 : align === 'right' ? tx + tw - 4 : tx + tw / 2;
-          ctx.fillText(cleanLocText, drawTx, ty + th / 2);
+          ctx.textAlign = 'center';
+          ctx.fillText(cleanLocText, textCenterX, by + bh / 2 + 1);
           ctx.restore();
           badgeDrawn = true;
         }
@@ -2093,16 +2134,23 @@ async function drawAuthoritativeDynamicFrameCanvas(
     if (!badgeDrawn) {
       ctx.save();
       const cleanLocText = formatCleanLocationText(card.location || '');
-      const fontSize = Math.max(14, Math.min(32, Math.round(bh * 0.58)));
+      const fontSize = Math.max(14, Math.min(30, Math.round(bh * 0.55)));
       const fallbackLocFont = card.locationFont || 'Baloo 2';
       ctx.font = `800 ${fontSize}px "${fallbackLocFont}", "Noto Sans Devanagari", sans-serif`;
       const measuredTextW = ctx.measureText(cleanLocText).width;
-      const dynamicBw = Math.min(width - bx - 20, Math.max(100, Math.round(measuredTextW + 56)));
+
+      const isRightAnchored = (locRect.x > 45);
+      const maxBw = isRightAnchored ? Math.round(width * 0.65) : Math.min(Math.round(width * 0.65), width - bx - 20);
+      const dynamicBw = Math.min(maxBw, Math.max(110, Math.round(measuredTextW + 56)));
+      const rightEdge = ((locRect.x + locRect.width) / 100) * width;
+      const actualBx = isRightAnchored
+        ? Math.max(Math.round(width * 0.30), Math.round(rightEdge - dynamicBw))
+        : Math.round(bx);
 
       const isDarkBadge = df.headerConfig?.locationBadgeAssetId === 'loc_style_compact_chip' || df.locationBadgeAssetId === 'loc_style_compact_chip' || df.headerConfig?.locationStyle === 'box' || df.headerConfig?.locationStyle === 'compact_chip';
       ctx.fillStyle = isDarkBadge && !card.locationBgColor && !df.headerConfig?.locationBgColor ? '#18181B' : (card.locationBgColor || df.headerConfig.locationBgColor || '#DC2626');
       ctx.beginPath();
-      ctx.roundRect(bx, by, dynamicBw, bh, (isDarkBadge || df.headerConfig.locationStyle === 'box') ? 6 : bh / 2);
+      ctx.roundRect(actualBx, by, dynamicBw, bh, (isDarkBadge || df.headerConfig.locationStyle === 'box') ? 6 : bh / 2);
       ctx.fill();
 
       // Stroke
@@ -2116,9 +2164,9 @@ async function drawAuthoritativeDynamicFrameCanvas(
       ctx.textBaseline = 'middle';
 
       if (df.headerConfig.locationShowIcon !== false) {
-        ctx.fillText(`📍 ${cleanLocText}`, bx + dynamicBw / 2, by + bh / 2 + 1);
+        ctx.fillText(`📍 ${cleanLocText}`, actualBx + dynamicBw / 2, by + bh / 2 + 1);
       } else {
-        ctx.fillText(cleanLocText, bx + dynamicBw / 2, by + bh / 2 + 1);
+        ctx.fillText(cleanLocText, actualBx + dynamicBw / 2, by + bh / 2 + 1);
       }
       ctx.restore();
     }
@@ -2232,36 +2280,36 @@ async function drawAuthoritativeDynamicFrameCanvas(
         ctx.drawImage(cImg, drawX, drawY, drawW, drawH);
       } else if (calloutText) {
         const cleanCallout = calloutText.replace('🔴', '').trim() || 'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें';
-        const fontSize = Math.round((df.fullStoryCalloutConfig?.fontSize || 22) * (width / 1080));
+        const fontSize = Math.round((df.fullStoryCalloutConfig?.fontSize || 26) * (width / 1080));
         ctx.font = `900 ${fontSize}px "Baloo 2", "Noto Sans Devanagari", sans-serif`;
         const textWidth = ctx.measureText(cleanCallout).width;
         const showIcon = df.fullStoryCalloutConfig?.showIcon !== false;
         const iconSize = Math.round(fontSize * 1.15);
-        const iconGap = Math.round(fontSize * 0.4);
-        const padX = Math.round(fontSize * 1.2);
-        const padY = Math.round(fontSize * 0.45);
+        const iconGap = Math.round(fontSize * 0.45);
+        const padX = Math.round(fontSize * 1.4);
+        const padY = Math.round(fontSize * 0.5);
 
         const contentW = textWidth + (showIcon ? iconSize + iconGap : 0);
         const pillW = Math.min(cw, contentW + padX * 2);
         const pillH = Math.min(ch, fontSize + padY * 2);
-        const pillRadius = Math.min(pillH / 2, 14);
+        const pillRadius = pillH / 2;
         const pillX = Math.round(cx + (cw - pillW) / 2);
         const pillY = Math.round(cy + (ch - pillH) / 2);
 
         // Draw pill background with border
         ctx.fillStyle = df.fullStoryCalloutConfig?.bgColor || '#DC2626';
         ctx.strokeStyle = df.fullStoryCalloutConfig?.borderColor || '#FACC15';
-        ctx.lineWidth = df.fullStoryCalloutConfig?.borderWidth ?? 1.5;
+        ctx.lineWidth = df.fullStoryCalloutConfig?.borderWidth ?? 2;
         ctx.beginPath();
         ctx.roundRect(pillX, pillY, pillW, pillH, pillRadius);
         ctx.fill();
-        if ((df.fullStoryCalloutConfig?.borderWidth ?? 1.5) > 0) {
+        if ((df.fullStoryCalloutConfig?.borderWidth ?? 2) > 0) {
           ctx.stroke();
         }
 
         // Draw icon and text centered in the pill
         let startX = pillX + (pillW - contentW) / 2;
-        const centerY = pillY + pillH / 2;
+        const centerY = pillY + pillH / 2 + 1;
         if (showIcon) {
           ctx.font = `${iconSize}px "Segoe UI Emoji", "Noto Color Emoji", "Apple Color Emoji", sans-serif`;
           ctx.textAlign = 'left';
@@ -2333,10 +2381,9 @@ async function drawAuthoritativeDynamicFrameCanvas(
         ctx.save();
         const textW = ctx.measureText(wmText).width;
         const boxPadX = 14;
-        const boxPadY = 6;
         ctx.fillStyle = card.photoTagBoxColor || wm.bgColor || 'rgba(0,0,0,0.85)';
-        const boxW = textW + boxPadX * 2;
-        const boxH = wmFontSize + boxPadY * 2;
+        const boxW = Math.round(textW + boxPadX * 2);
+        const boxH = Math.round(wmFontSize * 1.6);
         if (typeof ctx.roundRect === 'function') {
           ctx.beginPath();
           ctx.roundRect(-boxW / 2, -boxH / 2, boxW, boxH, 6);
@@ -2352,7 +2399,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
       ctx.textBaseline = 'middle';
       ctx.shadowColor = 'rgba(0,0,0,0.8)';
       ctx.shadowBlur = 6;
-      ctx.fillText(wmText, 0, 0);
+      ctx.fillText(wmText, 0, 1);
     }
     ctx.restore();
   }
@@ -2866,91 +2913,163 @@ async function drawGraphic001Canvas(
     const rawLoc = card.location || '';
     const cleanLoc = formatCleanLocationText(rawLoc) || 'लोकेशन';
 
-    ctx.save();
-    ctx.font = '800 26px "Noto Sans Devanagari", sans-serif';
-    const locTextW = ctx.measureText(cleanLoc).width;
-    const maxPillW = Math.round(width * 0.46);
-    const locW = Math.min(maxPillW, locTextW + 80);
-    const locH = Math.round(height * 0.045);
-    // Position inside Action Safe (5% inset from right edge = width * 0.95 = 1026px)
-    const locX = Math.round(width * 0.95) - locW;
-    const locY = Math.round(height * 0.066);
+    const userSelectedBadge = card.selectedLocationBadgeId ? getAssetLibraryItemById(card.selectedLocationBadgeId) : undefined;
+    const badgeAsset = card.customLocationBadgeUrl || userSelectedBadge?.url;
 
-    // Location Pill container with selectable soft color (default: #FFFFFF)
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
-    ctx.shadowBlur = 14;
-    ctx.shadowOffsetY = 3;
-    ctx.fillStyle = card.locationBgColor || '#FFFFFF';
-    ctx.beginPath();
-    ctx.roundRect(locX, locY, locW, locH, locH / 2);
-    ctx.fill();
-
-    ctx.strokeStyle = '#E2E8F0';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    ctx.shadowColor = 'transparent';
-
-    // Calculate dynamic font size and composite centering inside pill
-    const pinR = Math.round(locH * 0.38);
-    const pinDiameter = pinR * 2;
-    const gap = 10;
-    const maxLocTextW = locW - (pinDiameter + gap) - 16;
-    let locFontSize = 24;
-    const locPillFont = card.locationFont || 'Noto Sans Devanagari';
-    ctx.font = `800 ${locFontSize}px "${locPillFont}", sans-serif`;
-    while (ctx.measureText(cleanLoc).width > maxLocTextW && locFontSize > 15) {
-      locFontSize -= 1;
-      ctx.font = `800 ${locFontSize}px "${locPillFont}", sans-serif`;
-    }
-    const actualTextW = ctx.measureText(cleanLoc).width;
-    const contentW = pinDiameter + gap + actualTextW;
-    const startX = locX + Math.max(8, Math.round((locW - contentW) / 2));
-    const pinCenterX = startX + pinR;
-    const pinCenterY = locY + locH / 2;
-    const textStartX = startX + pinDiameter + gap;
-
-    // Red Circle for Pin Icon
-    ctx.fillStyle = '#DC2626';
-    ctx.beginPath();
-    ctx.arc(pinCenterX, pinCenterY, pinR, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Part F: Original White Location Icon Asset
-    let locIconLoaded = false;
-    try {
-      const locIconImg = await loadImage('/assets/location_white_icon.png');
-      if (locIconImg && locIconImg.width > 0) {
-        const iconSize = Math.round(pinR * 1.35);
-        ctx.drawImage(locIconImg, pinCenterX - iconSize / 2, pinCenterY - iconSize / 2, iconSize, iconSize);
-        locIconLoaded = true;
-      }
-    } catch {}
-
-    if (!locIconLoaded) {
+    let badgeDrawn = false;
+    if (badgeAsset) {
       try {
-        const locIconImg = await loadImage('assets/location_white_icon.png');
+        const safeLocAsset = toSafeSvgDataUrl(badgeAsset);
+        const badgeImg = await loadImage(safeLocAsset);
+        if (badgeImg && badgeImg.naturalWidth > 1 && badgeImg.naturalHeight > 1) {
+          const nw = badgeImg.naturalWidth || badgeImg.width || 360;
+          const nh = badgeImg.naturalHeight || badgeImg.height || 72;
+
+          // 3-slice horizontal stretching: Left pin/divider fixed, center stretches, right cap fixed
+          const leftSlicePct = 0.28;
+          const rightSlicePct = 0.15;
+          const pinW = Math.round(nw * leftSlicePct);
+          const capW = Math.round(nw * rightSlicePct);
+          const midW = Math.max(1, nw - pinW - capW);
+
+          const locHeightPct = 3.8;
+          const bh = Math.round((locHeightPct / 100) * height);
+          const by = Math.round(height * 0.066);
+
+          const leftDestW = (pinW / nh) * bh;
+          const rightDestW = (capW / nh) * bh;
+
+          ctx.save();
+          const locFontName = card.locationFont || 'Baloo 2';
+          let fontSize = Math.round(22 * (width / 1080));
+          ctx.font = `800 ${fontSize}px "${locFontName}", "Noto Sans Devanagari", sans-serif`;
+          const measuredTextW = ctx.measureText(cleanLoc).width;
+
+          // Dynamic horizontal expansion: adapt width to actual text length expanding leftwards
+          const maxBw = Math.round(width * 0.65);
+          const minCenterW = 10;
+          const neededCenterW = Math.max(minCenterW, measuredTextW + 48);
+          const dynamicBw = Math.min(maxBw, Math.max(120, leftDestW + neededCenterW + rightDestW));
+          const finalCenterW = Math.max(10, dynamicBw - leftDestW - rightDestW);
+
+          // Right edge at 95% width (safe right)
+          const rightEdge = Math.round(width * 0.95);
+          const actualBx = Math.max(Math.round(width * 0.30), Math.round(rightEdge - dynamicBw));
+
+          // Draw custom background color ONLY if explicitly set
+          if (card.locationBgColor) {
+            ctx.save();
+            ctx.fillStyle = card.locationBgColor;
+            ctx.beginPath();
+            ctx.roundRect(actualBx, by, dynamicBw, bh, bh / 2);
+            ctx.fill();
+            ctx.restore();
+          }
+
+          ctx.drawImage(badgeImg, 0, 0, pinW, nh, actualBx, by, leftDestW, bh);
+          ctx.drawImage(badgeImg, pinW, 0, midW, nh, actualBx + leftDestW, by, finalCenterW, bh);
+          ctx.drawImage(badgeImg, nw - capW, 0, capW, nh, actualBx + leftDestW + finalCenterW, by, rightDestW, bh);
+
+          const textCenterX = actualBx + leftDestW + finalCenterW / 2;
+          ctx.fillStyle = card.locationTextColor || '#FFFFFF';
+          ctx.textBaseline = 'middle';
+          ctx.textAlign = 'center';
+          ctx.fillText(cleanLoc, textCenterX, by + bh / 2 + 1);
+          ctx.restore();
+          badgeDrawn = true;
+        }
+      } catch (e) {
+        console.warn('graphic_001 location badge load warning:', e);
+      }
+    }
+
+    if (!badgeDrawn) {
+      ctx.save();
+      const locPillFont = card.locationFont || 'Noto Sans Devanagari';
+      let locFontSize = 24;
+      ctx.font = `800 ${locFontSize}px "${locPillFont}", sans-serif`;
+      const locTextW = ctx.measureText(cleanLoc).width;
+      const maxPillW = Math.round(width * 0.65);
+      const locH = Math.round(height * 0.038); // Sleek 3.8% height matching custom frames & preview
+      const locW = Math.min(maxPillW, Math.max(110, locTextW + 80));
+      // Position inside Action Safe (5% inset from right edge = width * 0.95 = 1026px)
+      const locX = Math.round(width * 0.95) - locW;
+      const locY = Math.round(height * 0.066);
+
+      // Location Pill container with selectable soft color (default: #FFFFFF)
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.55)';
+      ctx.shadowBlur = 14;
+      ctx.shadowOffsetY = 3;
+      ctx.fillStyle = card.locationBgColor || '#FFFFFF';
+      ctx.beginPath();
+      ctx.roundRect(locX, locY, locW, locH, locH / 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#E2E8F0';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.shadowColor = 'transparent';
+
+      // Calculate dynamic font size and composite centering inside pill
+      const pinR = Math.round(locH * 0.38);
+      const pinDiameter = pinR * 2;
+      const gap = 10;
+      const maxLocTextW = locW - (pinDiameter + gap) - 16;
+      ctx.font = `800 ${locFontSize}px "${locPillFont}", sans-serif`;
+      while (ctx.measureText(cleanLoc).width > maxLocTextW && locFontSize > 15) {
+        locFontSize -= 1;
+        ctx.font = `800 ${locFontSize}px "${locPillFont}", sans-serif`;
+      }
+      const actualTextW = ctx.measureText(cleanLoc).width;
+      const contentW = pinDiameter + gap + actualTextW;
+      const startX = locX + Math.max(8, Math.round((locW - contentW) / 2));
+      const pinCenterX = startX + pinR;
+      const pinCenterY = locY + locH / 2;
+      const textStartX = startX + pinDiameter + gap;
+
+      // Red Circle for Pin Icon
+      ctx.fillStyle = '#DC2626';
+      ctx.beginPath();
+      ctx.arc(pinCenterX, pinCenterY, pinR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Part F: Original White Location Icon Asset
+      let locIconLoaded = false;
+      try {
+        const locIconImg = await loadImage('/assets/location_white_icon.png');
         if (locIconImg && locIconImg.width > 0) {
           const iconSize = Math.round(pinR * 1.35);
           ctx.drawImage(locIconImg, pinCenterX - iconSize / 2, pinCenterY - iconSize / 2, iconSize, iconSize);
           locIconLoaded = true;
         }
       } catch {}
-    }
 
-    if (!locIconLoaded) {
-      ctx.fillStyle = '#FFFFFF';
-      ctx.font = '900 20px Arial, sans-serif';
-      ctx.textAlign = 'center';
+      if (!locIconLoaded) {
+        try {
+          const locIconImg = await loadImage('assets/location_white_icon.png');
+          if (locIconImg && locIconImg.width > 0) {
+            const iconSize = Math.round(pinR * 1.35);
+            ctx.drawImage(locIconImg, pinCenterX - iconSize / 2, pinCenterY - iconSize / 2, iconSize, iconSize);
+            locIconLoaded = true;
+          }
+        } catch {}
+      }
+
+      if (!locIconLoaded) {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '900 18px Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('📍', pinCenterX, pinCenterY);
+      }
+
+      // Location Text (Bold Dark Black, centered horizontally & vertically inside composite)
+      ctx.fillStyle = card.locationTextColor || '#090A0E';
+      ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText('📍', pinCenterX, pinCenterY);
+      ctx.fillText(cleanLoc, textStartX, pinCenterY + 1);
+      ctx.restore();
     }
-
-    // Location Text (Bold Dark Black, centered horizontally & vertically inside composite)
-    ctx.fillStyle = '#090A0E';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(cleanLoc, textStartX, pinCenterY + 2);
-    ctx.restore();
   }
 
   // 5. RED HEADLINE AREA (Dynamic Height & Position auto-adjusted to headline lines)
@@ -2974,34 +3093,46 @@ async function drawGraphic001Canvas(
   ctx.fillStyle = redGrad;
   ctx.fillRect(0, bannerY, width, bannerH);
 
-  // Left & Right Dark Red Chevron Accent Stripes (matching original SVG and preview)
+  // Left & Right Dark Red Chevron Accent Stripes (strictly bounded to bannerY .. bannerY + bannerH)
   ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, bannerY, width, bannerH);
+  ctx.clip();
   ctx.fillStyle = '#7A0005';
   ctx.globalAlpha = 0.6;
-  const scaleX = width / 1080;
-  const scaleY = height / 1350;
+  const chevronW = width * 0.10; // 10% width matching CardPreview
 
-  const drawChevron = (pts: [number, number][]) => {
+  const drawChevronLeft = (pts: [number, number][]) => {
     ctx.beginPath();
-    ctx.moveTo(pts[0][0] * scaleX, pts[0][1] * scaleY);
+    ctx.moveTo((pts[0][0] / 100) * chevronW, bannerY + (pts[0][1] / 440) * bannerH);
     for (let i = 1; i < pts.length; i++) {
-      ctx.lineTo(pts[i][0] * scaleX, pts[i][1] * scaleY);
+      ctx.lineTo((pts[i][0] / 100) * chevronW, bannerY + (pts[i][1] / 440) * bannerH);
+    }
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  const drawChevronRight = (pts: [number, number][]) => {
+    ctx.beginPath();
+    ctx.moveTo(width - ((100 - pts[0][0]) / 100) * chevronW, bannerY + (pts[0][1] / 440) * bannerH);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineTo(width - ((100 - pts[i][0]) / 100) * chevronW, bannerY + (pts[i][1] / 440) * bannerH);
     }
     ctx.closePath();
     ctx.fill();
   };
 
   // Left chevrons
-  drawChevron([[0, 800], [60, 800], [30, 860], [0, 860]]);
-  drawChevron([[0, 880], [75, 880], [35, 960], [0, 960]]);
-  drawChevron([[0, 980], [90, 980], [40, 1080], [0, 1080]]);
-  drawChevron([[0, 1100], [80, 1100], [30, 1200], [0, 1200]]);
+  drawChevronLeft([[0, 20], [60, 20], [30, 80], [0, 80]]);
+  drawChevronLeft([[0, 100], [75, 100], [35, 180], [0, 180]]);
+  drawChevronLeft([[0, 200], [90, 200], [40, 300], [0, 300]]);
+  drawChevronLeft([[0, 320], [80, 320], [30, 420], [0, 420]]);
 
   // Right chevrons
-  drawChevron([[1080, 800], [1020, 800], [1050, 860], [1080, 860]]);
-  drawChevron([[1080, 880], [1005, 880], [1045, 960], [1080, 960]]);
-  drawChevron([[1080, 980], [990, 980], [1040, 1080], [1080, 1080]]);
-  drawChevron([[1080, 1100], [1000, 1100], [1050, 1200], [1080, 1200]]);
+  drawChevronRight([[100, 20], [40, 20], [70, 80], [100, 80]]);
+  drawChevronRight([[100, 100], [25, 100], [65, 180], [100, 180]]);
+  drawChevronRight([[100, 200], [10, 200], [60, 300], [100, 300]]);
+  drawChevronRight([[100, 320], [20, 320], [70, 420], [100, 420]]);
   ctx.restore();
 
   // Glowing Divider Beam above headline banner (matching SVG streakGlow / CardPreview)
@@ -6780,15 +6911,17 @@ function drawPhotoDisclaimerWatermark(
   const wmRotDeg = card.watermarkRotation ?? (card as any).watermarkRotation ?? 270;
   ctx.rotate((wmRotDeg * Math.PI) / 180);
 
-  ctx.font = '800 16px "Baloo 2", system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+  const wmFontSize = 16;
+  ctx.font = `800 ${wmFontSize}px "Baloo 2", system-ui, -apple-system, BlinkMacSystemFont, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
   // Compact padding & box control
   const showBox = card.photoTagShowBox !== false;
   const boxBg = card.photoTagBoxColor || 'rgba(0, 0, 0, 0.85)';
-  const textWidth = ctx.measureText(disclaimerText).width + 20;
-  const pillH = 24;
+  const textWidth = ctx.measureText(disclaimerText).width;
+  const boxW = Math.round(textWidth + 28);
+  const pillH = Math.round(wmFontSize * 1.6);
 
   if (showBox) {
     // Translucent styled backdrop
@@ -6796,7 +6929,7 @@ function drawPhotoDisclaimerWatermark(
     ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
     ctx.shadowBlur = 8;
     ctx.beginPath();
-    ctx.roundRect(-textWidth / 2, -pillH / 2, textWidth, pillH, 5);
+    ctx.roundRect(-boxW / 2, -pillH / 2, boxW, pillH, 5);
     ctx.fill();
 
     // Subtle border
@@ -6813,7 +6946,7 @@ function drawPhotoDisclaimerWatermark(
     ctx.fillStyle = '#FFFFFF';
   }
 
-  ctx.fillText(disclaimerText, 0, 0);
+  ctx.fillText(disclaimerText, 0, 1);
   ctx.restore();
 }
 

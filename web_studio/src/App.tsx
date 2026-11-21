@@ -3075,14 +3075,14 @@ export default function App() {
       try {
         canvas = await renderCardToCanvas(card);
       } catch (renderErr: any) {
-        if (renderErr?.message && renderErr.message.includes('अनिवार्य')) {
-          throw renderErr;
-        }
         console.warn('renderCardToCanvas failed, attempting DOM capture fallback:', renderErr);
         try {
           canvas = await generateCardCanvas('news-card-container');
         } catch (domErr) {
           console.error('generateCardCanvas DOM capture also failed:', domErr);
+          if (renderErr?.message && renderErr.message.includes('अनिवार्य')) {
+            throw renderErr;
+          }
         }
       }
 
@@ -3185,10 +3185,14 @@ export default function App() {
       try {
         canvas = await renderCardToCanvas(card);
       } catch (renderErr: any) {
-        if (renderErr?.message && renderErr.message.includes('अनिवार्य')) {
-          throw renderErr;
+        console.warn('renderCardToCanvas failed, attempting DOM capture fallback:', renderErr);
+        try {
+          canvas = await generateCardCanvas('news-card-container');
+        } catch (domErr) {
+          if (renderErr?.message && renderErr.message.includes('अनिवार्य')) {
+            throw renderErr;
+          }
         }
-        canvas = await generateCardCanvas('news-card-container');
       }
       if (!canvas) throw new Error('Canvas rendering failed');
       canvas.toBlob(async (blob) => {

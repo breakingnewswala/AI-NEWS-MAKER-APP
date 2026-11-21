@@ -401,6 +401,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const [socialLinkErrorMsg, setSocialLinkErrorMsg] = useState<string>('');
 
   // WhatsApp Account Linking State (Task 1)
+  const [mobileSelectedPlanTab, setMobileSelectedPlanTab] = useState<'all' | 'basic' | 'advanced' | 'professional' | 'vip_desk'>('all');
   const [waLinkStatus, setWaLinkStatus] = useState<{ isLinked: boolean; linkedWhatsAppWaId: string; whatsappVerifiedAt?: number }>({ isLinked: false, linkedWhatsAppWaId: '' });
   const [waLinkLoading, setWaLinkLoading] = useState<boolean>(false);
   const [waGeneratedCode, setWaGeneratedCode] = useState<string>('');
@@ -1958,6 +1959,8 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         mobile: finalPhone || channelProfile.mobileNumber,
         username: channelProfile.username,
         district: finalDistrict,
+        city: (channelProfile.city || '').trim(),
+        designation: (channelProfile.designation || '').trim(),
         state: reporterState,
         accountType: channelProfile.accountType || 'channel',
         defaultLocation: defaultLoc,
@@ -1989,6 +1992,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
           channelLogoType: channelProfile.channelLogoType || (channelProfile.channelLogoGifUrl ? 'gif' : 'png'),
           district: finalDistrict,
           city: (channelProfile.city || '').trim(),
+          designation: (channelProfile.designation || '').trim(),
           location: finalDistrict,
           state: reporterState || channelProfile.state || '',
           address: channelProfile.address || '',
@@ -2273,9 +2277,39 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 )
               )}
 
-              {/* 4 Plan Cards Grid - Enhanced User View */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
-                {sortPlansByCanonicalOrder(getPlansCatalog()).map((plan) => {
+              {/* Mobile 1-2-3-4 Tab Selector (Optimal UX on small screens) */}
+              <div className="md:hidden flex items-center justify-between gap-1 p-1 bg-slate-950 border border-slate-800 rounded-xl mb-3">
+                {[
+                  { id: 'all', label: 'सभी (1-4)' },
+                  { id: 'basic', label: '1. बेसिक' },
+                  { id: 'advanced', label: '2. एडवांस' },
+                  { id: 'professional', label: '3. प्रो' },
+                  { id: 'vip_desk', label: '4. वीआईपी' },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setMobileSelectedPlanTab(tab.id as any)}
+                    className={`flex-1 py-1.5 px-1 text-[11px] font-black rounded-lg transition-all text-center cursor-pointer ${
+                      mobileSelectedPlanTab === tab.id
+                        ? 'bg-amber-500 text-slate-950 shadow-md font-bold'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* 4 Plan Cards Grid - 2x2 on Desktop, Filterable on Mobile */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
+                {sortPlansByCanonicalOrder(getPlansCatalog())
+                  .filter((plan) => {
+                    if (mobileSelectedPlanTab === 'all') return true;
+                    if (mobileSelectedPlanTab === 'vip_desk') return plan.id === 'vip_desk' || plan.id === 'vip';
+                    return plan.id === mobileSelectedPlanTab;
+                  })
+                  .map((plan) => {
                   const isCurrent = subscription.tier === plan.id;
                   const regPrice = plan.id === 'basic' ? 2999 : plan.id === 'advanced' ? 4999 : plan.id === 'professional' ? 6999 : 9999;
                   const discountPct = plan.discountPercent || (plan.id === 'basic' ? 67 : plan.id === 'advanced' ? 50 : plan.id === 'professional' ? 40 : 35);
@@ -3218,6 +3252,50 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Reporter Full Name & Designation */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    पूरा नाम (Full Name) *
+                  </label>
+                  <input
+                    type="text"
+                    value={channelProfile.fullName || ''}
+                    readOnly={isLockedForUser}
+                    onChange={(e) =>
+                      !isLockedForUser &&
+                      setChannelProfile((p) => ({ ...p, fullName: e.target.value }))
+                    }
+                    placeholder="उदा. राहुल शर्मा"
+                    className={`w-full px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold ${
+                      isLockedForUser
+                        ? 'bg-slate-900/60 border border-slate-800 text-slate-300 cursor-not-allowed select-none'
+                        : 'bg-slate-950 border border-slate-700 text-white focus:border-amber-400 focus:outline-hidden'
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    पत्रकारिता पद (Designation)
+                  </label>
+                  <input
+                    type="text"
+                    value={channelProfile.designation || ''}
+                    readOnly={isLockedForUser}
+                    onChange={(e) =>
+                      !isLockedForUser &&
+                      setChannelProfile((p) => ({ ...p, designation: e.target.value }))
+                    }
+                    placeholder="उदा. मुख्य संपादक, ब्यूरो प्रमुख, संवाददाता"
+                    className={`w-full px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-bold ${
+                      isLockedForUser
+                        ? 'bg-slate-900/60 border border-slate-800 text-slate-300 cursor-not-allowed select-none'
+                        : 'bg-slate-950 border border-slate-700 text-white focus:border-amber-400 focus:outline-hidden'
+                    }`}
+                  />
+                </div>
+              </div>
 
               {/* Channel Names */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -297,13 +297,18 @@ let cachedDownloadStatus: UserDailyDownloadStatus | null = null;
 export async function fetchUserDailyDownloadStatus(email?: string): Promise<UserDailyDownloadStatus> {
   const cleanEmail = (email || '').toLowerCase().trim();
   try {
-    const res = await fetch(`/api/user-download-status?email=${encodeURIComponent(cleanEmail)}`);
+    const res = await fetch(getApiUrl(`/api/user-download-status?email=${encodeURIComponent(cleanEmail)}`));
     if (res.ok) {
       const data = await res.json();
-      if (data && data.success) {
+      if (data && (data.success || data.allowed)) {
         cachedDownloadStatus = data;
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('ai_news_download_status_updated', { detail: data }));
+          if (cleanEmail) {
+            try {
+              localStorage.setItem(`daily_quota_${cleanEmail}`, JSON.stringify(data));
+            } catch {}
+          }
         }
         return data;
       }
@@ -693,6 +698,9 @@ export interface PlanUserRecord {
   accountType?: 'channel' | 'reporter';
   defaultLocation?: string;
   district?: string;
+  city?: string;
+  state?: string;
+  designation?: string;
   channelName?: string;
   channelNameHi?: string;
   channelNameEn?: string;
@@ -899,23 +907,34 @@ export function assignPlanToUserManually(
 
 export function adminUpdateUserRecord(
   email: string,
-  updates: Partial<PlanUserRecord> & { isLocked?: boolean }
+  updates: Partial<PlanUserRecord> & { isLocked?: boolean; removeSubscription?: boolean }
 ): void {
   if (typeof window === 'undefined') return;
   try {
     const users = getPlanUsers();
     const cleanEmail = email.toLowerCase().trim();
-    const idx = users.findIndex((u) => u.email.toLowerCase() === cleanEmail);
+    const idx = users.findIndex((u) => (u.email && u.email.toLowerCase() === cleanEmail) || (u.userId && u.userId.toLowerCase() === cleanEmail));
     if (idx >= 0) {
       const current = users[idx];
-      const newTier = updates.tier || current.tier;
+      const isRemoving = Boolean(updates.removeSubscription);
+      const newTier = isRemoving ? 'basic' : (updates.tier || current.tier);
       const planDetail = getPlanDetail(newTier);
+      const effectivePlanName = isRemoving ? 'BASIC' : (newTier === 'advanced' ? 'ADVANCE' : (newTier === 'ultra' ? 'VIP DESK' : (newTier === 'professional' ? 'PRO' : planDetail.planKey)));
       users[idx] = {
         ...current,
         ...updates,
         tier: newTier,
-        planName: planDetail.planKey,
+        planName: effectivePlanName,
+        hasActivePaidPlan: isRemoving ? false : (newTier !== 'basic'),
+        isTrialExpired: isRemoving ? true : (newTier !== 'basic' ? false : current.isTrialExpired),
+        expiresAt: isRemoving ? (Date.now() - 1000) : (updates.expiresAt || current.expiresAt),
       };
+
+      // Also update in-memory DEFAULT_GUARANTEED_PLAN_USERS entry if present
+      const defUser = DEFAULT_GUARANTEED_PLAN_USERS.find(u => u.email.toLowerCase().trim() === cleanEmail || u.userId.toLowerCase().trim() === cleanEmail);
+      if (defUser) {
+        Object.assign(defUser, users[idx]);
+      }
 
       // Authoritatively persist update to Backend Database (Part 7)
       try {
@@ -924,13 +943,14 @@ export function adminUpdateUserRecord(
           method: 'POST',
           headers,
           body: JSON.stringify({
-            userId: cleanEmail,
+            userId: users[idx].userId || cleanEmail,
             updates: {
               ...updates,
-              email: cleanEmail,
+              email: users[idx].email || cleanEmail,
               tier: newTier,
-              planName: planDetail.planKey,
-              isTrialExpired: false,
+              planName: effectivePlanName,
+              removeSubscription: isRemoving,
+              isTrialExpired: isRemoving ? true : false,
             },
           }),
         }).catch((err) => console.warn('Could not sync user update to backend:', err));
@@ -2111,6 +2131,28 @@ export async function adminUpdateCloudUser(
     }
   } catch (err: any) {
     return { success: false, error: err?.message || 'नेटवर्क त्रुटि' };
+  }
+}
+
+export async function adminRemoveUserSubscription(userEmailOrId: string, userId?: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const id = userId || userEmailOrId;
+    const updates = {
+      tier: 'basic' as UserPlanTier,
+      planName: 'BASIC',
+      removeSubscription: true,
+      hasActivePaidPlan: false,
+      isTrialExpired: true,
+      expiresAt: Date.now() - 1000,
+    };
+    adminUpdateUserRecord(userEmailOrId, updates);
+    if (userId && userId !== userEmailOrId) {
+      adminUpdateUserRecord(userId, updates);
+    }
+    const res = await adminUpdateCloudUser(id, updates);
+    return res;
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'सब्सक्रिप्शन हटाने में त्रुटि' };
   }
 }
 

@@ -6647,6 +6647,8 @@ interface AuthoritativeUser {
   state?: string;
   district?: string;
   location?: string;
+  city?: string;
+  designation?: string;
   address?: string;
   pincode?: string;
   assembly?: string;
@@ -7194,6 +7196,8 @@ function syncUserToProfiles(u: AuthoritativeUser) {
       state: (u.state && u.state.trim()) ? u.state : ((allProfiles[cleanKey] && allProfiles[cleanKey].state) || ''),
       district: (u.district && u.district.trim()) ? u.district : (u.location || (allProfiles[cleanKey] && allProfiles[cleanKey].district) || ''),
       location: (u.location && u.location.trim()) ? u.location : (u.district || (allProfiles[cleanKey] && allProfiles[cleanKey].location) || ''),
+      city: (u.city && u.city.trim()) ? u.city : ((allProfiles[cleanKey] && allProfiles[cleanKey].city) || ''),
+      designation: (u.designation && u.designation.trim()) ? u.designation : ((allProfiles[cleanKey] && allProfiles[cleanKey].designation) || ''),
       channelNameHi: u.channelNameHi || u.channelName || '',
       channelNameEn: u.channelNameEn || '',
       channelLogoUrl: u.channelLogoUrl || '',
@@ -7318,6 +7322,8 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       whatsappDisplayNumber: (userPayload as any).whatsappDisplayNumber || userPayload.whatsappNumber || (existing as any).whatsappDisplayNumber || existing.whatsappNumber || userPayload.mobileNumber || userPayload.mobile || existing.mobileNumber || '',
       district: (userPayload.district && String(userPayload.district).trim()) ? String(userPayload.district).trim() : (userPayload.location || existing.district || existing.location || ''),
       location: (userPayload.location && String(userPayload.location).trim()) ? String(userPayload.location).trim() : (userPayload.district || existing.location || existing.district || ''),
+      city: (userPayload.city && String(userPayload.city).trim()) ? String(userPayload.city).trim() : (existing.city || ''),
+      designation: (userPayload.designation && String(userPayload.designation).trim()) ? String(userPayload.designation).trim() : (existing.designation || ''),
       state: userPayload.state || existing.state || '',
       address: userPayload.address || existing.address || '',
       pincode: userPayload.pincode || existing.pincode || '',
@@ -7329,19 +7335,19 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       whatsappMarketingConsentSource: userPayload.whatsappMarketingConsentSource || existing.whatsappMarketingConsentSource || null,
       whatsappMarketingConsentVersion: userPayload.whatsappMarketingConsentVersion || existing.whatsappMarketingConsentVersion || null,
       whatsappMarketingConsentUpdatedAt: userPayload.whatsappMarketingConsentUpdatedAt || existing.whatsappMarketingConsentUpdatedAt || null,
-      role: isBreakingNewsWala ? 'superadmin' : (cleanEmail === 'admin.ainewsmaker@gmail.com' ? 'admin' : (existing.role || 'reporter')),
-      tier: (isBreakingNewsWala || cleanEmail === 'admin.ainewsmaker@gmail.com') ? 'ultra' : (existing.tier || 'basic'),
-      planName: (isBreakingNewsWala || cleanEmail === 'admin.ainewsmaker@gmail.com') ? 'VIP DESK' : (existing.planName || (existing.tier ? existing.tier.toUpperCase() : 'BASIC')),
+      role: isBreakingNewsWala ? 'superadmin' : (cleanEmail === 'admin.ainewsmaker@gmail.com' ? 'admin' : (userPayload.role || existing.role || 'reporter')),
+      tier: (isBreakingNewsWala || cleanEmail === 'admin.ainewsmaker@gmail.com') ? 'ultra' : (userPayload.tier || existing.tier || 'basic'),
+      planName: (isBreakingNewsWala || cleanEmail === 'admin.ainewsmaker@gmail.com') ? 'VIP DESK' : (userPayload.planName || (userPayload.tier === 'ultra' ? 'VIP DESK' : userPayload.tier === 'advanced' ? 'ADVANCE' : userPayload.tier === 'professional' ? 'PRO' : '') || existing.planName || (existing.tier ? (existing.tier === 'ultra' ? 'VIP DESK' : existing.tier === 'advanced' ? 'ADVANCE' : existing.tier === 'professional' ? 'PRO' : existing.tier.toUpperCase()) : 'BASIC')),
       isBlocked: Boolean(existing.isBlocked),
       blockedAt: existing.blockedAt,
       blockedBy: existing.blockedBy,
       createdAt: existing.createdAt || now,
       trialStartedAt: preservedTrialStart,
       trialEndsAt: preservedTrialEnds,
-      isTrialExpired: isSuper || (existing.tier && existing.tier !== 'basic') ? false : (Date.now() >= preservedTrialEnds),
+      isTrialExpired: isSuper || ((userPayload.tier || existing.tier) && (userPayload.tier || existing.tier) !== 'basic') ? false : (Date.now() >= preservedTrialEnds),
       lastLoginAt: now,
       activatedAt: existing.activatedAt || (isSuper ? now : preservedTrialStart),
-      expiresAt: existing.expiresAt && existing.expiresAt > now ? existing.expiresAt : (isSuper ? 2107057518060 : ((existing.tier && existing.tier !== 'basic') ? (now + 365 * 86400000) : preservedTrialEnds)),
+      expiresAt: existing.expiresAt && existing.expiresAt > now ? existing.expiresAt : (isSuper ? 2107057518060 : (((userPayload.tier || existing.tier) && (userPayload.tier || existing.tier) !== 'basic') ? (now + 365 * 86400000) : preservedTrialEnds)),
       activatedVia: existing.activatedVia || (isSuper ? 'Super Admin Preset' : 'Google Registration'),
     };
     users[idx] = updatedRecord;
@@ -7376,6 +7382,8 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       whatsappDisplayNumber: (userPayload as any).whatsappDisplayNumber || userPayload.whatsappNumber || userPayload.mobileNumber || userPayload.mobile || '',
       district: userPayload.district || userPayload.location || '',
       location: userPayload.location || userPayload.district || '',
+      city: userPayload.city || '',
+      designation: userPayload.designation || '',
       state: userPayload.state || '',
       address: userPayload.address || '',
       pincode: userPayload.pincode || '',
@@ -7387,9 +7395,9 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       whatsappMarketingConsentSource: userPayload.whatsappMarketingConsentSource || null,
       whatsappMarketingConsentVersion: userPayload.whatsappMarketingConsentVersion || null,
       whatsappMarketingConsentUpdatedAt: userPayload.whatsappMarketingConsentUpdatedAt || null,
-      role: isBreakingNewsWala ? 'superadmin' : (cleanEmail === 'admin.ainewsmaker@gmail.com' ? 'admin' : 'reporter'),
-      tier: (isBreakingNewsWala || cleanEmail === 'admin.ainewsmaker@gmail.com') ? 'ultra' : 'basic',
-      planName: (isBreakingNewsWala || cleanEmail === 'admin.ainewsmaker@gmail.com') ? 'VIP DESK' : 'BASIC',
+      role: isBreakingNewsWala ? 'superadmin' : (cleanEmail === 'admin.ainewsmaker@gmail.com' ? 'admin' : (userPayload.role || 'reporter')),
+      tier: (isBreakingNewsWala || cleanEmail === 'admin.ainewsmaker@gmail.com') ? 'ultra' : (userPayload.tier || 'basic'),
+      planName: (isBreakingNewsWala || cleanEmail === 'admin.ainewsmaker@gmail.com') ? 'VIP DESK' : (userPayload.planName || (userPayload.tier === 'ultra' ? 'VIP DESK' : userPayload.tier === 'advanced' ? 'ADVANCE' : userPayload.tier === 'professional' ? 'PRO' : 'BASIC')),
       isBlocked: false,
       blockedAt: null,
       blockedBy: null,
@@ -8681,6 +8689,15 @@ app.put("/api/admin/users/:userId/profile", requireAdminMiddleware, async (req, 
     if (updates.state !== undefined) {
       targetUser.state = updates.state.toString().trim();
     }
+    if (updates.city !== undefined) {
+      targetUser.city = updates.city.toString().trim();
+    }
+    if (updates.designation !== undefined) {
+      targetUser.designation = updates.designation.toString().trim();
+    }
+    if (updates.role !== undefined && isMaster) {
+      targetUser.role = updates.role;
+    }
     if (updates.channelLogoUrl !== undefined) {
       targetUser.channelLogoUrl = updates.channelLogoUrl;
     }
@@ -8717,6 +8734,9 @@ app.put("/api/admin/users/:userId/profile", requireAdminMiddleware, async (req, 
       websiteUrl: targetUser.websiteUrl,
       district: targetUser.district,
       location: targetUser.location,
+      city: targetUser.city || "",
+      designation: targetUser.designation || "",
+      role: targetUser.role || "reporter",
       state: targetUser.state,
       channelLogoUrl: targetUser.channelLogoUrl,
       channelLogoPngUrl: targetUser.channelLogoPngUrl,
@@ -18033,12 +18053,17 @@ app.post("/api/admin/update-user", requireAdminMiddleware, (req, res) => {
 
     let updatedUser: AuthoritativeUser;
     const now = Date.now();
-    const isUpgradedTier = updates.tier && updates.tier !== 'basic';
-    const effectivePlanName = isUpgradedTier
-      ? (updates.planName || (updates.tier === 'ultra' ? 'VIP DESK' : updates.tier.toUpperCase()))
-      : (updates.planName || (idx >= 0 ? users[idx].planName : 'BASIC'));
+    const isRemovingSubscription = Boolean(updates.removeSubscription);
+    const isUpgradedTier = !isRemovingSubscription && updates.tier && updates.tier !== 'basic';
+    const effectivePlanName = isRemovingSubscription
+      ? 'BASIC'
+      : isUpgradedTier
+      ? (updates.planName || (updates.tier === 'ultra' ? 'VIP DESK' : updates.tier === 'advanced' ? 'ADVANCE' : updates.tier === 'professional' ? 'PRO' : updates.tier.toUpperCase()))
+      : (updates.tier === 'basic' ? 'BASIC' : (updates.planName || (idx >= 0 ? users[idx].planName : 'BASIC')));
 
-    const calculatedExpiresAt = isUpgradedTier
+    const calculatedExpiresAt = isRemovingSubscription
+      ? (now - 1000)
+      : isUpgradedTier
       ? (updates.expiresAt || (idx >= 0 && users[idx].expiresAt && users[idx].expiresAt > now ? users[idx].expiresAt : (now + 365 * 86400000)))
       : (updates.expiresAt !== undefined ? updates.expiresAt : (idx >= 0 ? users[idx].expiresAt : (now + SEVEN_DAYS_MS)));
 
@@ -18055,15 +18080,19 @@ app.post("/api/admin/update-user", requireAdminMiddleware, (req, res) => {
         channelLogoGifUrl: updates.channelLogoGifUrl !== undefined ? updates.channelLogoGifUrl : users[idx].channelLogoGifUrl,
         mobile: updates.mobile || updates.mobileNumber || users[idx].mobile,
         mobileNumber: updates.mobileNumber || updates.mobile || users[idx].mobileNumber,
+        city: updates.city !== undefined ? updates.city : users[idx].city,
+        designation: updates.designation !== undefined ? updates.designation : users[idx].designation,
         websiteUrl: updates.websiteUrl !== undefined ? updates.websiteUrl : users[idx].websiteUrl,
         socialIcons: updates.socialIcons !== undefined ? updates.socialIcons : users[idx].socialIcons,
         role: updates.role || users[idx].role,
-        tier: updates.tier || users[idx].tier,
+        tier: isRemovingSubscription ? 'basic' : (updates.tier || users[idx].tier),
         planName: effectivePlanName,
         isBlocked: updates.isBlocked !== undefined ? updates.isBlocked : users[idx].isBlocked,
         isLocked: updates.isLocked !== undefined ? updates.isLocked : users[idx].isLocked,
-        isTrialExpired: isUpgradedTier ? false : (updates.isTrialExpired !== undefined ? updates.isTrialExpired : users[idx].isTrialExpired),
+        isTrialExpired: isRemovingSubscription ? true : (isUpgradedTier ? false : (updates.isTrialExpired !== undefined ? updates.isTrialExpired : users[idx].isTrialExpired)),
+        hasActivePaidPlan: isRemovingSubscription ? false : (isUpgradedTier ? true : (updates.hasActivePaidPlan !== undefined ? updates.hasActivePaidPlan : users[idx].hasActivePaidPlan)),
         expiresAt: calculatedExpiresAt,
+        activatedVia: isRemovingSubscription ? 'Subscription Removed by Admin' : (updates.activatedVia || users[idx].activatedVia),
         updatedAt: now,
       };
       updatedUser = users[idx];
@@ -30142,6 +30171,9 @@ app.post("/api/user/consume-graphic-creation-quota", async (req, res) => {
     userEntry.updatedAt = Date.now();
     saveDailyGraphicCreationsDatabase(db);
 
+    const currentRec = dailyDownloadsTracker.get(userKey) || { date: dateStr, count: 0 };
+    dailyDownloadsTracker.set(userKey, { date: dateStr, count: Math.max(currentRec.count, userEntry.count) });
+
     return res.json({
       success: true,
       unlimited: false,
@@ -30676,14 +30708,18 @@ app.get("/api/user-download-status", (req, res) => {
     const totalPackRemaining = userPacks.reduce((sum: number, p: any) => sum + (p.graphicsRemaining || 0), 0);
     const nearestPackExpiry = userPacks.length > 0 ? Math.min(...userPacks.map((p: any) => p.expiresAt)) : null;
 
-    const isExhausted = downloadsToday >= maxAllowed && totalPackRemaining === 0;
-    const remainingCount = Math.max(0, maxAllowed - downloadsToday) + totalPackRemaining;
+    const creationsDb = loadDailyGraphicCreationsDatabase();
+    const userCreations = creationsDb[dateStr]?.[userKey]?.count || creationsDb[dateStr]?.[matchedUser?.userId || '']?.count || 0;
+    const effectiveUsed = Math.max(downloadsToday, userCreations);
+
+    const isExhausted = effectiveUsed >= maxAllowed && totalPackRemaining === 0;
+    const remainingCount = Math.max(0, maxAllowed - effectiveUsed) + totalPackRemaining;
     return res.json({
       success: true,
       plan: tier,
       maxAllowed,
       dailyQuota: maxAllowed,
-      downloadsToday,
+      downloadsToday: effectiveUsed,
       remainingToday: remainingCount,
       remainingDownloads: remainingCount,
       isExhausted,

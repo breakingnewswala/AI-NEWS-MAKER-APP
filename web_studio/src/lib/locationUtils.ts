@@ -129,6 +129,10 @@ export interface DynamicLocationResult {
   leftDestW: number;
   rightDestW: number;
   finalCenterW: number;
+  actualBx: number;
+  actualBxPct: number;
+  heightPct: number;
+  bh: number;
 }
 
 /**
@@ -138,13 +142,17 @@ export interface DynamicLocationResult {
 export function calculateDynamicLocationMetrics(options: DynamicLocationOptions): DynamicLocationResult {
   const width = options.canvasWidth || 1080;
   const height = options.canvasHeight || 1350;
-  const locRect = options.locationRect || { x: 5, y: 13.5, width: 28, height: 4.5 };
+  // Sleeker badge height: 3.8% of card height (approx 51px on 1350px canvas) instead of bulky 4.5%
+  const targetHeightPct = options.locationRect?.height ? Math.min(options.locationRect.height, 3.8) : 3.8;
+  const locRect = options.locationRect
+    ? { ...options.locationRect, height: targetHeightPct }
+    : { x: 5, y: 13.5, width: 28, height: targetHeightPct };
   const bx = (locRect.x / 100) * width;
   const bh = (locRect.height / 100) * height;
 
   const cleanLocText = formatCleanLocationText(options.locationText || '');
   const typo = options.typographyConfig;
-  const fontSize = Math.round((typo?.fontSize || options.locationFontSize || 20) * (width / 1080));
+  const fontSize = Math.round((typo?.fontSize || options.locationFontSize || 22) * (width / 1080));
   const fontFamily = typo?.fontFamily || 'Baloo 2';
   const fontWeight = typo?.weight || 800;
 
@@ -167,23 +175,40 @@ export function calculateDynamicLocationMetrics(options: DynamicLocationOptions)
   let rightDestW = 0;
   let finalCenterW = 0;
 
+  const isRightAnchored = (locRect.x > 45);
+  // Max available width: on right side, allows leftward growth up to 65% of card width
+  const maxAvailableW = isRightAnchored
+    ? Math.round(width * 0.65)
+    : Math.min(Math.round(width * 0.65), width - bx - 20);
+
   if (options.hasBadgeAsset) {
     const leftSlicePct = options.sliceConfig?.leftWidthPct ?? 0.28;
     const rightSlicePct = options.sliceConfig?.rightWidthPct ?? 0.15;
-    const pinW = Math.round(400 * leftSlicePct);
-    const capW = Math.round(400 * rightSlicePct);
-    leftDestW = Math.round((pinW / 100) * bh);
-    rightDestW = Math.round((capW / 100) * bh);
+    const nw = 360;
+    const nh = 72;
+    const pinW = Math.round(nw * leftSlicePct);
+    const capW = Math.round(nw * rightSlicePct);
+    leftDestW = Math.round((pinW / nh) * bh);
+    rightDestW = Math.round((capW / nh) * bh);
 
-    const neededCenterW = Math.max(10, measuredTextW + 24);
-    dynamicBw = Math.min(width - bx - 20, Math.max(100, Math.round(leftDestW + neededCenterW + rightDestW)));
+    // Generous internal text padding (+48px) so long location names never touch pin divider or edges
+    const neededCenterW = Math.max(10, measuredTextW + 48);
+    dynamicBw = Math.min(maxAvailableW, Math.max(120, Math.round(leftDestW + neededCenterW + rightDestW)));
     finalCenterW = Math.max(10, dynamicBw - leftDestW - rightDestW);
   } else {
-    dynamicBw = Math.min(width - bx - 20, Math.max(100, Math.round(measuredTextW + 52)));
+    dynamicBw = Math.min(maxAvailableW, Math.max(110, Math.round(measuredTextW + 56)));
     finalCenterW = dynamicBw;
   }
 
   const widthPct = Number(((dynamicBw / width) * 100).toFixed(2));
+  const heightPct = Number(((bh / height) * 100).toFixed(2));
+
+  // If anchored on right, expanding to left keeps right margin intact
+  const rightEdge = ((locRect.x + locRect.width) / 100) * width;
+  const actualBx = isRightAnchored
+    ? Math.max(Math.round(width * 0.30), Math.round(rightEdge - dynamicBw))
+    : Math.round(bx);
+  const actualBxPct = Number(((actualBx / width) * 100).toFixed(2));
 
   return {
     dynamicBw,
@@ -193,6 +218,10 @@ export function calculateDynamicLocationMetrics(options: DynamicLocationOptions)
     leftDestW,
     rightDestW,
     finalCenterW,
+    actualBx,
+    actualBxPct,
+    heightPct,
+    bh,
   };
 }
 
@@ -217,15 +246,24 @@ export function toSafeSvgDataUrl(rawUrl?: string | null): string {
     // Replace %23 with # because in XML/SVG colors and gradient hrefs are #hex / #id
     rawContent = rawContent.replace(/%23/g, '#');
 
-    let base64 = '';
-    if (typeof Buffer !== 'undefined') {
-      base64 = Buffer.from(rawContent, 'utf8').toString('base64');
-    } else if (typeof btoa !== 'undefined') {
-      base64 = btoa(unescape(encodeURIComponent(rawContent)));
+    // Safe base64 conversion that NEVER fails on Unicode or browser environment
+    if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+      try {
+        const utf8Bytes = new TextEncoder().encode(rawContent);
+        let binary = '';
+        for (let i = 0; i < utf8Bytes.length; i++) {
+          binary += String.fromCharCode(utf8Bytes[i]);
+        }
+        return `data:image/svg+xml;base64,${window.btoa(binary)}`;
+      } catch {}
     }
-    if (base64) {
+
+    if (typeof Buffer !== 'undefined') {
+      const base64 = Buffer.from(rawContent, 'utf8').toString('base64');
       return `data:image/svg+xml;base64,${base64}`;
     }
+
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(rawContent)}`;
   } catch (err) {}
   return rawUrl;
 }

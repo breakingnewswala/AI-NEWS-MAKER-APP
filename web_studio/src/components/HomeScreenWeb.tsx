@@ -737,8 +737,15 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     const handleQuotaUpdate = (e: any) => {
       if (e?.detail) setDailyQuotaStatus(e.detail);
     };
+    const handleDownloadEvent = () => {
+      fetchUserDailyDownloadStatus(currentUser?.email).then(setDailyQuotaStatus).catch(() => {});
+    };
     window.addEventListener('ai_news_download_status_updated', handleQuotaUpdate);
-    return () => window.removeEventListener('ai_news_download_status_updated', handleQuotaUpdate);
+    window.addEventListener('ai_news_bonus_graphic_downloaded', handleDownloadEvent);
+    return () => {
+      window.removeEventListener('ai_news_download_status_updated', handleQuotaUpdate);
+      window.removeEventListener('ai_news_bonus_graphic_downloaded', handleDownloadEvent);
+    };
   }, [currentUser?.email]);
 
   // User Report Modal State (Part M)
@@ -1178,13 +1185,19 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       }
 
       if (data && typeof data.remainingToday === 'number') {
-        setDailyQuotaStatus((prev: any) => ({
-          ...(prev || {}),
+        const updatedStatus = {
           remainingToday: data.remainingToday,
           usedToday: data.usedToday,
           limit: data.limit,
+          dailyQuota: data.limit,
+          maxAllowed: data.limit,
           isExhausted: data.remainingToday <= 0,
+        };
+        setDailyQuotaStatus((prev: any) => ({
+          ...(prev || {}),
+          ...updatedStatus,
         }));
+        window.dispatchEvent(new CustomEvent('ai_news_download_status_updated', { detail: updatedStatus }));
       }
     } catch (e) {
       console.warn('Quota consumption network error, proceeding safely:', e);
@@ -2926,7 +2939,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           <span className="px-2 py-0.5 bg-black/80 backdrop-blur-sm rounded-md font-bold text-amber-300 border border-amber-500/30 truncate text-[11px]">
                             {post.location ? `📍 ${post.location}` : post.categoryName}
                           </span>
-                          {(post.status === 'pre_published' || (post as any).status === 'PRE_PUBLISHED' || Boolean((post as any).isPrePublished)) && (
+                          {canModerate && (post.status === 'pre_published' || (post as any).status === 'PRE_PUBLISHED' || Boolean((post as any).isPrePublished)) && (
                             <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/60 text-[10px] font-black rounded-md flex items-center gap-1 shadow-md backdrop-blur-sm shrink-0">
                               <CheckCircle2 className="w-2.5 h-2.5 text-amber-400" />
                               <span>PRE-PUBLISHED</span>
@@ -3550,8 +3563,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                           {post.categoryName}
                         </span>
 
-                        {/* Pre-Published Approved Editorial Badge */}
-                        {(post.status === 'pre_published' || (post as any).status === 'PRE_PUBLISHED' || Boolean((post as any).isPrePublished)) && (
+                        {/* Pre-Published Approved Editorial Badge - Admin Only */}
+                        {canModerate && (post.status === 'pre_published' || (post as any).status === 'PRE_PUBLISHED' || Boolean((post as any).isPrePublished)) && (
                           <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/60 text-[10px] font-black rounded-md flex items-center gap-1 shadow-md backdrop-blur-sm">
                             <CheckCircle2 className="w-2.5 h-2.5 text-amber-400" />
                             <span>PRE-PUBLISHED</span>

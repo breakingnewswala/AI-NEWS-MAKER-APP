@@ -51,6 +51,196 @@ const handleImgError = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
   target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>';
 };
 
+const DynamicLocationBadgePreview: React.FC<{
+  cleanLoc: string;
+  badgeAsset?: string;
+  sliceConfig?: { leftWidthPct?: number; rightWidthPct?: number };
+  locColor: string;
+  locBgColor?: string;
+  fontFamily: string;
+  fontSize: number;
+  showIcon?: boolean;
+  styleMode?: string;
+  previewScale: number;
+  widthPct: number;
+  heightPct: number;
+  xPct: number;
+  yPct: number;
+  rotation?: number;
+  isRightAnchored?: boolean;
+}> = ({
+  cleanLoc,
+  badgeAsset,
+  sliceConfig,
+  locColor,
+  locBgColor,
+  fontFamily,
+  fontSize,
+  showIcon,
+  styleMode,
+  previewScale,
+  widthPct,
+  heightPct,
+  xPct,
+  yPct,
+  rotation,
+  isRightAnchored,
+}) => {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const [imgLoaded, setImgLoaded] = React.useState(false);
+  const [imgError, setImgError] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!badgeAsset) {
+      setImgLoaded(false);
+      return;
+    }
+    const safeUrl = toSafeSvgDataUrl(badgeAsset) || badgeAsset;
+    let cancelled = false;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      if (!cancelled && img.naturalWidth > 1) {
+        setImgLoaded(true);
+        setImgError(false);
+      }
+    };
+    img.onerror = () => {
+      if (!cancelled) {
+        setImgError(true);
+        setImgLoaded(false);
+      }
+    };
+    img.src = safeUrl;
+    return () => {
+      cancelled = true;
+    };
+  }, [badgeAsset]);
+
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !imgLoaded || !badgeAsset) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const safeUrl = toSafeSvgDataUrl(badgeAsset) || badgeAsset;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const nw = img.naturalWidth || 360;
+      const nh = img.naturalHeight || 72;
+      const cw = canvas.width;
+      const ch = canvas.height;
+
+      ctx.clearRect(0, 0, cw, ch);
+
+      const leftSlicePct = sliceConfig?.leftWidthPct ?? 0.28;
+      const rightSlicePct = sliceConfig?.rightWidthPct ?? 0.15;
+      const pinW = Math.round(nw * leftSlicePct);
+      const capW = Math.round(nw * rightSlicePct);
+      const midW = Math.max(1, nw - pinW - capW);
+
+      const leftDestW = (pinW / nh) * ch;
+      const rightDestW = (capW / nh) * ch;
+      const midDestW = Math.max(1, cw - leftDestW - rightDestW);
+
+      ctx.drawImage(img, 0, 0, pinW, nh, 0, 0, leftDestW, ch);
+      ctx.drawImage(img, pinW, 0, midW, nh, leftDestW, 0, midDestW, ch);
+      ctx.drawImage(img, nw - capW, 0, capW, nh, leftDestW + midDestW, 0, rightDestW, ch);
+    };
+    img.src = safeUrl;
+  }, [badgeAsset, imgLoaded, sliceConfig, widthPct, heightPct]);
+
+  const isBox = styleMode === 'box' || styleMode === 'compact_chip';
+  const borderRadius = isBox ? '6px' : '9999px';
+  const fallbackBg = locBgColor && locBgColor !== 'transparent' ? locBgColor : '#DC2626';
+
+  const positionStyle: React.CSSProperties = isRightAnchored
+    ? {
+        right: `${Math.max(2, 100 - (xPct + 28))}%`,
+        top: `${yPct}%`,
+        width: `${widthPct}%`,
+        maxWidth: '75%',
+        height: `${heightPct}%`,
+        transform: (rotation ?? 0) !== 0 ? `rotate(${rotation}deg)` : undefined,
+        transformOrigin: 'center center',
+      }
+    : {
+        left: `${xPct}%`,
+        top: `${yPct}%`,
+        width: `${widthPct}%`,
+        maxWidth: '75%',
+        height: `${heightPct}%`,
+        transform: (rotation ?? 0) !== 0 ? `rotate(${rotation}deg)` : undefined,
+        transformOrigin: 'center center',
+      };
+
+  return (
+    <div
+      className="absolute pointer-events-auto flex items-center justify-center font-bold select-none drop-shadow-[0_4px_12px_rgba(0,0,0,0.6)] z-30"
+      style={positionStyle}
+    >
+      {badgeAsset && !imgError ? (
+        <div className="relative flex items-center justify-center h-full w-full overflow-hidden" style={{ borderRadius }}>
+          <canvas
+            ref={canvasRef}
+            width={480}
+            height={60}
+            className="absolute inset-0 w-full h-full pointer-events-none"
+          />
+          {!imgLoaded && (
+            <div
+              className="absolute inset-0 w-full h-full"
+              style={{ backgroundColor: fallbackBg, borderRadius }}
+            />
+          )}
+          <div
+            className="relative z-10 w-full h-full flex items-center justify-center text-center overflow-hidden"
+            style={{
+              paddingLeft: `${Math.round(((sliceConfig?.leftWidthPct ?? 0.28) * 100))}%`,
+              paddingRight: `${Math.round(((sliceConfig?.rightWidthPct ?? 0.15) * 100))}%`,
+            }}
+          >
+            <span
+              className="truncate drop-shadow-sm font-black tracking-wide"
+              style={{
+                color: locColor,
+                fontFamily: `"${fontFamily}", "Noto Sans Devanagari", sans-serif`,
+                fontSize: `${Math.max(9, Math.round(fontSize * previewScale))}px`,
+                lineHeight: 1,
+              }}
+            >
+              {cleanLoc}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div
+          className="relative flex items-center justify-center text-center h-full w-full px-3 shadow-md gap-1.5"
+          style={{
+            backgroundColor: fallbackBg,
+            color: locColor,
+            borderRadius,
+            border: isBox ? '1.5px solid #FFFFFF' : '1.5px solid rgba(255, 255, 255, 0.4)',
+          }}
+        >
+          {showIcon !== false && <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white shrink-0 drop-shadow-xs" />}
+          <span
+            className="truncate font-black tracking-wide"
+            style={{
+              color: locColor,
+              fontFamily: `"${fontFamily}", "Noto Sans Devanagari", sans-serif`,
+              fontSize: `${Math.max(9, Math.round(fontSize * previewScale))}px`,
+            }}
+          >
+            {cleanLoc}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale = 1, className, showSafeZone = false, onChange }) => {
   // If Admin Test Mode is active, override preview identity cleanly without modifying real admin profile
   const card = React.useMemo(() => {
@@ -401,11 +591,24 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     const textSlotRect = activeDf?.textSlots?.[0]?.rect;
     const canvasH = (activeDf?.aspectRatio === '9:16' || card.aspectRatio === '9:16') ? 1920 : (activeDf?.aspectRatio === '1:1' || card.aspectRatio === '1:1') ? 1080 : 1350;
     const paddedHw = textSlotRect ? Math.max(50, ((textSlotRect.width / 100) * 1080) - 30) : 0;
+
+    // Check if callout is active to avoid headline overlapping or cropping into callout strip
+    const isCalloutActive = Boolean(
+      activeDf?.fullStoryCalloutConfig?.calloutVisibilityPolicy === 'forced_on' ||
+      ((activeDf?.fullStoryCalloutConfig?.enabled || Boolean(card.customCalloutAssetUrl)) &&
+        activeDf?.fullStoryCalloutConfig?.calloutVisibilityPolicy !== 'disabled' &&
+        card.showCallout !== false)
+    );
+    const calloutRawY = activeDf?.fullStoryCalloutConfig?.rect?.y ?? 85;
+    const maxAvailableSlotH = (isCalloutActive && textSlotRect && calloutRawY > textSlotRect.y)
+      ? Math.min(textSlotRect.height, calloutRawY - textSlotRect.y - 1.2)
+      : (textSlotRect?.height ?? 27);
+
     const customBounds = textSlotRect ? {
       x: ((textSlotRect.x / 100) * 1080) + 15,
       y: (textSlotRect.y / 100) * canvasH,
       width: paddedHw,
-      height: (textSlotRect.height / 100) * canvasH,
+      height: (maxAvailableSlotH / 100) * canvasH,
     } : undefined;
 
     const effectiveHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
@@ -1401,7 +1604,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             style={{ width: '24px', height: '140px' }}
           >
             <div
-              className={`absolute whitespace-nowrap px-2 py-0.5 rounded shadow-md flex items-center justify-center ${
+              className={`absolute whitespace-nowrap px-3 py-1 rounded shadow-md flex items-center justify-center text-center ${
                 showBox ? 'border border-white/30' : ''
               }`}
               style={{
@@ -1410,7 +1613,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 backgroundColor: showBox ? boxBg : 'transparent',
               }}
             >
-              <span className={`text-[8px] sm:text-[9.5px] font-black uppercase tracking-[0.14em] text-white px-0.5 inline-block font-['Baloo_2',sans-serif] ${
+              <span className={`text-[8.5px] sm:text-[10px] font-black uppercase text-white inline-flex items-center justify-center text-center leading-none font-['Baloo_2',sans-serif] ${
                 showBox ? 'drop-shadow' : 'drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)]'
               }`}>
                 {text}
@@ -1479,23 +1682,20 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               )}
 
               {/* Dynamic Location Badge */}
-              {df.headerConfig?.showLocation && card.location && card.showLocation !== false && (() => {
+              {df.headerConfig?.showLocation !== false && card.location && card.showLocation !== false && (() => {
                 const cleanLoc = formatCleanLocationText(card.location);
-                let badgeAsset = card.customLocationBadgeUrl || df.headerConfig.manualLocationAsset || (df.headerConfig as any).locationBadgeAssetUrl || (df.headerConfig as any).locationBadgeUrl;
-                if (!badgeAsset) {
-                  const badgeId = card.selectedLocationBadgeId || df.headerConfig.locationBadgeAssetId || df.locationBadgeAssetId;
-                  if (badgeId) {
-                    const item = getAssetLibraryItemById(badgeId);
-                    if (item && item.url) badgeAsset = item.url;
-                  }
+                const badgeId = card.selectedLocationBadgeId || df.headerConfig?.locationBadgeAssetId || df.locationBadgeAssetId;
+                const userSelectedBadge = card.selectedLocationBadgeId ? getAssetLibraryItemById(card.selectedLocationBadgeId) : undefined;
+                let badgeAsset = card.customLocationBadgeUrl || userSelectedBadge?.url || df.headerConfig?.manualLocationAsset || (df.headerConfig as any)?.locationBadgeAssetUrl;
+                if (!badgeAsset && badgeId) {
+                  const item = getAssetLibraryItemById(badgeId);
+                  if (item && item.url) badgeAsset = item.url;
                 }
                 const locColor = card.locationTextColor || df.headerConfig.locationTextColor || '#FFFFFF';
-                const isDarkChip = df.headerConfig.locationBadgeAssetId === 'loc_style_compact_chip' || df.locationBadgeAssetId === 'loc_style_compact_chip' || df.headerConfig.locationStyle === 'compact_chip' || df.headerConfig.locationStyle === 'box';
+                const styleMode = df.headerConfig?.locationBadgeAssetId || df.locationBadgeAssetId || df.headerConfig?.locationStyle;
+                const isDarkChip = styleMode === 'loc_style_compact_chip' || styleMode === 'compact_chip' || styleMode === 'box';
                 const locBgColor = card.locationBgColor || df.headerConfig.locationBgColor || (badgeAsset ? 'transparent' : (isDarkChip ? '#18181B' : '#DC2626'));
-                const locBorderRadius = isDarkChip || df.headerConfig.locationStyle === 'box' ? '6px' : '9999px';
-                const locBorder = isDarkChip ? '2px solid #FFFFFF' : '1.5px solid rgba(255, 255, 255, 0.4)';
-
-                let safeBadgeUrl = toSafeSvgDataUrl(badgeAsset);
+                const locBorderRadius = df.headerConfig.locationStyle === 'box' ? '6px' : '9999px';
 
                 const dynamicLoc = calculateDynamicLocationMetrics({
                   locationText: cleanLoc,
@@ -1505,71 +1705,33 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   locationFontSize: df.headerConfig.locationFontSize,
                   hasBadgeAsset: Boolean(badgeAsset),
                 });
-                const locWidth = `${dynamicLoc.widthPct}%` || `${df.headerConfig.locationRect?.width ?? 28}%`;
 
-                return badgeAsset ? (
-                  <div
-                    className="absolute pointer-events-auto flex items-center justify-center font-bold shadow-md select-none"
-                    style={{
-                      left: `${df.headerConfig.locationRect?.x ?? 5}%`,
-                      top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
-                      width: locWidth,
-                      maxWidth: '85%',
-                      height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
-                      transform: (df.headerConfig.locationRotation ?? 0) !== 0 ? `rotate(${df.headerConfig.locationRotation}deg)` : undefined,
-                      transformOrigin: 'center center',
-                    }}
-                  >
-                    <div className="relative flex items-center justify-center h-full w-full">
-                      <img
-                        src={safeBadgeUrl || badgeAsset}
-                        alt=""
-                        className="h-full w-full object-contain pointer-events-none select-none"
-                        onError={(e) => {
-                          const target = e.currentTarget as HTMLImageElement;
-                          target.style.display = 'none';
-                        }}
-                      />
-                      <div
-                        className="absolute inset-y-0 flex items-center justify-center overflow-hidden"
-                        style={{
-                          left: `${Math.round(((df.sliceConfig?.leftWidthPct ?? df.headerConfig?.sliceConfig?.leftWidthPct) ?? 0.28) * 100)}%`,
-                          right: `${Math.round(((df.sliceConfig?.rightWidthPct ?? df.headerConfig?.sliceConfig?.rightWidthPct) ?? 0.15) * 100)}%`,
-                        }}
-                      >
-                        <span
-                          className="truncate shadow-xs"
-                          style={{
-                            color: locColor,
-                            fontFamily: card.locationFont || df.headerConfig.typographyConfig?.fontFamily || 'Baloo 2',
-                            fontWeight: df.headerConfig.typographyConfig?.weight || 800,
-                            fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 22) * previewScale))}px`,
-                          }}
-                        >
-                          {cleanLoc}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    className="absolute pointer-events-auto flex items-center justify-center font-bold px-2.5 shadow-md"
-                    style={{
-                      left: `${df.headerConfig.locationRect?.x ?? 5}%`,
-                      top: `${df.headerConfig.locationRect?.y ?? 13.5}%`,
-                      width: locWidth,
-                      maxWidth: `${df.headerConfig.locationRect?.width ?? 38}%`,
-                      height: `${df.headerConfig.locationRect?.height ?? 4.5}%`,
-                      backgroundColor: locBgColor,
-                      color: locColor,
-                      border: locBorder,
-                      borderRadius: locBorderRadius,
-                      fontSize: `${Math.max(10, Math.round((df.headerConfig.locationFontSize || 20) * previewScale))}px`,
-                    }}
-                  >
-                    {df.headerConfig.locationShowIcon !== false && <MapPin className="w-3.5 h-3.5 mr-1 inline shrink-0" style={{ color: locColor }} />}
-                    <span className="truncate">{cleanLoc}</span>
-                  </div>
+                const xPct = df.headerConfig?.locationRect?.x ?? 68;
+                const yPct = df.headerConfig?.locationRect?.y ?? 4;
+                const isRightAnchored = xPct > 45;
+
+                // Ensure toSafeSvgDataUrl(badgeAsset) is explicitly called for safe rendering
+                const safeBadgeUrl = toSafeSvgDataUrl(badgeAsset);
+
+                return (
+                  <DynamicLocationBadgePreview
+                    cleanLoc={cleanLoc}
+                    badgeAsset={safeBadgeUrl || badgeAsset}
+                    sliceConfig={df.sliceConfig || df.headerConfig?.sliceConfig}
+                    locColor={locColor}
+                    locBgColor={locBgColor}
+                    fontFamily={card.locationFont || df.headerConfig.typographyConfig?.fontFamily || 'Baloo 2'}
+                    fontSize={df.headerConfig.locationFontSize || 22}
+                    showIcon={df.headerConfig.locationShowIcon !== false}
+                    styleMode={df.headerConfig.locationStyle}
+                    previewScale={previewScale}
+                    widthPct={dynamicLoc.widthPct}
+                    heightPct={dynamicLoc.heightPct}
+                    xPct={xPct}
+                    yPct={yPct}
+                    rotation={df.headerConfig.locationRotation}
+                    isRightAnchored={isRightAnchored}
+                  />
                 );
               })()}
 
@@ -1754,16 +1916,17 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                         />
                       ) : (
                         <div
-                          className="font-black px-3 py-0.5 rounded-lg shadow-md flex items-center justify-center gap-1.5 whitespace-nowrap max-w-full overflow-hidden"
+                          className="font-bold px-4 py-1 sm:px-5 sm:py-1.5 rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.5)] flex items-center justify-center text-center gap-2 whitespace-nowrap max-w-full overflow-hidden select-none"
                           style={{
                             color: df.fullStoryCalloutConfig?.textColor || '#FFFFFF',
                             backgroundColor: df.fullStoryCalloutConfig?.bgColor || '#DC2626',
-                            border: `${df.fullStoryCalloutConfig?.borderWidth ?? 1}px solid ${df.fullStoryCalloutConfig?.borderColor || '#FACC15'}`,
-                            fontSize: `${Math.max(10, Math.round((df.fullStoryCalloutConfig?.fontSize || 18) * previewScale))}px`,
+                            border: `${df.fullStoryCalloutConfig?.borderWidth ?? 1.5}px solid ${df.fullStoryCalloutConfig?.borderColor || '#FACC15'}`,
+                            fontSize: `${Math.max(12, Math.round((df.fullStoryCalloutConfig?.fontSize || 22) * previewScale))}px`,
+                            letterSpacing: '0.02em',
                           }}
                         >
-                          {df.fullStoryCalloutConfig?.showIcon !== false && <span>📢</span>}
-                          <span className="truncate">{effectiveCalloutText || 'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें'}</span>
+                          {df.fullStoryCalloutConfig?.showIcon !== false && <span className="text-sm sm:text-base leading-none">📢</span>}
+                          <span className="truncate drop-shadow-xs">{effectiveCalloutText || 'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें'}</span>
                         </div>
                       )}
                     </div>
@@ -1803,15 +1966,29 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                 const hbBorderColor = slot0?.borderColor || '#FACC15';
                 const hbBorderRadius = (slot0?.borderRadius || 0) * previewScale;
                 const hbPadding = (slot0?.padding || 0) * previewScale;
+
+                // Ensure headline height stops cleanly above callout strip to prevent clipping
+                const isCalloutActive = Boolean(
+                  df.fullStoryCalloutConfig?.calloutVisibilityPolicy === 'forced_on' ||
+                  ((df.fullStoryCalloutConfig?.enabled || Boolean(card.customCalloutAssetUrl)) &&
+                    df.fullStoryCalloutConfig?.calloutVisibilityPolicy !== 'disabled' &&
+                    card.showCallout !== false)
+                );
+                const calloutRawY = df.fullStoryCalloutConfig?.rect?.y ?? 85;
+                const slotY = slot0?.rect?.y ?? 63;
+                const rawSlotH = slot0?.rect?.height ?? 27;
+                const effectiveSlotH = (isCalloutActive && calloutRawY > slotY)
+                  ? Math.min(rawSlotH, calloutRawY - slotY - 1.2)
+                  : rawSlotH;
+
                 return (
                   <div
-                    className={`absolute pointer-events-auto flex items-center overflow-hidden max-h-full ${slot0?.alignment === 'left' ? 'justify-start text-left' : slot0?.alignment === 'right' ? 'justify-end text-right' : 'justify-center text-center'}`}
+                    className={`absolute pointer-events-auto flex items-center overflow-visible z-15 ${slot0?.alignment === 'left' ? 'justify-start text-left' : slot0?.alignment === 'right' ? 'justify-end text-right' : 'justify-center text-center'}`}
                     style={{
                       left: `${slot0?.rect?.x ?? 7}%`,
-                      top: `${slot0?.rect?.y ?? 63}%`,
+                      top: `${slotY}%`,
                       width: `${slot0?.rect?.width ?? 86}%`,
-                      height: `${slot0?.rect?.height ?? 27}%`,
-                      maxHeight: `${slot0?.rect?.height ?? 27}%`,
+                      height: `${effectiveSlotH}%`,
                       backgroundColor: hbBg,
                       opacity: hbOpacity,
                       border: hbBorderWidth > 0 ? `${hbBorderWidth}px solid ${hbBorderColor}` : undefined,
@@ -1820,7 +1997,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                     }}
                   >
                     <h1
-                      className="font-black leading-snug drop-shadow-md w-full overflow-hidden max-h-full pb-0.5"
+                      className="font-black leading-snug drop-shadow-md w-full overflow-visible pb-0.5"
                       style={{
                         color: slot0?.textColor || '#FFFFFF',
                         fontFamily: `"${card.headlineFontFamily || df.typographyConfig?.primaryFontFamily || slot0?.fontFamily || 'Baloo 2'}", "Noto Sans Devanagari", sans-serif`,
@@ -1945,29 +2122,68 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             );
           })()}
 
-          {/* Top-Right Location Box: Displays user's actual location in the authentic pill area */}
-          {card.showLocation !== false && (
-            <div
-              className="absolute z-30 flex items-center justify-center gap-1.5 rounded-full px-2.5 py-0.5 sm:px-3.5 sm:py-1 shadow-[0_4px_16px_rgba(0,0,0,0.6)] border border-slate-200 pointer-events-auto"
-              style={{
-                right: '5%',
-                top: '6.6%',
-                height: '4.5%',
-                maxWidth: '46%',
-                backgroundColor: card.locationBgColor || '#FFFFFF',
-              }}
-            >
-              <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
-                <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
-              </div>
-              <span
-                className="font-bold text-[11px] sm:text-xs md:text-sm text-neutral-950 tracking-wide truncate inline-block translate-y-[2px] leading-tight"
-                style={{ fontFamily: card.locationFont ? `"${card.locationFont}", "Noto Sans Devanagari", sans-serif` : undefined }}
+          {/* Top-Right Location Box: Displays user's actual location in selected badge style or authentic default pill */}
+          {card.showLocation !== false && (() => {
+            const cleanLoc = formatCleanLocationText(card.location) || 'लोकेशन';
+            const selectedBadge = card.selectedLocationBadgeId ? getAssetLibraryItemById(card.selectedLocationBadgeId) : undefined;
+            const badgeAsset = card.customLocationBadgeUrl || selectedBadge?.url;
+
+            if (badgeAsset) {
+              const dynamicLoc = calculateDynamicLocationMetrics({
+                locationText: cleanLoc,
+                locationRect: { x: 68, y: 6.6, width: 28, height: 3.8 },
+                hasBadgeAsset: true,
+              });
+              return (
+                <DynamicLocationBadgePreview
+                  cleanLoc={cleanLoc}
+                  badgeAsset={toSafeSvgDataUrl(badgeAsset) || badgeAsset}
+                  locColor={card.locationTextColor || '#FFFFFF'}
+                  locBgColor={card.locationBgColor}
+                  fontFamily={card.locationFont || 'Baloo 2'}
+                  fontSize={22}
+                  showIcon={true}
+                  previewScale={previewScale}
+                  widthPct={dynamicLoc.widthPct}
+                  heightPct={dynamicLoc.heightPct}
+                  xPct={68}
+                  yPct={6.6}
+                  isRightAnchored={true}
+                />
+              );
+            }
+
+            // Authentic Default White Pill with Red Pin Icon
+            const dynamicLoc = calculateDynamicLocationMetrics({
+              locationText: cleanLoc,
+              locationRect: { x: 68, y: 6.6, width: 28, height: 3.8 },
+              hasBadgeAsset: false,
+            });
+
+            return (
+              <div
+                className="absolute z-30 flex items-center justify-center gap-1.5 rounded-full px-3 py-0.5 sm:px-4 sm:py-1 shadow-[0_4px_16px_rgba(0,0,0,0.6)] border border-slate-200 pointer-events-auto"
+                style={{
+                  right: '5%',
+                  top: '6.6%',
+                  height: `${dynamicLoc.heightPct}%`,
+                  width: `${dynamicLoc.widthPct}%`,
+                  maxWidth: '65%',
+                  backgroundColor: card.locationBgColor || '#FFFFFF',
+                }}
               >
-                {formatCleanLocationText(card.location) || 'लोकेशन'}
-              </span>
-            </div>
-          )}
+                <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
+                  <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
+                </div>
+                <span
+                  className="font-bold text-[11px] sm:text-xs md:text-sm text-neutral-950 tracking-wide truncate inline-block translate-y-[1px] leading-tight text-center"
+                  style={{ fontFamily: card.locationFont ? `"${card.locationFont}", "Noto Sans Devanagari", sans-serif` : undefined }}
+                >
+                  {cleanLoc}
+                </span>
+              </div>
+            );
+          })()}
 
           {/* Red Headline Area (Dynamic Top & Height Auto-Adjusted to line count):
               - Always renders the authentic red banner overlay to ensure clean default slate.

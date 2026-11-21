@@ -103,7 +103,12 @@ import {
   approveLogoChangeRequest,
   rejectLogoChangeRequest,
   registerOrUpdateUser,
+  adminRemoveUserSubscription,
 } from '../lib/userPlanManager';
+import {
+  getAllIndianStates,
+  getDistrictsForState,
+} from '../data/indianStatesDistricts';
 import {
   AdminRssSource,
   getAdminRssSources,
@@ -1280,6 +1285,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
   const [editUserUsername, setEditUserUsername] = useState<string>('');
   const [editUserDistrict, setEditUserDistrict] = useState<string>('');
   const [editUserState, setEditUserState] = useState<string>('');
+  const [editUserCity, setEditUserCity] = useState<string>('');
+  const [editUserDesignation, setEditUserDesignation] = useState<string>('');
+  const [editUserRole, setEditUserRole] = useState<'superadmin' | 'admin' | 'reporter' | 'bureau'>('reporter');
   const [editBrandNameHi, setEditBrandNameHi] = useState<string>('');
   const [editBrandNameEn, setEditBrandNameEn] = useState<string>('');
   const [editBrandWebsite, setEditBrandWebsite] = useState<string>('');
@@ -1587,6 +1595,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     setEditUserUsername((user.username || '').replace(/^@/, ''));
     setEditUserDistrict(user.district || (user as any).location || '');
     setEditUserState(user.state || '');
+    setEditUserCity((user as any).city || '');
+    setEditUserDesignation((user as any).designation || '');
+    setEditUserRole((user.role as any) || 'reporter');
     setEditBrandNameHi(user.channelName || (user as any).channelNameHi || '');
     setEditBrandNameEn((user as any).channelNameEn || user.channelName || '');
     setEditBrandWebsite(user.websiteUrl || '');
@@ -1612,6 +1623,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       username: editUserUsername.trim().replace(/^@/, ''),
       district: editUserDistrict.trim(),
       location: editUserDistrict.trim(),
+      city: editUserCity.trim(),
+      designation: editUserDesignation.trim(),
+      role: editUserRole,
       state: editUserState.trim(),
       channelName: editBrandNameHi || editBrandNameEn,
       channelNameHi: editBrandNameHi || editBrandNameEn,
@@ -1624,6 +1638,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       socialIcons: editBrandSocials,
     };
     adminUpdateUserRecord(editingBrandingUser.email, updates);
+    if (editingBrandingUser.userId) {
+      adminUpdateUserRecord(editingBrandingUser.userId, updates);
+    }
     try {
       const adminEmail = effectiveCurrentUser?.email || 'admin.ainewsmaker@gmail.com';
       const targetId = editingBrandingUser.userId || editingBrandingUser.email;
@@ -1643,6 +1660,14 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
         setEditBrandMsg(`⚠️ ${errData.error || 'सर्वर पर प्रोफाइल सुरक्षित करने में त्रुटि।'}`);
         return;
       }
+
+      // Also trigger cloud user update to sync with master accounts database
+      await adminUpdateCloudUser(targetId, updates).catch(() => {});
+
+      // Broadcast instant real-time events across all screens
+      window.dispatchEvent(new CustomEvent('ai_news_profile_updated', { detail: updates }));
+      window.dispatchEvent(new CustomEvent('ai_news_user_plan_updated', { detail: updates }));
+
       setEditBrandMsg('✅ यूज़र प्रोफाइल व विवरण सफलतापूर्वक सुरक्षित हो गया!');
       setTimeout(() => {
         setEditingBrandingUser(null);
@@ -4292,10 +4317,14 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                   {!isSuper && (
                                     <select
                                       value={u.tier || 'basic'}
-                                      onChange={(e) => {
+                                      onChange={async (e) => {
                                         const newTier = e.target.value as UserPlanTier;
-                                        adminUpdateUserRecord(u.email, { tier: newTier });
-                                        adminUpdateCloudUser(u.userId, { tier: newTier });
+                                        const planKey = newTier === 'ultra' ? 'VIP DESK' : (newTier === 'advanced' ? 'ADVANCE' : (newTier === 'professional' ? 'PRO' : 'BASIC'));
+                                        adminUpdateUserRecord(u.email, { tier: newTier, planName: planKey });
+                                        if (u.userId) {
+                                          adminUpdateUserRecord(u.userId, { tier: newTier, planName: planKey });
+                                        }
+                                        await adminUpdateCloudUser(u.userId || u.email, { tier: newTier, planName: planKey });
                                         setPlanUsers(getPlanUsers());
                                       }}
                                       className="bg-slate-950 border border-slate-700 text-white rounded px-1.5 py-0.5 text-[10px] font-bold cursor-pointer hover:border-amber-400 focus:outline-hidden"
@@ -4305,6 +4334,21 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                                       <option value="professional">PRO</option>
                                       <option value="ultra">VIP DESK</option>
                                     </select>
+                                  )}
+                                  {!isSuper && (
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        if (window.confirm(`क्या आप ${u.name || u.email} का सब्सक्रिप्शन/ट्रायल हटाना चाहते हैं? यह उपयोगकर्ता तुरंत बेसिक प्लान पर रीसेट हो जाएगा।`)) {
+                                          await adminRemoveUserSubscription(u.email, u.userId);
+                                          setPlanUsers(getPlanUsers());
+                                        }
+                                      }}
+                                      className="px-2 py-0.5 bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-700/60 rounded text-[9.5px] font-bold flex items-center gap-1 cursor-pointer transition shadow-xs"
+                                      title="सब्सक्रिप्शन हटाएं (रद्द करें)"
+                                    >
+                                      <span>❌ सब्सक्रिप्शन हटाएं</span>
+                                    </button>
                                   )}
                                   <button
                                     type="button"
@@ -4516,7 +4560,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                 <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">पूरा नाम (Full Name)</label>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">पूरा नाम (Full Name) *</label>
                       <input
                         type="text"
                         value={editUserFullName}
@@ -4526,12 +4570,38 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">यूज़रनेम (Username)</label>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">यूज़रनेम (Username / Handle)</label>
                       <input
                         type="text"
                         value={editUserUsername}
                         onChange={(e) => setEditUserUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
                         placeholder="उदा. rahul_news"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">अकाउंट रोल (Account Role)</label>
+                      <select
+                        value={editUserRole}
+                        onChange={(e) => setEditUserRole(e.target.value as any)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400 cursor-pointer"
+                      >
+                        <option value="reporter">संवाददाता / रिपोर्टर (Reporter)</option>
+                        <option value="bureau">ब्यूरो चीफ (Bureau Chief)</option>
+                        <option value="admin">एडमिन (Admin)</option>
+                        <option value="superadmin">सुपर एडमिन (Super Admin)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">पत्रकारिता पद (Designation)</label>
+                      <input
+                        type="text"
+                        value={editUserDesignation}
+                        onChange={(e) => setEditUserDesignation(e.target.value)}
+                        placeholder="उदा. मुख्य संपादक, ब्यूरो प्रमुख, संवाददाता"
                         className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400"
                       />
                     </div>
@@ -4539,36 +4609,77 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">ज़िला / स्थान (District / City)</label>
-                      <input
-                        type="text"
-                        value={editUserDistrict}
-                        onChange={(e) => setEditUserDistrict(e.target.value)}
-                        placeholder="उदा. भोपाल"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400"
-                      />
+                      <label className="block text-xs font-bold text-slate-300 mb-1">राज्य (State) *</label>
+                      <select
+                        value={editUserState}
+                        onChange={(e) => {
+                          const st = e.target.value;
+                          setEditUserState(st);
+                          setEditUserDistrict('');
+                        }}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400 cursor-pointer"
+                      >
+                        <option value="">-- राज्य चुनें --</option>
+                        {getAllIndianStates().map((st) => (
+                          <option key={st} value={st}>
+                            {st}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-300 mb-1">राज्य (State)</label>
-                      <input
-                        type="text"
-                        value={editUserState}
-                        onChange={(e) => setEditUserState(e.target.value)}
-                        placeholder="उदा. मध्य प्रदेश"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400"
-                      />
+                      <label className="block text-xs font-bold text-slate-300 mb-1">ज़िला / मंडल (District) *</label>
+                      <select
+                        value={editUserDistrict}
+                        onChange={(e) => setEditUserDistrict(e.target.value)}
+                        disabled={!editUserState}
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400 disabled:opacity-50 cursor-pointer"
+                      >
+                        <option value="">{editUserState ? '-- ज़िला चुनें --' : 'पहले राज्य चुनें'}</option>
+                        {editUserState && getDistrictsForState(editUserState).map((d) => (
+                          <option key={d} value={d}>
+                            {d}
+                          </option>
+                        ))}
+                        {editUserDistrict && editUserState && !getDistrictsForState(editUserState).includes(editUserDistrict) && (
+                          <option value={editUserDistrict}>{editUserDistrict} (कस्टम)</option>
+                        )}
+                      </select>
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">चैनल / पोर्टल नाम</label>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">शहर / कस्बा / तहसील (City / Tehsil)</label>
                     <input
                       type="text"
-                      value={editBrandNameHi}
-                      onChange={(e) => setEditBrandNameHi(e.target.value)}
-                      placeholder="उदा. ब्रेकिंग न्यूज़ 24"
+                      value={editUserCity}
+                      onChange={(e) => setEditUserCity(e.target.value)}
+                      placeholder="उदा. सहारनपुर, उपरा, उत्तर प्रदेश या स्थानीय तहसील"
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400"
                     />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">चैनल का नाम (हिंदी में) *</label>
+                      <input
+                        type="text"
+                        value={editBrandNameHi}
+                        onChange={(e) => setEditBrandNameHi(e.target.value)}
+                        placeholder="उदा. अनमोल संदेश"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">चैनल का नाम (English में)</label>
+                      <input
+                        type="text"
+                        value={editBrandNameEn}
+                        onChange={(e) => setEditBrandNameEn(e.target.value)}
+                        placeholder="उदा. Anmol Sandesh"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400"
+                      />
+                    </div>
                   </div>
 
                   <div>
@@ -4577,7 +4688,7 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       type="text"
                       value={editBrandWebsite}
                       onChange={(e) => setEditBrandWebsite(e.target.value)}
-                      placeholder="उदा. www.breakingnews24.com"
+                      placeholder="उदा. anmolsandesh.com"
                       className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden focus:border-amber-400"
                     />
                   </div>
