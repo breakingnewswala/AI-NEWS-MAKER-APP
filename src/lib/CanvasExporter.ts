@@ -1866,7 +1866,12 @@ async function drawAuthoritativeDynamicFrameCanvas(
   }
 
   // LAYER 1.2: DYNAMIC FRAME CIRCLE PHOTO OVERLAY (1 Photo + 1 Circle Overlay Photo)
-  if (card.layout === 'inset-circle' || card.showCirclePhoto || Boolean(card.images?.insetCircle) || Boolean(card.circlePhotoUrl)) {
+  const isCircleActive1 = Boolean(
+    (card.layout === 'inset-circle' || card.photoLayoutMode === 'circle' || card.photoLayoutMode === 'single_circle' || card.showCirclePhoto === true) &&
+    card.layout !== 'single' &&
+    card.photoLayoutMode !== 'single'
+  );
+  if (isCircleActive1) {
     const circleSrc = card.images?.insetCircle || card.circlePhotoUrl || card.images?.second || card.secondaryPhoto;
     if (circleSrc) {
       try {
@@ -2797,7 +2802,12 @@ async function drawGraphic001Canvas(
       }
 
       // Draw Circle Photo Overlay if active (1 Photo + 1 Circle Overlay Photo)
-      if (layout === 'inset-circle' || card.showCirclePhoto || Boolean(card.images?.insetCircle) || Boolean(card.circlePhotoUrl)) {
+      const isCircleActive2 = Boolean(
+        (layout === 'inset-circle' || card.photoLayoutMode === 'circle' || card.photoLayoutMode === 'single_circle' || card.showCirclePhoto === true) &&
+        layout !== 'single' &&
+        card.photoLayoutMode !== 'single'
+      );
+      if (isCircleActive2) {
         const circleSrc = card.images?.insetCircle || card.circlePhotoUrl || card.images?.second || card.secondaryPhoto;
         if (circleSrc) {
           try {

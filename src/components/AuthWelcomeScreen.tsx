@@ -277,6 +277,9 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     return initialStep === 2 ? 2 : 1;
   });
 
+  // Two-Step Setup Wizard for Registration: 1 = Profile & Channel Details, 2 = Channel Branding & Social Media
+  const [setupWizardStep, setSetupWizardStep] = useState<1 | 2>(1);
+
   // Terms Acceptance State
   const [acceptedTerms, setAcceptedTerms] = useState<boolean>(() => {
     try {
@@ -1418,26 +1421,31 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
     // Required fields based on account type
     if (!detailFullName || !detailFullName.trim()) {
+      setSetupWizardStep(1);
       setStep2ErrorMsg('⚠️ कृपया अपना पूरा नाम दर्ज करें।');
       return;
     }
 
     if (!reportingState || !reportingState.trim()) {
+      setSetupWizardStep(1);
       setStep2ErrorMsg('⚠️ कृपया अपना राज्य / केंद्र शासित प्रदेश (State) चुनें।');
       return;
     }
 
     if (!reportingDistrict || !reportingDistrict.trim()) {
+      setSetupWizardStep(1);
       setStep2ErrorMsg('⚠️ कृपया अपना ज़िला / ब्यूरो क्षेत्र चुनें।');
       return;
     }
 
     if (!detailCityName || !detailCityName.trim()) {
+      setSetupWizardStep(1);
       setStep2ErrorMsg('⚠️ कृपया अपने शहर का नाम लिखें।');
       return;
     }
 
     if (isReporterAcc && (!reporterDesignation || !reporterDesignation.trim())) {
+      setSetupWizardStep(1);
       setStep2ErrorMsg('⚠️ कृपया अपना पद / पत्रकारिता परिचय दर्ज करें।');
       return;
     }
@@ -1445,18 +1453,21 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     if (!isReporterAcc) {
       // Check Channel Name Hi (Mandatory for Channel)
       if (!detailChannelNameHi || !detailChannelNameHi.trim() || detailChannelNameHi.trim() === 'सेटअप अधूरा (Incomplete)' || detailChannelNameHi.trim() === 'एआई न्यूज़ मेकर') {
+        setSetupWizardStep(1);
         setStep2ErrorMsg('⚠️ कृपया अपने न्यूज़ चैनल का वास्तविक नाम (हिन्दी में) दर्ज करें।');
         return;
       }
 
       // Check Channel Name En (Mandatory for Channel)
       if (!detailChannelNameEn || !detailChannelNameEn.trim() || detailChannelNameEn.trim() === 'AI News Maker') {
+        setSetupWizardStep(1);
         setStep2ErrorMsg('⚠️ कृपया अपने न्यूज़ चैनल का नाम (English में) दर्ज करें।');
         return;
       }
 
       // Check Channel Logo (Mandatory for Channel)
       if (!detailChannelLogoUrl || !detailChannelLogoUrl.trim()) {
+        setSetupWizardStep(2);
         setStep2ErrorMsg('⚠️ चैनल लोगो अपलोड करना अनिवार्य है। कृपया "लोगो चुनें" पर क्लिक करके अपने चैनल का लोगो अपलोड करें।');
         return;
       }
@@ -2125,12 +2136,65 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
               </div>
             </div>
 
+            {/* 2-Step Progress Indicator */}
+            <div className="mb-4 bg-slate-900/90 border border-amber-500/30 rounded-2xl p-3 sm:p-4 shadow-lg flex items-center justify-between">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStep2ErrorMsg('');
+                    setSetupWizardStep(1);
+                  }}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                    setupWizardStep === 1
+                      ? 'bg-amber-400/15 border border-amber-400 text-amber-300 ring-1 ring-amber-400/40'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
+                    setupWizardStep === 1
+                      ? 'bg-amber-400 text-slate-950'
+                      : 'bg-emerald-500 text-white'
+                  }`}>
+                    {setupWizardStep > 1 ? '✓' : '1'}
+                  </div>
+                  <span className="text-xs font-bold font-['Noto_Sans_Devanagari']">
+                    1. प्रोफाइल व चैनल विवरण
+                  </span>
+                </button>
+
+                <div className="w-6 sm:w-10 h-0.5 bg-slate-700" />
+
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition ${
+                  setupWizardStep === 2
+                    ? 'bg-amber-400/15 border border-amber-400 text-amber-300 ring-1 ring-amber-400/40'
+                    : 'text-slate-500'
+                }`}>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
+                    setupWizardStep === 2
+                      ? 'bg-amber-400 text-slate-950'
+                      : 'bg-slate-800 text-slate-400 border border-slate-700'
+                  }`}>
+                    2
+                  </div>
+                  <span className="text-xs font-bold font-['Noto_Sans_Devanagari']">
+                    2. ब्रांडिंग व सोशल मीडिया
+                  </span>
+                </div>
+              </div>
+              <span className="text-[10px] sm:text-xs font-black font-mono text-amber-400 bg-amber-400/10 px-2 sm:px-2.5 py-1 rounded-lg border border-amber-400/30 shrink-0">
+                {setupWizardStep === 1 ? 'STEP 1 OF 2' : 'STEP 2 OF 2'}
+              </span>
+            </div>
+
             {/* Form Container */}
             <form
               onSubmit={handleCompleteSetupSubmit}
-              className="bg-slate-900/95 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-5"
+              className="bg-slate-900/95 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4"
             >
-              {/* ACCOUNT TYPE SELECTION: CHANNEL vs REPORTER */}
+              {setupWizardStep === 1 ? (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  {/* ACCOUNT TYPE SELECTION: CHANNEL vs REPORTER */}
               <div className="p-3.5 bg-slate-950/90 border border-amber-500/40 rounded-xl space-y-2.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-black text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
@@ -2552,7 +2616,67 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 )}
               </div>
 
-              {/* SECTION C: CHANNEL LOGO (PNG/JPEG & OPTIONAL ANIMATED GIF) */}
+                  {/* Step 1 Error Message (if any) */}
+                  {step2ErrorMsg && (
+                    <div className="p-3 bg-red-950/80 border border-red-500/80 rounded-xl text-xs text-red-200 text-left flex items-start gap-2 shadow-lg animate-in fade-in">
+                      <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                      <span>{step2ErrorMsg}</span>
+                    </div>
+                  )}
+
+                  {/* Step 1 Next Button */}
+                  <div className="pt-2 sticky bottom-0 bg-slate-900/95 py-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStep2ErrorMsg('');
+                        if (!detailFullName.trim()) {
+                          setStep2ErrorMsg('⚠️ कृपया अपना पूरा नाम दर्ज करें।');
+                          return;
+                        }
+                        if (!reportingState.trim()) {
+                          setStep2ErrorMsg('⚠️ कृपया अपना राज्य / केंद्र शासित प्रदेश (State) चुनें।');
+                          return;
+                        }
+                        if (!reportingDistrict.trim()) {
+                          setStep2ErrorMsg('⚠️ कृपया अपना ज़िला / ब्यूरो क्षेत्र चुनें।');
+                          return;
+                        }
+                        if (!detailCityName.trim()) {
+                          setStep2ErrorMsg('⚠️ कृपया अपने शहर का नाम लिखें।');
+                          return;
+                        }
+                        if (accountType === 'reporter' && (!reporterDesignation || !reporterDesignation.trim())) {
+                          setStep2ErrorMsg('⚠️ कृपया अपना पद / पत्रकारिता परिचय दर्ज करें।');
+                          return;
+                        }
+                        if (accountType === 'channel') {
+                          if (!detailChannelNameHi.trim() || detailChannelNameHi.trim() === 'सेटअप अधूरा (Incomplete)' || detailChannelNameHi.trim() === 'एआई न्यूज़ मेकर') {
+                            setStep2ErrorMsg('⚠️ कृपया अपने न्यूज़ चैनल का वास्तविक नाम (हिन्दी में) दर्ज करें।');
+                            return;
+                          }
+                          if (!detailChannelNameEn.trim() || detailChannelNameEn.trim() === 'AI News Maker') {
+                            setStep2ErrorMsg('⚠️ कृपया अपने न्यूज़ चैनल का नाम (English में) दर्ज करें।');
+                            return;
+                          }
+                        }
+                        const cleanDigits = primaryMobileNumber.replace(/\D/g, '').slice(-10);
+                        if (!cleanDigits || cleanDigits.length !== 10) {
+                          setStep2ErrorMsg('⚠️ कृपया आगे बढ़ने के लिए अपना वैध 10-अंकों का WhatsApp नंबर दर्ज करें।');
+                          return;
+                        }
+                        setSetupWizardStep(2);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-sm sm:text-base rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all transform active:scale-98 cursor-pointer"
+                    >
+                      <span>आगे बढ़ें (चरण 2: ब्रांडिंग व सोशल मीडिया) →</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  {/* SECTION C: CHANNEL LOGO (PNG/JPEG & OPTIONAL ANIMATED GIF) */}
               <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
@@ -2960,20 +3084,33 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 </label>
               </div>
 
-              {/* Action Submit Buttons */}
-              <div className="pt-2 space-y-2">
+              {/* Step 2 Action Submit Buttons */}
+              <div className="pt-2 sticky bottom-0 bg-slate-900/95 py-2 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStep2ErrorMsg('');
+                    setSetupWizardStep(1);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="py-3.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm rounded-xl border border-slate-700 transition cursor-pointer shrink-0"
+                >
+                  ← पिछला चरण
+                </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full py-4 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-sm sm:text-base rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all transform active:scale-98 cursor-pointer disabled:opacity-60"
+                  className="flex-1 py-3.5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-base rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all transform active:scale-98 cursor-pointer disabled:opacity-60"
                 >
-                  <Sparkles className={`w-5 h-5 text-slate-950 ${isSubmitting ? 'animate-spin' : ''}`} />
-                  <span>{isSubmitting ? 'सहेजा जा रहा है...' : 'सेव करें एवं होम फ़ीड शुरू करें →'}</span>
+                  <Sparkles className={`w-4 h-4 text-slate-950 ${isSubmitting ? 'animate-spin' : ''}`} />
+                  <span>{isSubmitting ? 'सहेजा जा रहा है...' : '✓ सेव करें एवं होम फ़ीड शुरू करें →'}</span>
                 </button>
               </div>
-            </form>
-          </div>
-        )}
+            </div>
+          )}
+        </form>
+      </div>
+    )}
       </main>
 
       {/* Manual Logo Cropper Modal */}

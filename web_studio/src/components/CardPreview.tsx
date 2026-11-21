@@ -906,7 +906,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       })()}
 
       {/* 0B1. DYNAMIC FRAME CIRCLE PHOTO OVERLAY (1 Photo + 1 Circle Overlay Photo) */}
-      {df && (card.layout === 'inset-circle' || card.showCirclePhoto || Boolean(card.images?.insetCircle) || Boolean(card.circlePhotoUrl)) && (
+      {df && ((card.layout === 'inset-circle' || card.photoLayoutMode === 'circle' || card.photoLayoutMode === 'single_circle' || card.showCirclePhoto === true) && card.layout !== 'single' && card.photoLayoutMode !== 'single') && (
         <div
           className="absolute z-15 pointer-events-none"
           style={{
@@ -1445,7 +1445,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         )}
 
         {/* Circle Photo Overlay (1 Photo + 1 Circle Overlay Photo) */}
-        {(card.layout === 'inset-circle' || card.showCirclePhoto || Boolean(card.images?.insetCircle) || Boolean(card.circlePhotoUrl)) && (
+        {((card.layout === 'inset-circle' || card.photoLayoutMode === 'circle' || card.photoLayoutMode === 'single_circle' || card.showCirclePhoto === true) && card.layout !== 'single' && card.photoLayoutMode !== 'single') && (
           <div
             className="absolute z-15 pointer-events-none"
             style={{

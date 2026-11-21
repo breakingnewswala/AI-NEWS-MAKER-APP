@@ -274,6 +274,11 @@ export const FOOTER_BG_PRESETS = [
   ...FOOTER_BG_SECONDARY_PRESETS.map((p) => ({ color: p.color, label: `${p.nameHi} (${p.name})`, border: p.border })),
 ];
 
+export const ALL_FOOTER_BG_PALETTE = [
+  ...FOOTER_BG_PRIMARY_PRESETS,
+  ...FOOTER_BG_SECONDARY_PRESETS,
+];
+
 export const FOOTER_TEXT_COLOR_PRESETS = [
   { color: '#000000', name: 'Black', nameHi: 'काला (डिफ़ॉल्ट)' },
   { color: '#333333', name: 'Dark Gray', nameHi: 'डार्क ग्रे' },
@@ -3517,9 +3522,9 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <button
                 type="button"
-                onClick={() => onChange({ layout: 'single', showCirclePhoto: false })}
+                onClick={() => onChange({ layout: 'single', photoLayoutMode: 'single', showCirclePhoto: false })}
                 className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer border ${
-                  (card.layout === 'single' || card.layout === 'full') && !card.showCirclePhoto
+                  (card.layout === 'single' || card.layout === 'full' || card.photoLayoutMode === 'single') && !card.showCirclePhoto && card.layout !== 'inset-circle'
                     ? 'border-yellow-400 bg-yellow-500/20 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
                     : 'border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-neutral-700'
                 }`}
@@ -3535,13 +3540,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 type="button"
                 data-testid="layout-btn-inset-circle"
                 onClick={() => {
-                  const updates: Partial<NewsCardData> = { layout: 'inset-circle', showCirclePhoto: true };
+                  const updates: Partial<NewsCardData> = { layout: 'inset-circle', photoLayoutMode: 'circle', showCirclePhoto: true };
                   const availablePhotos = card.extractedArticlePhotos || [];
                   const circlePhoto = (card.images?.insetCircle && card.images.insetCircle !== card.images.main)
                     ? card.images.insetCircle
                     : (card.images?.second && card.images.second !== card.images.main
                       ? card.images.second
-                      : (availablePhotos[1] && availablePhotos[1] !== card.images.main ? availablePhotos[1] : card.images?.insetCircle));
+                      : (availablePhotos[1] && availablePhotos[1] !== card.images.main ? availablePhotos[1] : (availablePhotos[0] || card.images?.insetCircle)));
                   if (circlePhoto) {
                     updates.images = { ...card.images, insetCircle: circlePhoto };
                     updates.circlePhotoUrl = circlePhoto;
@@ -3549,7 +3554,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   onChange(updates);
                 }}
                 className={`py-2.5 px-3 rounded-xl text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer border ${
-                  card.layout === 'inset-circle' || card.showCirclePhoto
+                  (card.layout === 'inset-circle' || card.photoLayoutMode === 'circle' || card.showCirclePhoto) && card.layout !== 'single'
                     ? 'border-yellow-400 bg-yellow-500/20 text-yellow-300 shadow-sm ring-1 ring-yellow-400/40'
                     : 'border-neutral-800 bg-neutral-950 text-neutral-300 hover:border-neutral-700'
                 }`}
@@ -3879,36 +3884,42 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   cleanPhotos.push(trimmed);
                 }
 
-                if (cleanPhotos.length <= 1) return null;
+                if (cleanPhotos.length === 0) return null;
+
+                const isCircleMode = (card.layout === 'inset-circle' || card.photoLayoutMode === 'circle' || card.showCirclePhoto) && card.layout !== 'single';
+                const isTwoPhotoMode = (card.layout === 'split-v' || card.layout === 'double' || card.layout === 'double-h' || card.layout === 'split-h') && !card.showCirclePhoto;
+                const isMultiGrid = (card.layout === 'grid-3' || card.layout === 'grid-3-bottom' || card.layout === 'grid-4') && !card.showCirclePhoto;
+                const isSingleMode = !isCircleMode && !isTwoPhotoMode && !isMultiGrid;
 
                 return (
                   <div className="p-3 bg-neutral-950 border border-yellow-500/40 rounded-xl space-y-2 animate-in fade-in">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-bold text-yellow-300 flex items-center gap-1.5">
                         <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
-                        <span>लेख की लिंक में उपलब्ध फोटोज़ ({cleanPhotos.length}):</span>
+                        <span>समाचार लेख की उपलब्ध फोटो गैलरी ({cleanPhotos.length}):</span>
                       </span>
-                      <span className="text-[10px] text-neutral-400">टच करके प्राइमरी फोटो बदलें</span>
+                      <span className="text-[10px] text-neutral-400">
+                        {isCircleMode ? 'मुख्य या सर्कल फोटो स्लॉट में सेट करें' : isTwoPhotoMode ? 'स्लॉट 1 या 2 में सेट करें' : isMultiGrid ? 'ग्रिड स्लॉट चुनें' : 'क्लिक करके मुख्य फोटो सेट करें'}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                    <div className="flex items-center gap-2.5 overflow-x-auto pb-1.5 scrollbar-thin">
                       {cleanPhotos.map((photoUrl, pIdx) => {
                         const isMainSel = card.images?.main === photoUrl || card.photoUrl === photoUrl;
+                        const isCircleSel = card.images?.insetCircle === photoUrl || card.circlePhotoUrl === photoUrl;
                         const isSecondSel = card.images?.second === photoUrl;
                         const isThirdSel = card.images?.third === photoUrl;
                         const isFourthSel = card.images?.fourth === photoUrl;
-                        const isMultiGrid = card.layout === 'split-v' || card.layout === 'double' || card.layout === 'double-h' || card.layout === 'split-h' || card.layout === 'grid-3' || card.layout === 'grid-3-bottom' || card.layout === 'grid-4';
 
                         return (
                           <div key={`ext-photo-${pIdx}`} className="flex flex-col items-center gap-1 shrink-0">
                             <button
                               type="button"
                               onClick={() => {
-                                if (activeCropPhotoKey === 'second') {
-                                  onChange({ images: { ...card.images, second: photoUrl } });
-                                } else if (activeCropPhotoKey === 'third') {
-                                  onChange({ images: { ...card.images, third: photoUrl } });
-                                } else if (activeCropPhotoKey === 'fourth') {
-                                  onChange({ images: { ...card.images, fourth: photoUrl } });
+                                if (isCircleMode && !isMainSel) {
+                                  onChange({
+                                    photoUrl,
+                                    images: { ...card.images, main: photoUrl },
+                                  });
                                 } else {
                                   onChange({
                                     photoUrl,
@@ -3916,17 +3927,82 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                                   });
                                 }
                               }}
-                              className={`relative w-16 h-16 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
-                                isMainSel || isSecondSel || isThirdSel || isFourthSel
+                              className={`relative w-16 h-16 rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${
+                                isMainSel || (isCircleMode && isCircleSel) || isSecondSel || isThirdSel || isFourthSel
                                   ? 'border-yellow-400 ring-2 ring-yellow-400/50 scale-105 shadow-lg'
                                   : 'border-neutral-800 opacity-70 hover:opacity-100'
                               }`}
+                              title={`फोटो ${pIdx + 1} चुनें`}
                             >
-                              <img src={photoUrl} alt={`Extracted Photo ${pIdx + 1}`} className="w-full h-full object-cover" onError={handleThumbnailImgError} />
-                              <span className="absolute bottom-0 inset-x-0 bg-black/80 text-[9px] font-black text-center text-yellow-300 py-0.5">
-                                फोटो {pIdx + 1}
+                              <img src={photoUrl} alt={`Article Photo ${pIdx + 1}`} className="w-full h-full object-cover" onError={handleThumbnailImgError} />
+                              <span className="absolute bottom-0 inset-x-0 bg-black/85 text-[8.5px] font-black text-center text-yellow-300 py-0.5 truncate px-0.5">
+                                {isMainSel ? '✓ मुख्य' : (isCircleMode && isCircleSel) ? '✓ सर्कल' : isSecondSel ? '✓ S2' : `फोटो ${pIdx + 1}`}
                               </span>
                             </button>
+
+                            {/* Slot Assignment Controls */}
+                            {isCircleMode && (
+                              <div className="flex items-center gap-1 text-[8px] font-bold">
+                                <button
+                                  type="button"
+                                  onClick={() => onChange({ photoUrl, images: { ...card.images, main: photoUrl } })}
+                                  className={`px-1.5 py-0.5 rounded border transition cursor-pointer ${
+                                    isMainSel
+                                      ? 'bg-yellow-400 text-black border-yellow-300 font-black'
+                                      : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700'
+                                  }`}
+                                  title="मुख्य फुल स्क्रीन फोटो स्लॉट में सेट करें"
+                                >
+                                  मुख्य
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => onChange({
+                                    circlePhotoUrl: photoUrl,
+                                    images: { ...card.images, insetCircle: photoUrl },
+                                    showCirclePhoto: true,
+                                  })}
+                                  className={`px-1.5 py-0.5 rounded border transition cursor-pointer ${
+                                    isCircleSel
+                                      ? 'bg-pink-500 text-white border-pink-400 font-black'
+                                      : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700'
+                                  }`}
+                                  title="सर्कल ओवरले फोटो स्लॉट में सेट करें"
+                                >
+                                  सर्कल
+                                </button>
+                              </div>
+                            )}
+
+                            {isTwoPhotoMode && (
+                              <div className="flex items-center gap-1 text-[8px] font-bold">
+                                <button
+                                  type="button"
+                                  onClick={() => onChange({ photoUrl, images: { ...card.images, main: photoUrl } })}
+                                  className={`px-1.5 py-0.5 rounded border transition cursor-pointer ${
+                                    isMainSel
+                                      ? 'bg-yellow-400 text-black border-yellow-300 font-black'
+                                      : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700'
+                                  }`}
+                                  title="स्लॉट 1 (फोटो 1) में सेट करें"
+                                >
+                                  S1
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => onChange({ images: { ...card.images, second: photoUrl } })}
+                                  className={`px-1.5 py-0.5 rounded border transition cursor-pointer ${
+                                    isSecondSel
+                                      ? 'bg-blue-400 text-black border-blue-300 font-black'
+                                      : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700'
+                                  }`}
+                                  title="स्लॉट 2 (फोटो 2) में सेट करें"
+                                >
+                                  S2
+                                </button>
+                              </div>
+                            )}
+
                             {isMultiGrid && (
                               <div className="flex items-center gap-0.5 text-[8px] font-bold">
                                 <button
@@ -3966,6 +4042,20 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                                   </button>
                                 )}
                               </div>
+                            )}
+
+                            {isSingleMode && (
+                              <button
+                                type="button"
+                                onClick={() => onChange({ photoUrl, images: { ...card.images, main: photoUrl } })}
+                                className={`px-1.5 py-0.5 rounded text-[8px] font-bold border transition cursor-pointer ${
+                                  isMainSel
+                                    ? 'bg-yellow-400 text-black border-yellow-300 font-black'
+                                    : 'bg-neutral-800 text-neutral-300 border-neutral-700 hover:bg-neutral-700'
+                                }`}
+                              >
+                                {isMainSel ? '✓ सक्रिय' : 'चुनें'}
+                              </button>
                             )}
                           </div>
                         );
@@ -5599,14 +5689,27 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               <span>📢 स्टोरी कॉलआउट (Story Callout)</span>
             </span>
             {(() => {
+              const isFrameCalloutSupported = Boolean(
+                currentDynamicFrame &&
+                card.frameDesign !== 'graphic_001' &&
+                (currentDynamicFrame.storyCalloutSupported !== false) &&
+                (currentDynamicFrame.fullStoryCalloutConfig?.enabled || (currentDynamicFrame as any).storyCalloutSupported)
+              );
               const isCalloutExplicitlyOn = Boolean(
-                card.showCallout === true ||
-                (card.showCallout !== false && currentDynamicFrame?.fullStoryCalloutConfig?.enabled)
+                isFrameCalloutSupported && (
+                  card.showCallout === true ||
+                  (card.showCallout !== false && currentDynamicFrame?.fullStoryCalloutConfig?.enabled)
+                )
               );
               return (
                 <button
                   type="button"
                   onClick={() => {
+                    if (!isFrameCalloutSupported) {
+                      alert('इस फ्रेम में Story Callout सुविधा उपलब्ध नहीं है। यह विकल्प केवल अधिकृत फ्रेम और प्लान के लिए उपलब्ध है।');
+                      onChange({ showCallout: false });
+                      return;
+                    }
                     onChange({ showCallout: !isCalloutExplicitlyOn });
                   }}
                   className={`px-2.5 py-1 rounded-full text-[10px] font-black border transition-all flex items-center gap-1 cursor-pointer ${
@@ -5624,7 +5727,11 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             'पूरी खबर विवरण नीचे डिस्क्रिप्शन में पढ़ें' कॉलआउट का डिज़ाइन व साइज सेट करें। डिफ़ॉल्ट रूप से यह बंद (OFF) रहता है।
           </p>
 
-          {Boolean(card.showCallout === true || (card.showCallout !== false && currentDynamicFrame?.fullStoryCalloutConfig?.enabled)) && (
+          {Boolean(
+            card.frameDesign !== 'graphic_001' &&
+            currentDynamicFrame?.storyCalloutSupported !== false &&
+            (card.showCallout === true || (card.showCallout !== false && currentDynamicFrame?.fullStoryCalloutConfig?.enabled))
+          ) && (
             <div className="space-y-3 pt-2 border-t border-neutral-800 animate-in fade-in duration-150">
               {/* Category Filter Pills */}
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
@@ -5777,11 +5884,30 @@ export const CardEditor: React.FC<CardEditorProps> = ({
             </span>
           </div>
 
-          {canChangeLogo ? (
-            <div className="flex items-center gap-2">
-              <label className="flex-1 py-2 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer border border-neutral-700 transition">
+          {/* Approved Channel Logo Status Plate (Locked & Assigned) */}
+          <div className="flex items-center gap-3 p-2.5 bg-neutral-900 rounded-xl border border-neutral-800">
+            <div className="w-12 h-12 bg-neutral-950 rounded-lg border border-neutral-700 flex items-center justify-center overflow-hidden p-1 shadow-inner shrink-0">
+              {card.customLogoUrl || (card as any).channelLogoUrl || (card as any).logoUrl ? (
+                <img
+                  src={card.customLogoUrl || (card as any).channelLogoUrl || (card as any).logoUrl}
+                  alt="Channel Logo Preview"
+                  className="max-w-full max-h-full object-contain"
+                />
+              ) : (
+                <span className="text-[10px] text-neutral-400 font-bold">लोगो</span>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="text-xs text-amber-300 font-bold flex items-center gap-1">
+                ✓ चैनल लोगो (स्थिति फिक्स व लॉक)
+              </span>
+              <span className="text-[10.5px] text-neutral-400 block truncate mt-0.5">
+                आधिकारिक चैनल प्रोफाइल से निर्धारित • स्केल: {Math.round((card.logoScale ?? 1.25) * 100)}%
+              </span>
+            </div>
+            {effectiveAdmin && (
+              <label className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-[10px] font-bold border border-neutral-700 cursor-pointer shrink-0" title="एडमिन: लोगो बदलें">
                 <Upload className="w-3.5 h-3.5" />
-                <span>{card.customLogoUrl ? 'नया लोगो बदलें' : 'कस्टम लोगो अपलोड'}</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -5792,43 +5918,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   }}
                 />
               </label>
-              {card.customLogoUrl && (
-                <button
-                  type="button"
-                  onClick={() => onChange({ customLogoUrl: undefined, brandLogoType: 'default', logoScale: 1.25 })}
-                  className="p-2 rounded-lg bg-red-900/40 hover:bg-red-800/60 text-red-300 border border-red-800/80 cursor-pointer"
-                  title="लोगो हटाएं"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="p-2.5 bg-neutral-900 rounded-lg border border-neutral-800 text-neutral-400 text-xs flex items-center justify-between">
-              <span>लोगो सुरक्षित (Basic Plan):</span>
-              <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
-                <Lock className="w-3 h-3" />
-                <span>लोगो बदलने हेतु Pro/VIP आवश्यक</span>
-              </span>
-            </div>
-          )}
-
-              {/* Logo Preview thumbnail */}
-              {card.customLogoUrl && (
-                <div className="flex items-center gap-3 p-2 bg-neutral-900 rounded-lg border border-neutral-800">
-                  <div className="w-12 h-12 bg-neutral-950 rounded-lg border border-neutral-700 flex items-center justify-center overflow-hidden p-1">
-                    <img src={card.customLogoUrl} alt="Logo Preview" className="max-w-full max-h-full object-contain" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs text-green-400 font-bold flex items-center gap-1">
-                      ✓ लोगो लोड किया गया (स्थिति फिक्स व लॉक)
-                    </span>
-                    <span className="text-[10px] text-neutral-400 block truncate">
-                      स्केल: {Math.round((card.logoScale ?? 1.25) * 100)}%
-                    </span>
-                  </div>
-                </div>
-              )}
+            )}
+          </div>
 
               {/* Logo Resize Controls */}
               <div className="bg-neutral-900/90 border border-neutral-800 rounded-lg p-2.5 space-y-2">
@@ -5889,22 +5980,13 @@ export const CardEditor: React.FC<CardEditorProps> = ({
           const bannedFooterColor = activeDf?.footerConfig?.bannedFooterColor || (activeDf as any)?.bannedFooterColor;
 
           if (!isProOrVip) {
-            return (
-              <div className="p-3 bg-neutral-950/80 border border-neutral-800 rounded-xl space-y-2 text-xs">
-                <div className="flex items-center justify-between text-amber-300 font-bold">
-                  <span className="flex items-center gap-1.5">
-                    <Lock className="w-3.5 h-3.5 text-amber-400" />
-                    <span>कस्टम फ़ुटर लाइब्रेरी (Custom Footers)</span>
-                  </span>
-                  <span className="text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded font-black">
-                    🔒 केवल PRO / VIP DESK
-                  </span>
-                </div>
-                <p className="text-[11px] text-neutral-400 leading-relaxed">
-                  मास्टर एडमिन द्वारा स्वीकृत विशेष कस्टम फुटर केवल PRO और VIP DESK पैकेज में उपलब्ध हैं।
-                </p>
-              </div>
-            );
+            return null; // Module 3: Basic & Advanced users only receive normal Footer Branding; Custom Footer Library is hidden
+          }
+
+          // Frame-specific footer permissions: check if active frame allows custom footers
+          const isCustomFooterAllowedForFrame = activeDf ? (activeDf.customFooterEnabled !== false && !activeDf.footerBrandingOnly) : true;
+          if (!isCustomFooterAllowedForFrame && !effectiveAdmin) {
+            return null;
           }
 
           return (
@@ -6105,18 +6187,32 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
                   return (
                     <>
-                      {/* Primary Colors — First 5 options displayed prominently */}
-                      <div className="space-y-1">
-                        <span className="text-[10px] text-neutral-400 block font-semibold">1. मुख्य प्राथमिक रंग (Primary 5):</span>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-                          {FOOTER_BG_PRIMARY_PRESETS.map((p) => {
+                      {/* Unified Single Palette for Footer Background */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-[10.5px] text-neutral-400 font-semibold flex items-center gap-1.5">
+                            <span>🎨</span>
+                            <span>फुटर बैकग्राउंड रंग पैलेट:</span>
+                          </span>
+                          {card.footerBgColor && (
+                            <span className="font-mono text-[10px] text-amber-300 font-bold px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-800">
+                              {card.footerBgColor}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 overflow-x-auto pb-2 pt-1 scrollbar-thin px-0.5">
+                          {ALL_FOOTER_BG_PALETTE.map((p, idx) => {
                             const isSel = (card.footerBgColor || '#FFFFFF').toUpperCase() === p.color.toUpperCase();
                             const isColorBanned = Boolean(
                               activeDf && (
                                 (activeDf.footerConfig?.bannedFooterColor && activeDf.footerConfig.bannedFooterColor.toUpperCase() === p.color.toUpperCase()) ||
-                                (activeDf.footerConfig?.reserveWhiteBand && p.color.toUpperCase() === '#FFFFFF')
+                                (activeDf.footerConfig?.reserveWhiteBand && p.color.toUpperCase() === '#FFFFFF') ||
+                                (activeDf.bannedFooterColor && activeDf.bannedFooterColor.toUpperCase() === p.color.toUpperCase())
                               )
                             );
+                            // Advance tier has 5 primary presets (indices 0..4); Pro/VIP/Admin has all 14
+                            const isLockedForTier = !effectiveAdmin && effectiveTier === 'advanced' && idx >= 5;
+
                             return (
                               <button
                                 key={p.color}
@@ -6124,79 +6220,58 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                                 disabled={isColorBanned}
                                 onClick={() => {
                                   if (isColorBanned) return;
+                                  if (isLockedForTier) {
+                                    setLockedFeatureInfo({
+                                      featureName: `${p.nameHi} फ़ुटर रंग`,
+                                      requiredPlan: 'प्रो (PRO) या वीआईपी डेस्क',
+                                      description: 'अतिरिक्त 9 फ़ुटर बैकग्राउंड रंग प्रो एवं वीआईपी डेस्क प्लान में उपलब्ध हैं।',
+                                    });
+                                    setShowPermissionModal(true);
+                                    return;
+                                  }
                                   onChange({ footerBgColor: p.color, selectedCustomFooterId: undefined, customFooterConfig: undefined, customFooterPng: undefined });
                                 }}
-                                className={`px-2 py-1.5 rounded-lg text-left text-xs font-bold border flex items-center justify-between gap-1.5 transition-all ${
+                                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 shrink-0 transition-all ${
                                   isColorBanned
                                     ? 'opacity-40 cursor-not-allowed bg-neutral-900 border-neutral-800'
-                                    : isSel
-                                      ? 'ring-2 ring-yellow-400 scale-[1.02] shadow-md border-yellow-400 cursor-pointer'
-                                      : 'hover:border-neutral-500 cursor-pointer'
-                                } ${p.border}`}
-                                style={{ backgroundColor: p.color, color: '#0F172A' }}
-                                title={isColorBanned ? '🚫 इस फ्रेम में यह रंग आरक्षित है' : `${p.nameHi} - ${p.color}`}
+                                    : isLockedForTier
+                                      ? 'opacity-60 cursor-pointer border-neutral-800 hover:border-neutral-600 bg-neutral-900'
+                                      : isSel
+                                        ? 'ring-2 ring-yellow-400 scale-[1.03] shadow-md border-yellow-400 cursor-pointer'
+                                        : 'hover:border-neutral-500 cursor-pointer'
+                                } ${p.border || ''}`}
+                                style={{
+                                  backgroundColor: isLockedForTier ? '#1e293b' : p.color,
+                                  color: isLockedForTier ? '#cbd5e1' : '#0F172A',
+                                }}
+                                title={
+                                  isColorBanned
+                                    ? '🚫 इस फ्रेम में यह रंग आरक्षित है'
+                                    : isLockedForTier
+                                      ? `🔒 ${p.nameHi} - केवल प्रो/वीआईपी डेस्क प्लान में उपलब्ध`
+                                      : `${p.nameHi} (${p.name}) - ${p.color}`
+                                }
                               >
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  <span className="w-3.5 h-3.5 rounded-full border border-neutral-400/60 shrink-0 shadow-inner" style={{ backgroundColor: p.color }} />
-                                  <span className="text-[10.5px] truncate">{p.nameHi}</span>
-                                </div>
+                                <span
+                                  className="w-3.5 h-3.5 rounded-full border border-neutral-400/60 shrink-0 shadow-inner"
+                                  style={{ backgroundColor: p.color }}
+                                />
+                                <span className="text-[10.5px] whitespace-nowrap">{p.nameHi}</span>
                                 {isColorBanned ? (
                                   <span className="font-mono text-[8px] text-red-600 font-black shrink-0">🚫 आरक्षित</span>
+                                ) : isLockedForTier ? (
+                                  <Lock className="w-2.5 h-2.5 text-amber-400 shrink-0" />
                                 ) : (
                                   <span className="font-mono text-[9px] text-neutral-600 shrink-0">{p.color}</span>
+                                )}
+                                {isSel && !isColorBanned && !isLockedForTier && (
+                                  <span className="text-yellow-600 font-black text-xs">✓</span>
                                 )}
                               </button>
                             );
                           })}
                         </div>
                       </div>
-
-                      {/* Remaining 9 Colors — Visible to Pro, VIP, and Admin */}
-                      {(effectiveAdmin || effectiveTier === 'professional' || effectiveTier === 'ultra') && (
-                        <div className="space-y-1 pt-1">
-                          <span className="text-[10px] text-neutral-400 block font-semibold">2. अतिरिक्त रंग पैलेट (Remaining 9):</span>
-                          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
-                            {FOOTER_BG_SECONDARY_PRESETS.map((p) => {
-                              const isSel = (card.footerBgColor || '#FFFFFF').toUpperCase() === p.color.toUpperCase();
-                              const isColorBanned = Boolean(
-                                activeDf && (
-                                  (activeDf.footerConfig?.bannedFooterColor && activeDf.footerConfig.bannedFooterColor.toUpperCase() === p.color.toUpperCase()) ||
-                                  (activeDf.footerConfig?.reserveWhiteBand && p.color.toUpperCase() === '#FFFFFF') ||
-                                  (activeDf.bannedFooterColor && activeDf.bannedFooterColor.toUpperCase() === p.color.toUpperCase())
-                                )
-                              );
-                              return (
-                                <button
-                                  key={p.color}
-                                  type="button"
-                                  disabled={isColorBanned}
-                                  onClick={() => {
-                                    if (isColorBanned) return;
-                                    onChange({ footerBgColor: p.color, selectedCustomFooterId: undefined, customFooterConfig: undefined, customFooterPng: undefined });
-                                  }}
-                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold border flex items-center gap-1.5 shrink-0 transition-all ${
-                                    isColorBanned
-                                      ? 'opacity-40 cursor-not-allowed bg-neutral-900 border-neutral-800'
-                                      : isSel
-                                        ? 'ring-2 ring-yellow-400 scale-105 shadow-md border-yellow-400 cursor-pointer'
-                                        : 'hover:border-neutral-500 cursor-pointer'
-                                  } ${p.border}`}
-                                  style={{ backgroundColor: p.color, color: '#0F172A' }}
-                                  title={isColorBanned ? '🚫 इस फ्रेम में यह रंग आरक्षित है' : `${p.nameHi} (${p.name}) - ${p.color}`}
-                                >
-                                  <span className="w-3 h-3 rounded-full border border-neutral-400/60 shadow-inner" style={{ backgroundColor: p.color }} />
-                                  <span className="text-[10px] whitespace-nowrap">{p.nameHi}</span>
-                                  {isColorBanned ? (
-                                    <span className="font-mono text-[8px] text-red-600 font-black shrink-0">🚫 आरक्षित</span>
-                                  ) : (
-                                    <span className="font-mono text-[9px] text-neutral-600">{p.color}</span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
 
                       {/* Custom Color Option for Footer Background — strictly for VIP Desk and Admin */}
                       {(effectiveAdmin || effectiveTier === 'ultra') && (

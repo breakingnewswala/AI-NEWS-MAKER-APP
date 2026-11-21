@@ -21612,10 +21612,21 @@ export function parseArticleHtml(html: string, pageUrl: string): {
                 extractedAuthor = cleanHtmlEntities(String(item.author.name)).trim();
               }
             }
-            const img = item.image?.url || (typeof item.image === "string" ? item.image : (Array.isArray(item.image) ? item.image[0] : null));
-            if (img) {
-              const resolvedImg = resolveUrl(typeof img === "object" ? img.url : img, pageUrl);
-              if (resolvedImg && !foundImages.includes(resolvedImg)) foundImages.unshift(resolvedImg);
+            const rawImages = Array.isArray(item.image) ? item.image : [item.image];
+            if (item.thumbnailUrl) {
+              if (Array.isArray(item.thumbnailUrl)) rawImages.push(...item.thumbnailUrl);
+              else rawImages.push(item.thumbnailUrl);
+            }
+            for (const imgEntry of rawImages) {
+              if (!imgEntry) continue;
+              const imgUrl = typeof imgEntry === "string" ? imgEntry : (imgEntry?.url || imgEntry?.contentUrl);
+              if (imgUrl && typeof imgUrl === "string") {
+                const resolvedImg = resolveUrl(imgUrl.trim().replace(/&amp;/g, '&'), pageUrl);
+                if (resolvedImg && !foundImages.includes(resolvedImg) && !resolvedImg.includes("logo") && !resolvedImg.includes("icon") && !resolvedImg.includes("avatar")) {
+                  foundImages.push(resolvedImg);
+                  if (foundImages.length >= 6) break;
+                }
+              }
             }
           }
         }
@@ -21711,15 +21722,17 @@ export function parseArticleHtml(html: string, pageUrl: string): {
 
   if (ogImageMatch && ogImageMatch[1]) {
     const resolved = resolveUrl(ogImageMatch[1].trim(), pageUrl);
-    if (resolved && !foundImages.includes(resolved)) foundImages.push(resolved);
+    if (resolved && !foundImages.includes(resolved)) {
+      foundImages.unshift(resolved);
+    }
   }
   if (twitterImageMatch && twitterImageMatch[1]) {
     const resolved = resolveUrl(twitterImageMatch[1].trim(), pageUrl);
     if (resolved && !foundImages.includes(resolved)) foundImages.push(resolved);
   }
 
-  // Body <img>
-  const imgMatches = html.matchAll(/<img[^>]+src=["']([^"'\s]+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi);
+  // Body <img> & <figure> <img> with data-src, data-original, src
+  const imgMatches = html.matchAll(/<img[^>]+(?:src|data-src|data-original)=["']([^"'\s]+\.(?:jpg|jpeg|png|webp)[^"']*)["']/gi);
   for (const match of imgMatches) {
     const src = match[1];
     if (
@@ -21740,7 +21753,7 @@ export function parseArticleHtml(html: string, pageUrl: string): {
       const resolved = resolveUrl(src, pageUrl);
       if (resolved && !foundImages.includes(resolved)) {
         foundImages.push(resolved);
-        if (foundImages.length >= 4) break;
+        if (foundImages.length >= 6) break;
       }
     }
   }
