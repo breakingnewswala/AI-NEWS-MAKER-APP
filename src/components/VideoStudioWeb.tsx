@@ -1606,6 +1606,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
   // Quick Video Active Workflow Step (1 to 5 + Final)
   const [quickStep, setQuickStep] = useState<number>(1);
+  const [studioStep, setStudioStep] = useState<number>(1);
+  const [studioViewMode, setStudioViewMode] = useState<'stepwise' | 'grid'>('stepwise');
 
   // Mobile Detection (Part 3)
   const [isMobile, setIsMobile] = useState<boolean>(() => {
@@ -3302,7 +3304,16 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       setCompletedDownloadFilename(filename);
 
       if ((window as any).AndroidBridge?.downloadVideo) {
-        (window as any).AndroidBridge.downloadVideo(downloadUrl, filename);
+        try {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64data = reader.result as string;
+            (window as any).AndroidBridge.downloadVideo(base64data, filename);
+          };
+          reader.readAsDataURL(finalBlob);
+        } catch {
+          (window as any).AndroidBridge.downloadVideo(downloadUrl, filename);
+        }
       } else {
         const link = document.createElement('a');
         link.href = downloadUrl;
@@ -4571,22 +4582,23 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   </div>
                 </div>
 
-                {/* Horizontal Compact Step Navigation Pills */}
+                {/* Horizontal Compact Step Navigation Pills with Icons & Hindi Text */}
                 <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[10.5px] sm:text-xs font-bold w-full">
                   {[
-                    { step: 1, label: '१. वीडियो', ok: Boolean((videoUrl && videoUrl.trim()) || clips.length > 0) },
-                    { step: 2, label: '२. हेडलाइंस', ok: Boolean(headline && headline.trim().length > 0) },
-                    { step: 3, label: '३. लोकेशन', ok: Boolean(location && location.trim().length > 0) },
-                    { step: 4, label: '४. लोगो & ब्रांडिंग', ok: Boolean((socialHandle && socialHandle.trim().length > 0) || (channelTag && channelTag.trim().length > 0) || (mobileNumber && mobileNumber.trim().length > 0)) },
-                    { step: 5, label: '५. डाउनलोड', ok: quickVideoValidation.isValid },
+                    { step: 1, label: '१. वीडियो', icon: Film, ok: Boolean((videoUrl && videoUrl.trim()) || clips.length > 0) },
+                    { step: 2, label: '२. हेडलाइंस', icon: Type, ok: Boolean(headline && headline.trim().length > 0) },
+                    { step: 3, label: '३. लोकेशन', icon: MapPin, ok: Boolean(location && location.trim().length > 0) },
+                    { step: 4, label: '४. लोगो & ब्रांडिंग', icon: Sparkles, ok: Boolean((socialHandle && socialHandle.trim().length > 0) || (channelTag && channelTag.trim().length > 0) || (mobileNumber && mobileNumber.trim().length > 0)) },
+                    { step: 5, label: '५. डाउनलोड', icon: Download, ok: quickVideoValidation.isValid },
                   ].map((s) => {
                     const isActive = quickStep === s.step;
+                    const IconComp = s.icon;
                     return (
                       <button
                         key={s.step}
                         type="button"
                         onClick={() => setQuickStep(s.step)}
-                        className={`flex-shrink-0 px-2 py-1 sm:px-3 sm:py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                        className={`flex-shrink-0 px-2.5 py-1.5 sm:px-3 sm:py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
                           isActive
                             ? 'bg-gradient-to-r from-red-600 to-amber-500 text-white font-black shadow-md'
                             : s.ok
@@ -4599,8 +4611,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                         }`}>
                           {s.step}
                         </span>
+                        <IconComp className="w-3.5 h-3.5 shrink-0" />
                         <span>{s.label}</span>
-                        {s.ok && !isActive && <Check className="w-2.5 h-2.5 text-emerald-400" />}
+                        {s.ok && !isActive && <Check className="w-2.5 h-2.5 text-emerald-400 shrink-0" />}
                       </button>
                     );
                   })}
@@ -5918,10 +5931,103 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           ) : (
                 /* WORKFLOW 2: STUDIO MODE (!isReadyToUseMode)                 */
                 /* ============================================================ */
-                /* Part 6: Responsive Grid (Mobile: 2 cols x 3 rows, Desktop: 3 cols x 2 rows) */
-                <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 items-stretch">
-                  {/* Card 1: Multi-Clip Video Timeline Manager */}
-                  <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
+                /* Systematic Step-Wise Workflow or Responsive Grid View Mode  */
+                <div className="space-y-4">
+                  {/* Studio Mode Systematic Step Navigation Bar */}
+                  <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 sm:p-4 space-y-3 shadow-lg">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <Sliders className="w-4 h-4 text-amber-400" />
+                        <span className="text-xs sm:text-sm font-black text-amber-300">
+                          सिस्टमैटिक वीडियो स्टूडियो (चरण {studioStep}/7):
+                        </span>
+                        <span className="text-[11px] font-bold text-slate-300">
+                          {[
+                            'वीडियो टाइमलाइन और क्लिप्स',
+                            'वीडियो फ्रेम / जैकेट चुनें',
+                            'हेडलाइन्स व टाइमलाइन शेड्यूलिंग',
+                            'मल्टी-ट्रैक ऑडियो मिक्सर',
+                            'वीडियो ट्रांज़िशन इफ़ेक्ट्स',
+                            'खबर की लोकेशन',
+                            'सोशल फ़ूटर, टिकर व ब्रांडिंग',
+                          ][studioStep - 1]}
+                        </span>
+                      </div>
+
+                      {/* View Switcher: Stepwise vs Grid */}
+                      <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => setStudioViewMode('stepwise')}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                            studioViewMode === 'stepwise'
+                              ? 'bg-amber-400 text-slate-950 font-black shadow'
+                              : 'bg-slate-800 text-slate-300 hover:text-white'
+                          }`}
+                          title="स्टेप-वाइज़ सिस्टमैटिक व्यू"
+                        >
+                          <span>📑 स्टेप-वाइज़</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setStudioViewMode('grid')}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                            studioViewMode === 'grid'
+                              ? 'bg-amber-400 text-slate-950 font-black shadow'
+                              : 'bg-slate-800 text-slate-300 hover:text-white'
+                          }`}
+                          title="सभी 7 कार्ड्स ग्रिड में देखें"
+                        >
+                          <span>⊞ ग्रिड व्यू</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Horizontal Step Navigation Bar */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[11px] font-bold w-full">
+                      {[
+                        { step: 1, label: '१. क्लिप्स', icon: Film },
+                        { step: 2, label: '२. फ्रेम व जैकेट', icon: Tv },
+                        { step: 3, label: '३. हेडलाइन्स', icon: Type },
+                        { step: 4, label: '४. ऑडियो', icon: Music },
+                        { step: 5, label: '५. इफेक्ट्स', icon: Layers },
+                        { step: 6, label: '६. लोकेशन', icon: MapPin },
+                        { step: 7, label: '७. फ़ूटर व टिकर', icon: Globe },
+                      ].map((s) => {
+                        const isActive = studioStep === s.step;
+                        const IconComp = s.icon;
+                        return (
+                          <button
+                            key={s.step}
+                            type="button"
+                            onClick={() => {
+                              setStudioStep(s.step);
+                              setStudioViewMode('stepwise');
+                            }}
+                            className={`flex-shrink-0 px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                              isActive
+                                ? 'bg-gradient-to-r from-red-600 to-amber-500 text-white font-black shadow-md'
+                                : 'bg-slate-800/80 text-slate-300 hover:bg-slate-800 hover:text-white'
+                            }`}
+                          >
+                            <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-black shrink-0 ${
+                              isActive ? 'bg-white text-red-600' : 'bg-amber-400 text-neutral-950'
+                            }`}>
+                              {s.step}
+                            </span>
+                            <IconComp className="w-3.5 h-3.5 shrink-0" />
+                            <span>{s.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Cards Container: Full-width in stepwise mode; responsive grid in grid mode */}
+                  <div className={studioViewMode === 'stepwise' ? 'space-y-4' : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 items-stretch'}>
+                    {(studioViewMode === 'grid' || studioStep === 1) && (
+                      /* Card 1: Multi-Clip Video Timeline Manager */
+                      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                         <Film className="w-4 h-4 text-amber-400" />
@@ -6073,8 +6179,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       </div>
                     </div>
                   </div>
+                )}
 
-                  {/* Card 2: Select Jacket / Frame */}
+                {(studioViewMode === 'grid' || studioStep === 2) && (
+                  /* Card 2: Select Jacket / Frame */
                   <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3 shadow-lg">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
@@ -6120,8 +6228,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       })}
                     </div>
                   </div>
+                )}
 
-                  {/* Card 3: Headlines & Timeline Scheduling (Single vs 10s/15s Interval) */}
+                {(studioViewMode === 'grid' || studioStep === 3) && (
+                  /* Card 3: Headlines & Timeline Scheduling (Single vs 10s/15s Interval) */
                   <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
@@ -6297,8 +6407,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       />
                     </div>
                   </div>
+                )}
 
-                  {/* Card 4: Multi-Track Audio Mixing Studio (BGM + Voiceover + Video) */}
+                {(studioViewMode === 'grid' || studioStep === 4) && (
+                  /* Card 4: Multi-Track Audio Mixing Studio (BGM + Voiceover + Video) */
                   <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
@@ -6543,8 +6655,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       </div>
                     </div>
                   </div>
+                )}
 
-                  {/* Card 5: Video Transitions & Motion FX */}
+                {(studioViewMode === 'grid' || studioStep === 5) && (
+                  /* Card 5: Video Transitions & Motion FX */
                   <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
@@ -6599,8 +6713,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       })}
                     </div>
                   </div>
+                )}
 
-                  {/* Card 6: Location - Dedicated Independent Box */}
+                {(studioViewMode === 'grid' || studioStep === 6) && (
+                  /* Card 6: Location - Dedicated Independent Box */
                   <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3 shadow-lg">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
@@ -6631,8 +6747,11 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       💡 जब लोकेशन खाली हो या टॉगल बंद हो, तो स्क्रीन पर कोई खाली पट्टी नहीं आएगी।
                     </p>
                   </div>
+                )}
 
-                  {/* Card 7: Social Media & Scrolling Ticker */}
+                {(studioViewMode === 'grid' || studioStep === 7) && (
+                  <>
+                    {/* Card 7: Social Media & Scrolling Ticker */}
                   <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
@@ -6858,8 +6977,51 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       )}
                     </div>
                   </div>
-                </div>
+                </>
               )}
+            </div>
+
+            {/* Stepwise Navigation Footer */}
+            {studioViewMode === 'stepwise' && (
+              <div className="flex items-center justify-between gap-3 p-3 bg-slate-900/90 border border-slate-800 rounded-2xl shadow-lg">
+                <button
+                  type="button"
+                  disabled={studioStep <= 1}
+                  onClick={() => setStudioStep((prev) => Math.max(1, prev - 1))}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-200 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  <span>पिछला चरण</span>
+                </button>
+
+                <div className="text-[11px] text-slate-400 font-bold hidden sm:block">
+                  चरण {studioStep} / 7
+                </div>
+
+                {studioStep < 7 ? (
+                  <button
+                    type="button"
+                    onClick={() => setStudioStep((prev) => Math.min(7, prev + 1))}
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-red-600 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white font-extrabold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-md"
+                  >
+                    <span>अगला चरण (स्टेप {studioStep + 1})</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleDownloadVideo}
+                    disabled={!quickVideoValidation.isValid || isExporting}
+                    className="px-6 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-extrabold text-xs cursor-pointer shadow hover:from-emerald-500 hover:to-teal-400 transition flex items-center gap-1.5 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Download className="w-4 h-4 text-white" />
+                    <span>{isExporting ? 'रेंडरिंग जारी...' : 'वीडियो डाउनलोड करें'}</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         </section>
       </div>
 

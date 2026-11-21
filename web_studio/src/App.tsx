@@ -4615,15 +4615,19 @@ export default function App() {
                 🔒
               </div>
               <div>
-                <h3 className="text-base font-black text-white">सदस्यता समाप्त</h3>
+                <h3 className="text-base font-black text-white">
+                  {userSubscription?.tier === 'basic' ? '🔒 आपका ट्रायल समाप्त हो चुका है' : 'सदस्यता समाप्त'}
+                </h3>
                 <span className="text-xs text-amber-400 font-bold">
-                  {userSubscription?.tier === 'basic' ? '7-दिवसीय फ्री ट्रायल समाप्त' : 'आपका वर्तमान प्लान समाप्त हो गया है'}
+                  {userSubscription?.tier === 'basic' ? 'अब आपको सब्सक्राइब करना पड़ेगा (पैकेज लेना पड़ेगा)' : 'आपका वर्तमान प्लान समाप्त हो गया है'}
                 </span>
               </div>
             </div>
 
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              आपका प्लान समाप्त हो गया है। अपनी सुविधाएँ जारी रखने के लिए प्लान सक्रिय करें। जब तक आप अपना प्लान सक्रिय नहीं करते, तब तक आप अपने लिए उपलब्ध बोनस खबरों और बोनस वीडियो का उपयोग कर सकते हैं।
+              {userSubscription?.tier === 'basic'
+                ? 'आपका ट्रायल समाप्त हो चुका है। अब आपको सब्सक्राइब करना पड़ेगा (पैकेज लेना पड़ेगा)। AI News Maker के सभी स्मार्ट फीचर्स, अनलिमिटेड ग्राफिक निर्माण, एचडी वीडियो स्टूडियो और एक्सपोर्ट टूल्स का उपयोग करने के लिए कृपया अपनी पसंद का कोई पैकेज सब्सक्राइब करें।'
+                : 'आपका प्लान समाप्त हो गया है। अपनी सुविधाएँ जारी रखने के लिए प्लान सक्रिय करें। जब तक आप अपना प्लान सक्रिय नहीं करते, तब तक आप केवल उपलब्ध बोनस खबरों और बोनस वीडियो का उपयोग कर सकते हैं।'}
             </p>
 
             <div className="pt-2 flex flex-col sm:flex-row gap-2">
@@ -4638,10 +4642,10 @@ export default function App() {
                     window.location.hash = '#membership';
                   }
                 }}
-                className="flex-1 py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg transition active:scale-95 cursor-pointer"
+                className="flex-1 py-2.5 px-4 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition active:scale-95 cursor-pointer"
               >
                 <span>⚡</span>
-                <span>प्लान सक्रिय करें</span>
+                <span>पैकेज चुनें व सब्सक्राइब करें</span>
               </button>
               <button
                 type="button"

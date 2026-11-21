@@ -39,6 +39,7 @@ import { downloadCanvas } from '../lib/CanvasExporter';
 import { getApiBaseUrl } from '../lib/apiConfig';
 import { BUILTIN_RIBBONS } from '../lib/ribbonPresets';
 import { STATEMENT_BACKGROUND_PRESETS } from '../lib/statementBackgroundPresets';
+import { STARTER_DUMMY_STORY_TEMPLATES } from './AdminStoryTemplateControl';
 
 export interface SocialMediaStoryModalProps {
   isOpen: boolean;
@@ -79,6 +80,7 @@ export const SocialMediaStoryModal: React.FC<SocialMediaStoryModalProps> = ({
 
   // Story Customization State
   const [customHeadline, setCustomHeadline] = useState('');
+  const [customSubheadline, setCustomSubheadline] = useState('');
   const [customLocation, setCustomLocation] = useState('');
   const [customPhotoUrl, setCustomPhotoUrl] = useState('');
   const [speakerName, setSpeakerName] = useState('मुख्यमंत्री / वक्ता');
@@ -106,14 +108,24 @@ export const SocialMediaStoryModal: React.FC<SocialMediaStoryModalProps> = ({
       const allFrames = await fetchDynamicFramesFromApi('9:16');
       const storyFrames = allFrames.filter((f) => f.aspectRatio === '9:16' && f.publicationStatus === 'published');
       const loaded = storyFrames.length > 0 ? storyFrames : DEFAULT_DYNAMIC_FRAMES.filter((f) => f.aspectRatio === '9:16');
-      const normalizedList = loaded.map(normalizeDynamicFrame);
+      
+      // Ensure starter dummy story templates are accessible
+      const existingIds = new Set(loaded.map((f) => f.id));
+      const combined = [...loaded];
+      for (const starter of STARTER_DUMMY_STORY_TEMPLATES) {
+        if (!existingIds.has(starter.id)) {
+          combined.push(starter);
+        }
+      }
+
+      const normalizedList = combined.map(normalizeDynamicFrame);
       setFrames(normalizedList);
 
       const prefId = getLocalPrimaryStoryFrameId(currentUser?.email || currentUser?.userId);
-      setPrimaryFrameId(prefId || 'df_story_9_16_standard');
+      setPrimaryFrameId(prefId || 'df_story_starter_classic');
 
       // Select primary frame by default or the first 9:16 frame
-      const initial = normalizedList.find((f) => f.id === prefId) || normalizedList[0] || DEFAULT_DYNAMIC_FRAMES[3];
+      const initial = normalizedList.find((f) => f.id === prefId) || normalizedList[0] || STARTER_DUMMY_STORY_TEMPLATES[0];
       setSelectedFrame(initial);
     };
 
@@ -124,6 +136,8 @@ export const SocialMediaStoryModal: React.FC<SocialMediaStoryModalProps> = ({
   useEffect(() => {
     if (newsPost) {
       setCustomHeadline(newsPost.headline || newsPost.title || 'ताज़ा खबर यहाँ दिखाई देगी');
+      const rawDesc = newsPost.summary || newsPost.fullContent || newsPost.content || '';
+      setCustomSubheadline(rawDesc.slice(0, 180));
       setCustomLocation(newsPost.location || newsPost.district || 'मध्य प्रदेश');
       setCustomPhotoUrl(newsPost.imageUrl || newsPost.image || (newsPost.images && newsPost.images[0]) || '/assets/preview_placeholder.jpg');
     }
@@ -591,6 +605,23 @@ export const SocialMediaStoryModal: React.FC<SocialMediaStoryModalProps> = ({
             ctx.fillText(line, drawX, startY);
             startY += lineHeight;
           }
+        } else if (tSlot.role === 'subheadline' || tSlot.role === 'secondary_headline') {
+          ctx.fillStyle = tSlot.textColor || '#CBD5E1';
+          const fontSize = Math.min(tSlot.fontSize || 34, 40);
+          ctx.font = `500 ${fontSize}px "Noto Sans Devanagari", sans-serif`;
+          ctx.textAlign = tSlot.alignment || 'left';
+          ctx.textBaseline = 'alphabetic';
+
+          const textToDraw = customSubheadline || 'ताजा खबर का विस्तृत विवरण यहाँ प्रदर्शित होगा।';
+          const lines = wrapText(ctx, textToDraw, tw - 40, tSlot.maxLines || 3);
+          const lineHeight = fontSize * (tSlot.lineHeight || 1.35);
+          let startY = ty + 30 + fontSize;
+
+          for (const line of lines) {
+            const drawX = tSlot.alignment === 'center' ? tx + tw / 2 : tx + 20;
+            ctx.fillText(line, drawX, startY);
+            startY += lineHeight;
+          }
         } else if (tSlot.role === 'quote') {
           ctx.fillStyle = tSlot.textColor || '#F8FAFC';
           const fontSize = Math.min(tSlot.fontSize || 66, 68);
@@ -1008,13 +1039,24 @@ export const SocialMediaStoryModal: React.FC<SocialMediaStoryModalProps> = ({
 
               <div className="space-y-2">
                 <div>
-                  <label className="text-[10px] text-slate-400 block mb-0.5">हेडलाइन टेक्स्ट:</label>
+                  <label className="text-[10px] text-slate-400 block mb-0.5">हेडलाइन टेक्स्ट (बड़ी हेडलाइन):</label>
                   <input
                     type="text"
                     value={customHeadline}
                     onChange={(e) => setCustomHeadline(e.target.value)}
                     className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500"
                     placeholder="स्टोरी हेडलाइन यहाँ लिखें..."
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-400 block mb-0.5">सब-हेडलाइन / मुख्य विवरण (Subheadline & Details):</label>
+                  <textarea
+                    rows={2}
+                    value={customSubheadline}
+                    onChange={(e) => setCustomSubheadline(e.target.value)}
+                    className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-indigo-500 resize-none"
+                    placeholder="स्टोरी का संक्षिप्त विवरण यहाँ लिखें..."
                   />
                 </div>
 

@@ -171,6 +171,7 @@ const DynamicLocationBadgePreview: React.FC<{
 
   const isBox = styleMode === 'box' || styleMode === 'compact_chip';
   const borderRadius = isBox ? '6px' : '9999px';
+  const fallbackBg = locBgColor || (isBox ? '#B91C1C' : '#DC2626');
 
   const positionStyle: React.CSSProperties = isRightAnchored
     ? {
@@ -2199,24 +2200,50 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               hasBadgeAsset: false,
             });
 
+            // Scaled padding, icon size, and font size based on previewScale
+            const scaledPadY = Math.max(1, Math.round(4 * previewScale));
+            const scaledPadX = Math.max(4, Math.round(14 * previewScale));
+            const scaledIconSize = Math.max(10, Math.round(22 * previewScale));
+            const scaledPinIcon = Math.max(6, Math.round(13 * previewScale));
+            const scaledFontSize = Math.max(8.5, Math.round(20 * previewScale));
+
             return (
               <div
-                className="absolute z-30 flex items-center justify-center gap-1.5 rounded-full px-3 py-0.5 sm:px-4 sm:py-1 shadow-[0_4px_16px_rgba(0,0,0,0.6)] border border-slate-200 pointer-events-auto"
+                className="absolute z-30 flex items-center justify-center rounded-full shadow-[0_4px_16px_rgba(0,0,0,0.6)] border border-slate-200 pointer-events-auto select-none"
                 style={{
                   right: '5%',
                   top: '6.6%',
                   height: `${dynamicLoc.heightPct}%`,
+                  minHeight: `${Math.max(18, Math.round(36 * previewScale))}px`,
                   width: `${dynamicLoc.widthPct}%`,
-                  maxWidth: '65%',
+                  minWidth: `${Math.max(60, Math.round(dynamicLoc.dynamicBw * previewScale))}px`,
+                  maxWidth: '70%',
+                  padding: `${scaledPadY}px ${scaledPadX}px`,
+                  gap: `${Math.max(2, Math.round(6 * previewScale))}px`,
                   backgroundColor: card.locationBgColor || '#FFFFFF',
                 }}
               >
-                <div className="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs">
-                  <MapPin className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" />
+                <div
+                  className="rounded-full bg-[#DC2626] flex items-center justify-center shrink-0 shadow-xs"
+                  style={{
+                    width: `${scaledIconSize}px`,
+                    height: `${scaledIconSize}px`,
+                  }}
+                >
+                  <MapPin
+                    className="text-white shrink-0"
+                    style={{
+                      width: `${scaledPinIcon}px`,
+                      height: `${scaledPinIcon}px`,
+                    }}
+                  />
                 </div>
                 <span
-                  className="font-bold text-[11px] sm:text-xs md:text-sm text-neutral-950 tracking-wide truncate inline-block translate-y-[1px] leading-tight text-center"
-                  style={{ fontFamily: card.locationFont ? `"${card.locationFont}", "Noto Sans Devanagari", sans-serif` : undefined }}
+                  className="font-bold text-neutral-950 tracking-wide truncate leading-none text-center"
+                  style={{
+                    fontSize: `${scaledFontSize}px`,
+                    fontFamily: card.locationFont ? `"${card.locationFont}", "Noto Sans Devanagari", sans-serif` : undefined,
+                  }}
                 >
                   {cleanLoc}
                 </span>

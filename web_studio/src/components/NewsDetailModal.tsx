@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, X, MapPin, Clock, Heart, Loader2 } from 'lucide-react';
+import { Sparkles, X, MapPin, Clock, Heart, Loader2, Film } from 'lucide-react';
 import { NewsFeedPost } from '../data/newsFeedData';
 import { cleanNewsDescription, decodeHtmlEntities } from '../lib/newsDescriptionCleaner';
 
@@ -8,6 +8,8 @@ export interface NewsDetailModalProps {
   currentUser?: any;
   onClose: () => void;
   onOpenStudio?: (post: NewsFeedPost) => void;
+  onOpenStory?: (post: NewsFeedPost) => void;
+  canModerate?: boolean;
   isFavorite?: boolean;
   onToggleFavorite?: (postId: string) => void;
   onSetReminder?: (post: NewsFeedPost, minutes: number) => void;
@@ -81,6 +83,8 @@ export const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
   currentUser,
   onClose,
   onOpenStudio,
+  onOpenStory,
+  canModerate = false,
   isFavorite = false,
   onToggleFavorite,
   onSetReminder,
@@ -295,6 +299,19 @@ export const NewsDetailModal: React.FC<NewsDetailModalProps> = ({
               </div>
             )}
           </div>
+
+          {/* Story CTA (Master Admin and Admin Only) */}
+          {canModerate && onOpenStory && (
+            <button
+              type="button"
+              onClick={() => onOpenStory(post)}
+              className="flex-1 sm:flex-initial py-2.5 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 cursor-pointer transition active:scale-95"
+              title="9:16 सोशल मीडिया स्टोरी बनाएं"
+            >
+              <Film className="w-4 h-4 text-purple-200" />
+              <span>📱 सोशल स्टोरी</span>
+            </button>
+          )}
 
           {/* Right Action: Primary CTA */}
           {onOpenStudio && (

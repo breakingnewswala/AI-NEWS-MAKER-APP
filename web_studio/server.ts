@@ -7193,10 +7193,10 @@ function syncUserToProfiles(u: AuthoritativeUser) {
       uid: u.userId,
       tier: u.tier,
       email: u.email,
-      state: (u.state && u.state.trim()) ? u.state : ((allProfiles[cleanKey] && allProfiles[cleanKey].state) || ''),
-      district: (u.district && u.district.trim()) ? u.district : (u.location || (allProfiles[cleanKey] && allProfiles[cleanKey].district) || ''),
-      location: (u.location && u.location.trim()) ? u.location : (u.district || (allProfiles[cleanKey] && allProfiles[cleanKey].location) || ''),
-      city: (u.city && u.city.trim()) ? u.city : ((allProfiles[cleanKey] && allProfiles[cleanKey].city) || ''),
+      state: (u.state && u.state.trim()) ? u.state : ((allProfiles[cleanKey] && allProfiles[cleanKey].state) || (cleanKey === 'admin.ainewsmaker@gmail.com' || cleanKey === 'breakingnewswala.com@gmail.com' ? 'मध्य प्रदेश' : '')),
+      district: (u.district && u.district.trim() && u.district !== 'हेडक्वार्टर सेंट्रल डेस्क') ? u.district : (u.location || (allProfiles[cleanKey] && allProfiles[cleanKey].district) || (cleanKey === 'admin.ainewsmaker@gmail.com' || cleanKey === 'breakingnewswala.com@gmail.com' ? 'भोपाल' : '')),
+      location: (u.location && u.location.trim() && u.location !== 'हेडक्वार्टर सेंट्रल डेस्क') ? u.location : (u.district || (allProfiles[cleanKey] && allProfiles[cleanKey].location) || (cleanKey === 'admin.ainewsmaker@gmail.com' || cleanKey === 'breakingnewswala.com@gmail.com' ? 'भोपाल' : '')),
+      city: (u.city && u.city.trim()) ? u.city : ((allProfiles[cleanKey] && allProfiles[cleanKey].city) || (cleanKey === 'admin.ainewsmaker@gmail.com' || cleanKey === 'breakingnewswala.com@gmail.com' ? 'भोपाल' : '')),
       designation: (u.designation && u.designation.trim()) ? u.designation : ((allProfiles[cleanKey] && allProfiles[cleanKey].designation) || ''),
       channelNameHi: u.channelNameHi || u.channelName || '',
       channelNameEn: u.channelNameEn || '',
@@ -13623,10 +13623,18 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       isProfileComplete: (isMasterAdminEmail || isSubAdminEmail) ? true : isProfileComplete,
       profileStatus: (isMasterAdminEmail || isSubAdminEmail) ? "active" : (isProfileComplete ? "active" : "incomplete"),
       email: profile.email || existing.email || "",
-      state: (profile.state !== undefined && profile.state !== null && String(profile.state).trim() !== "") ? String(profile.state).trim() : (existing.state || ""),
-      district: (profile.district !== undefined && profile.district !== null && String(profile.district).trim() !== "") ? String(profile.district).trim() : (existing.district || ""),
-      city: (profile.city !== undefined && profile.city !== null && String(profile.city).trim() !== "") ? String(profile.city).trim() : (existing.city || ""),
-      location: (profile.location !== undefined && profile.location !== null && String(profile.location).trim() !== "") ? String(profile.location).trim() : (existing.location || ""),
+      state: (profile.state !== undefined && profile.state !== null && String(profile.state).trim() !== "")
+        ? String(profile.state).trim()
+        : (existing.state || (isSubAdminEmail || isMasterAdminEmail ? "मध्य प्रदेश" : "")),
+      district: (profile.district !== undefined && profile.district !== null && String(profile.district).trim() !== "" && String(profile.district).trim() !== "हेडक्वार्टर सेंट्रल डेस्क")
+        ? String(profile.district).trim()
+        : ((existing.district && existing.district !== "हेडक्वार्टर सेंट्रल डेस्क") ? existing.district : (isSubAdminEmail || isMasterAdminEmail ? "भोपाल" : "")),
+      city: (profile.city !== undefined && profile.city !== null && String(profile.city).trim() !== "")
+        ? String(profile.city).trim()
+        : (existing.city || (isSubAdminEmail ? "भोपाल" : "")),
+      location: (profile.location !== undefined && profile.location !== null && String(profile.location).trim() !== "" && String(profile.location).trim() !== "हेडक्वार्टर सेंट्रल डेस्क")
+        ? String(profile.location).trim()
+        : ((existing.location && existing.location !== "हेडक्वार्टर सेंट्रल डेस्क") ? existing.location : (isSubAdminEmail || isMasterAdminEmail ? "भोपाल" : "")),
       channelNameHi: (() => {
         const raw = profile.channelNameHi || profile.channelName || existing.channelNameHi || "";
         if (typeof raw === "string" && (raw.includes("à¤") || raw.includes("Ã") || raw.trim() === "")) {
@@ -13652,11 +13660,7 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       whatsappMarketingConsentSource: profile.whatsappMarketingConsentSource || existing.whatsappMarketingConsentSource || null,
       whatsappMarketingConsentVersion: profile.whatsappMarketingConsentVersion || existing.whatsappMarketingConsentVersion || null,
       whatsappMarketingConsentUpdatedAt: profile.whatsappMarketingConsentUpdatedAt || existing.whatsappMarketingConsentUpdatedAt || null,
-      activeLogoUrl: isMasterAdminEmail
-        ? '/assets/breaking_news_wala_logo.png'
-        : isSubAdminEmail
-          ? '/assets/ai_news_maker_logo.png'
-          : (existing.activeLogoUrl || (existing.logoApprovalStatus === "approved" ? existing.channelLogoUrl : undefined)),
+      activeLogoUrl: (profile.channelLogoPngUrl || profile.channelLogoUrl || existing.channelLogoPngUrl || existing.channelLogoUrl || existing.activeLogoUrl || (isMasterAdminEmail ? '/assets/breaking_news_wala_logo.png' : isSubAdminEmail ? '/assets/ai_news_maker_logo.png' : undefined)),
       logoApprovalStatus: existing.logoApprovalStatus || "none",
       approvedLogoRequestId: existing.approvedLogoRequestId,
       logoApprovedAt: existing.logoApprovedAt,

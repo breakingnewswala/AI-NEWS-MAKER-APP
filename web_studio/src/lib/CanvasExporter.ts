@@ -3049,7 +3049,7 @@ async function drawGraphic001Canvas(
       ctx.arc(pinCenterX, pinCenterY, pinR, 0, Math.PI * 2);
       ctx.fill();
 
-      // Part F: Original White Location Icon Asset
+      // Part F: Crisp White Vector Map Pin Icon (100% reliable vector, zero network asset dependency)
       let locIconLoaded = false;
       try {
         const locIconImg = await loadImage('/assets/location_white_icon.png');
@@ -3061,22 +3061,26 @@ async function drawGraphic001Canvas(
       } catch {}
 
       if (!locIconLoaded) {
-        try {
-          const locIconImg = await loadImage('assets/location_white_icon.png');
-          if (locIconImg && locIconImg.width > 0) {
-            const iconSize = Math.round(pinR * 1.35);
-            ctx.drawImage(locIconImg, pinCenterX - iconSize / 2, pinCenterY - iconSize / 2, iconSize, iconSize);
-            locIconLoaded = true;
-          }
-        } catch {}
-      }
+        // Draw crisp white vector map pin matching Lucide MapPin icon
+        const pinHeadR = pinR * 0.44;
+        const pinHeadY = pinCenterY - pinR * 0.16;
 
-      if (!locIconLoaded) {
+        ctx.save();
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = '900 18px Arial, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('📍', pinCenterX, pinCenterY);
+        ctx.beginPath();
+        // Top circular arc of pin
+        ctx.arc(pinCenterX, pinHeadY, pinHeadR, Math.PI * 0.85, Math.PI * 0.15, false);
+        // Pointed tip extending to bottom
+        ctx.lineTo(pinCenterX, pinCenterY + pinR * 0.62);
+        ctx.closePath();
+        ctx.fill();
+
+        // Inner cutout circle (red)
+        ctx.fillStyle = '#DC2626';
+        ctx.beginPath();
+        ctx.arc(pinCenterX, pinHeadY, pinHeadR * 0.45, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       }
 
       // Location Text (Bold Dark Black, centered horizontally & vertically inside composite)

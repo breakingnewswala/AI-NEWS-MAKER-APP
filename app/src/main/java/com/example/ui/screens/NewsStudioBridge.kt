@@ -626,6 +626,81 @@ class NewsStudioBridge(
     }
 
     @JavascriptInterface
+    fun downloadVideo(base64DataOrUrl: String, fileName: String) {
+        try {
+            val cleanName = if (fileName.endsWith(".mp4", ignoreCase = true) || fileName.endsWith(".webm", ignoreCase = true)) {
+                fileName
+            } else {
+                "$fileName.mp4"
+            }
+
+            if (base64DataOrUrl.startsWith("data:") || !base64DataOrUrl.startsWith("http")) {
+                val base64Data = if (base64DataOrUrl.contains(",")) base64DataOrUrl.substringAfter(",") else base64DataOrUrl
+                val videoBytes = Base64.decode(base64Data, Base64.DEFAULT)
+
+                val mime = if (cleanName.endsWith(".webm", ignoreCase = true)) "video/webm" else "video/mp4"
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val contentValues = ContentValues().apply {
+                        put(MediaStore.Video.Media.DISPLAY_NAME, cleanName)
+                        put(MediaStore.Video.Media.MIME_TYPE, mime)
+                        put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/AINewsMaker")
+                        put(MediaStore.Video.Media.IS_PENDING, 1)
+                    }
+                    val uri = context.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, contentValues)
+                        ?: throw IllegalStateException("MediaStore URI निर्माण विफल")
+
+                    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                        outputStream.write(videoBytes)
+                    }
+
+                    contentValues.clear()
+                    contentValues.put(MediaStore.Video.Media.IS_PENDING, 0)
+                    context.contentResolver.update(uri, contentValues, null, null)
+                } else {
+                    val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+                    val appDir = File(moviesDir, "AINewsMaker").apply { mkdirs() }
+                    val file = File(appDir, cleanName)
+                    file.outputStream().use { it.write(videoBytes) }
+
+                    MediaScannerConnection.scanFile(
+                        context,
+                        arrayOf(file.absolutePath),
+                        arrayOf(mime),
+                        null
+                    )
+                }
+
+                Handler(Looper.getMainLooper()).post {
+                    Toast.makeText(
+                        context,
+                        "✅ वीडियो सफलतापूर्वक गैलरी में सुरक्षित हो गया!",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            } else {
+                val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
+                val uri = Uri.parse(base64DataOrUrl)
+                val request = DownloadManager.Request(uri).apply {
+                    setTitle(cleanName)
+                    setDescription("AI News Maker वीडियो डाउनलोड")
+                    setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                    setDestinationInExternalPublicDir(Environment.DIRECTORY_MOVIES, "AINewsMaker/$cleanName")
+                }
+                downloadManager?.enqueue(request)
+                Handler(Looper.getMainLooper()).post {
+                    Toast.makeText(context, "⬇️ वीडियो डाउनलोड प्रारंभ हुआ...", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(context, "वीडियो सेव करने में त्रुटि: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    @JavascriptInterface
     fun shareImage(dataUrl: String, title: String) {
         try {
             val base64Data = if (dataUrl.contains(",")) dataUrl.substringAfter(",") else dataUrl

@@ -1152,7 +1152,15 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       fetch(getApiUrl('/api/analytics/track'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: post.id, type: 'news', event: 'view' }),
+        body: JSON.stringify({
+          id: post.id,
+          itemId: post.id,
+          title: post.title,
+          type: 'news',
+          event: 'click_create',
+          userEmail: currentUser?.email,
+          userId: currentUser?.userId,
+        }),
       }).catch(() => {});
     } catch {}
     if (!currentUser?.email) {
@@ -3090,6 +3098,23 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         </button>
                       )}
 
+                      {/* Master Admin / Admin Only: सोशल मीडिया स्टोरी बनाएं */}
+                      {canModerate && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedStoryPost(post);
+                            setIsStoryModalOpen(true);
+                          }}
+                          className="py-1.5 px-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-transform active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+                          title="9:16 सोशल मीडिया स्टोरी बनाएं (Admin Only)"
+                        >
+                          <Film className="w-3.5 h-3.5 text-purple-200 shrink-0" />
+                          <span>सोशल स्टोरी</span>
+                        </button>
+                      )}
+
                       {/* Admin / Master Admin Only: वेबसाइट पर जाएँ button */}
                       {canModerate && (
                         (post.sourceUrl || post.url) ? (
@@ -3740,6 +3765,23 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                                   ? `ग्राफिक्स फिर से बनाएँ · शेष ${dailyQuotaStatus?.unlimited ? 'असीमित' : (dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : 10)}`
                                   : `खबर से ग्राफिक बनाएं · शेष ${dailyQuotaStatus?.unlimited ? 'असीमित' : (dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : 10)}`)}
                           </span>
+                        </button>
+                      )}
+
+                      {/* Master Admin / Admin Only: सोशल मीडिया स्टोरी बनाएं */}
+                      {canModerate && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedStoryPost(post);
+                            setIsStoryModalOpen(true);
+                          }}
+                          className="py-1.5 px-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-transform active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
+                          title="9:16 सोशल मीडिया स्टोरी बनाएं (Admin Only)"
+                        >
+                          <Film className="w-3.5 h-3.5 text-purple-200 shrink-0" />
+                          <span>सोशल स्टोरी</span>
                         </button>
                       )}
 
@@ -6203,6 +6245,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         <NewsDetailModal
           post={detailModalPost}
           currentUser={currentUser}
+          canModerate={canModerate}
           isFavorite={userFavorites.has(detailModalPost.id)}
           onToggleFavorite={handleToggleFavorite}
           onSetReminder={handleSetReminder}
@@ -6210,6 +6253,11 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           onOpenStudio={(post) => {
             setDetailModalPost(null);
             handleOpenStudioSafe(post);
+          }}
+          onOpenStory={(post) => {
+            setDetailModalPost(null);
+            setSelectedStoryPost(post);
+            setIsStoryModalOpen(true);
           }}
         />
       )}

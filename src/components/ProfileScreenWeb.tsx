@@ -290,17 +290,15 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       .then((data) => {
         if (data && data.success && data.profile) {
           const cloudP = data.profile;
-          if (cloudP.district || cloudP.location) {
-            const rawDist = (cloudP.district || cloudP.location || '').trim();
-            const cleanDist = (rawDist === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDist === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : (isBnwAdmin ? (rawDist || 'भोपाल') : rawDist);
-            setReporterDistrict(cleanDist);
-          }
+          const rawDist = (cloudP.district || cloudP.location || '').trim();
+          const cleanDist = (rawDist === 'सेंट्रल डेस्क / भोपाल' || rawDist === 'हेडक्वार्टर सेंट्रल डेस्क') ? 'भोपाल' : ((isBnwAdmin || isAinewsAdmin) ? (rawDist || 'भोपाल') : rawDist);
+          if (cleanDist) setReporterDistrict(cleanDist);
+
           if (cloudP.state) {
             setReporterState(cloudP.state);
-          } else if (cloudP.district || cloudP.location) {
-            const rawDist = (cloudP.district || cloudP.location || '').trim();
-            const inf = inferStateFromDistrict(rawDist);
-            if (inf) setReporterState(inf);
+          } else {
+            const inf = inferStateFromDistrict(cleanDist);
+            setReporterState(inf || ((isBnwAdmin || isAinewsAdmin) ? 'मध्य प्रदेश' : ''));
           }
           setChannelProfile((prev) => {
             const rawCandidate = cloudP.channelLogoUrl || cloudP.channelLogoPngUrl || prev.channelLogoUrl || prev.channelLogoPngUrl || '';
@@ -1296,13 +1294,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
   const [reporterDistrict, setReporterDistrict] = useState<string>(() => {
     const raw = (currentUser?.district || channelProfile.district || channelProfile.location || '').trim();
-    return (raw && raw !== 'सेंट्रल डेस्क / भोपाल' && raw !== 'हेडक्वार्टर सेंट्रल डेस्क') ? raw : (isBnwAdmin ? 'भोपाल' : raw);
+    return (raw && raw !== 'सेंट्रल डेस्क / भोपाल' && raw !== 'हेडक्वार्टर सेंट्रल डेस्क') ? raw : ((isBnwAdmin || isAinewsAdmin) ? 'भोपाल' : raw);
   });
   const [reporterState, setReporterState] = useState<string>(() => {
     const rawState = (channelProfile.state || currentUser?.state || '').trim();
     if (rawState) return rawState;
     const rawDist = (currentUser?.district || channelProfile.district || channelProfile.location || '').trim();
-    return inferStateFromDistrict(rawDist) || (isBnwAdmin ? 'मध्य प्रदेश' : '');
+    return inferStateFromDistrict(rawDist) || ((isBnwAdmin || isAinewsAdmin) ? 'मध्य प्रदेश' : '');
   });
   const [saveSettingsSuccess, setSaveSettingsSuccess] = useState<boolean>(false);
   const [isSavingBranding, setIsSavingBranding] = useState<boolean>(false);
@@ -1874,7 +1872,9 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
       const finalPhone = (channelProfile.whatsappNumber || channelProfile.mobileNumber || '').trim();
 
       const rawDistrict = (reporterDistrict || channelProfile.district || channelProfile.location || '').trim();
-      const finalDistrict = (rawDistrict === 'सेंट्रल डेस्क / भोपाल' || (isBnwAdmin && rawDistrict === 'हेडक्वार्टर सेंट्रल डेस्क')) ? 'भोपाल' : rawDistrict;
+      const finalDistrict = (rawDistrict === 'सेंट्रल डेस्क / भोपाल' || rawDistrict === 'हेडक्वार्टर सेंट्रल डेस्क') ? 'भोपाल' : (rawDistrict || ((isBnwAdmin || isAinewsAdmin) ? 'भोपाल' : ''));
+      const finalState = reporterState || channelProfile.state || ((isBnwAdmin || isAinewsAdmin) ? 'मध्य प्रदेश' : '');
+      const finalCity = (channelProfile.city || ((isBnwAdmin || isAinewsAdmin) ? 'भोपाल' : '')).trim();
       const finalWhatsappDisplay = (channelProfile.whatsappDisplayNumber !== undefined && channelProfile.whatsappDisplayNumber.trim())
         ? channelProfile.whatsappDisplayNumber.trim()
         : finalPhone;
@@ -1888,13 +1888,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         linkedin: Boolean(channelProfile.socialIcons.linkedin),
       } : DEFAULT_SOCIAL_ICONS;
 
-      const defaultLoc = finalDistrict ? `${finalDistrict}${reporterState ? `, ${reporterState}` : ''}` : (channelProfile.defaultLocation || finalDistrict);
+      const defaultLoc = finalDistrict ? `${finalDistrict}${finalState ? `, ${finalState}` : ''}` : (channelProfile.defaultLocation || finalDistrict);
       const updatedProfile = {
         ...channelProfile,
         accountType: channelProfile.accountType || 'channel',
-        state: reporterState || channelProfile.state || '',
+        state: finalState,
         district: finalDistrict,
-        city: (channelProfile.city || '').trim(),
+        city: finalCity,
         location: finalDistrict,
         defaultLocation: defaultLoc,
         whatsappNumber: finalPhone,

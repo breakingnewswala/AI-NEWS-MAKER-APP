@@ -112,10 +112,8 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
     );
   });
   
-  // Filters (Part 5: 1:1, Category dropdown & Search removed; Clean Manager UI)
-  // Legacy filter test assertions: selectedRatio === 'all' && selectedRatio === '4:5' && selectedRatio === '9:16' && selectedRatio === '1:1'
-  // Legacy filter test assertions: filterCategory !== 'all' && searchQuery
-  const [selectedRatio, setSelectedRatio] = useState<'all' | '4:5' | '1:1' | '9:16'>('all');
+  // Filters (Graphic Template Control: 4:5 and 1:1; 9:16 moved to dedicated Story Template Control)
+  const [selectedRatio, setSelectedRatio] = useState<'all' | '4:5' | '1:1'>('all');
   const [filterPlan, setFilterPlan] = useState<'all' | GraphicPlanCategory>('all');
   const [selectedCategory, setSelectedCategory] = useState<'all' | CanonicalFrameCategory>('all');
   
@@ -342,7 +340,8 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
         };
       });
 
-    return [...dynamicItems, ...staticItems];
+    // Only return graphic aspect ratios (4:5 and 1:1); 9:16 is exclusively managed in Story Template Control
+    return [...dynamicItems, ...staticItems].filter((i) => i.aspectRatio !== '9:16');
   }, [dynamicFramesList, frameOptions, templateConfigs]);
 
   // Unified allFrames collection
@@ -360,7 +359,6 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
 
   const count4_5 = displayItems.filter((i) => i.aspectRatio === '4:5').length;
   const count1_1 = displayItems.filter((i) => i.aspectRatio === '1:1').length;
-  const count9_16 = displayItems.filter((i) => i.aspectRatio === '9:16').length;
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { all: displayItems.length };
@@ -499,18 +497,6 @@ export const AdminTemplatePlanManager: React.FC<AdminTemplatePlanManagerProps> =
             }`}
           >
             <span>1:1 स्क्वायर ({count1_1})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setSelectedRatio('9:16')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer transition flex items-center gap-1.5 whitespace-nowrap ${
-              selectedRatio === '9:16'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'bg-slate-800/80 text-slate-300 hover:text-white'
-            }`}
-          >
-            <span>9:16 सोशल स्टोरी ({count9_16})</span>
           </button>
         </div>
 

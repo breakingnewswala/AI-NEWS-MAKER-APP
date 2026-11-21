@@ -23,6 +23,7 @@ import {
   ChevronDown,
   ChevronUp,
   Film,
+  Smartphone,
 } from 'lucide-react';
 import {
   getCustomFrames,
@@ -40,6 +41,7 @@ import {
 } from '../lib/userTemplatesManager';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
 import { AdminVideoTemplateControl } from './AdminVideoTemplateControl';
+import { AdminStoryTemplateControl } from './AdminStoryTemplateControl';
 import { AdminAssetLibrariesManager } from './AdminAssetLibrariesManager';
 import { DynamicFrameGeneratorModal } from './DynamicFrameGeneratorModal';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -98,9 +100,10 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
     active: boolean;
   } | null>(null);
 
-  // Admin Section Accordion States (Part 15 + Section D: AI Frame Generator)
+  // Admin Section Accordion States (Part 15 + Section C: Story Template Control + Section E: AI Frame Generator)
   const [isGraphicsExpanded, setIsGraphicsExpanded] = useState(false);
   const [isVideoExpanded, setIsVideoExpanded] = useState(false);
+  const [isStoryExpanded, setIsStoryExpanded] = useState(false);
   const [isApprovalExpanded, setIsApprovalExpanded] = useState(false);
   const [isFrameGenExpanded, setIsFrameGenExpanded] = useState(false);
 
@@ -1467,25 +1470,26 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
       {/* ========================================================================= */}
       {isAdmin && (
         <div className="space-y-6 animate-in fade-in">
-          {/* Phase 5: Mobile Single-Row 4 Controls (A, B, C, D) + Details Section Below */}
+          {/* Phase 5: Mobile Single-Row 5 Controls (A, B, C, D, E) + Details Section Below */}
           <div className="md:hidden space-y-3">
-            <div className="grid grid-cols-4 gap-1.5">
+            <div className="grid grid-cols-5 gap-1">
               <button
                 type="button"
                 onClick={() => {
                   setIsGraphicsExpanded(!isGraphicsExpanded);
                   setIsVideoExpanded(false);
+                  setIsStoryExpanded(false);
                   setIsApprovalExpanded(false);
                   setIsFrameGenExpanded(false);
                 }}
-                className={`p-2 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
+                className={`p-1.5 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
                   isGraphicsExpanded
                     ? 'bg-purple-600 text-white border-purple-400 font-black shadow-md'
                     : 'bg-slate-900 text-purple-300 border-purple-500/30'
                 }`}
               >
-                <Layout className="w-4 h-4" />
-                <span className="text-[10px] font-bold leading-tight">A. ग्राफिक</span>
+                <Layout className="w-3.5 h-3.5" />
+                <span className="text-[9.5px] font-bold leading-tight">A. ग्राफिक</span>
               </button>
 
               <button
@@ -1493,17 +1497,37 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                 onClick={() => {
                   setIsVideoExpanded(!isVideoExpanded);
                   setIsGraphicsExpanded(false);
+                  setIsStoryExpanded(false);
                   setIsApprovalExpanded(false);
                   setIsFrameGenExpanded(false);
                 }}
-                className={`p-2 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
+                className={`p-1.5 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
                   isVideoExpanded
                     ? 'bg-amber-600 text-white border-amber-400 font-black shadow-md'
                     : 'bg-slate-900 text-amber-300 border-amber-500/30'
                 }`}
               >
-                <Film className="w-4 h-4" />
-                <span className="text-[10px] font-bold leading-tight">B. वीडियो</span>
+                <Film className="w-3.5 h-3.5" />
+                <span className="text-[9.5px] font-bold leading-tight">B. वीडियो</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsStoryExpanded(!isStoryExpanded);
+                  setIsGraphicsExpanded(false);
+                  setIsVideoExpanded(false);
+                  setIsApprovalExpanded(false);
+                  setIsFrameGenExpanded(false);
+                }}
+                className={`p-1.5 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
+                  isStoryExpanded
+                    ? 'bg-pink-600 text-white border-pink-400 font-black shadow-md'
+                    : 'bg-slate-900 text-pink-300 border-pink-500/30'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span className="text-[9.5px] font-bold leading-tight">C. स्टोरी</span>
               </button>
 
               <button
@@ -1512,16 +1536,17 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                   setIsApprovalExpanded(!isApprovalExpanded);
                   setIsGraphicsExpanded(false);
                   setIsVideoExpanded(false);
+                  setIsStoryExpanded(false);
                   setIsFrameGenExpanded(false);
                 }}
-                className={`p-2 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
+                className={`p-1.5 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
                   isApprovalExpanded
                     ? 'bg-indigo-600 text-white border-indigo-400 font-black shadow-md'
                     : 'bg-slate-900 text-indigo-300 border-indigo-500/30'
                 }`}
               >
-                <Layers className="w-4 h-4" />
-                <span className="text-[10px] font-bold leading-tight">C. अप्रूवल</span>
+                <Layers className="w-3.5 h-3.5" />
+                <span className="text-[9.5px] font-bold leading-tight">D. अप्रूवल</span>
               </button>
 
               <button
@@ -1530,16 +1555,17 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                   setIsFrameGenExpanded(!isFrameGenExpanded);
                   setIsGraphicsExpanded(false);
                   setIsVideoExpanded(false);
+                  setIsStoryExpanded(false);
                   setIsApprovalExpanded(false);
                 }}
-                className={`p-2 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
+                className={`p-1.5 rounded-xl border text-center flex flex-col items-center justify-center gap-1 transition shadow-xs cursor-pointer ${
                   isFrameGenExpanded
-                    ? 'bg-pink-600 text-white border-pink-400 font-black shadow-md'
-                    : 'bg-slate-900 text-pink-300 border-pink-500/30'
+                    ? 'bg-emerald-600 text-white border-emerald-400 font-black shadow-md'
+                    : 'bg-slate-900 text-emerald-300 border-emerald-500/30'
                 }`}
               >
-                <Sparkles className="w-4 h-4 text-amber-300" />
-                <span className="text-[10px] font-bold leading-tight">D. AI फ्रेम</span>
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span className="text-[9.5px] font-bold leading-tight">E. AI फ्रेम</span>
               </button>
             </div>
 
@@ -1550,10 +1576,10 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                 <span className="text-amber-400 font-bold">PRO & VIP DESK • AI STUDIO</span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-[10.5px]">
-                <div className="text-purple-300">• 8 ग्राफिक श्रेणियां</div>
+                <div className="text-purple-300">• 8 ग्राफिक श्रेणियां (4:5, 1:1)</div>
                 <div className="text-amber-300">• 9:16, 1:1, 4:5 वीडियो</div>
-                <div className="text-indigo-300">• कस्टम हेडर/फुटर</div>
-                <div className="text-pink-300">• 4:5 व 9:16 AI फ्रेम जनरेटर</div>
+                <div className="text-pink-300">• 9:16 सोशल मीडिया स्टोरी</div>
+                <div className="text-indigo-300">• कस्टम हेडर/फुटर अप्रूवल</div>
               </div>
             </div>
 
@@ -1574,6 +1600,23 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
             {isVideoExpanded && (
               <div className="p-3 bg-slate-950/80 border border-amber-500/40 rounded-xl animate-in fade-in">
                 <AdminVideoTemplateControl onOpenStudioWithVideoFrame={onOpenStudioWithTemplate} />
+              </div>
+            )}
+            {isStoryExpanded && (
+              <div className="p-3 bg-slate-950/80 border border-pink-500/40 rounded-xl animate-in fade-in">
+                <AdminStoryTemplateControl
+                  onOpenStudioWithStory={onOpenStudioWithTemplate}
+                  onEditFrame={(frame) => {
+                    setSelectedEditFrame(frame);
+                    setSelectedGeneratorMode('photo');
+                    setIsDynamicFrameModalOpen(true);
+                  }}
+                  onNewStoryFrame={() => {
+                    setSelectedEditFrame(null);
+                    setSelectedGeneratorMode('photo');
+                    setIsDynamicFrameModalOpen(true);
+                  }}
+                />
               </div>
             )}
             {isApprovalExpanded && (
@@ -1673,7 +1716,53 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
             )}
           </div>
 
-          {/* 15.3 SECTION C: Custom Ad Reporter Approval */}
+          {/* 15.3 SECTION C: Story Template Control (स्टोरी टेम्पलेट कंट्रोल) */}
+          <div id="admin-story-section" className="border border-pink-500/30 rounded-2xl overflow-hidden bg-slate-900/60 shadow-xl">
+            <button
+              type="button"
+              onClick={() => setIsStoryExpanded(!isStoryExpanded)}
+              className="w-full p-4 bg-gradient-to-r from-pink-950/80 via-slate-900 to-purple-950/80 flex items-center justify-between text-left hover:bg-slate-800/80 transition cursor-pointer"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-pink-600/30 border border-pink-500/50 text-pink-300">
+                  <Smartphone className="w-5 h-5 text-pink-400" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-base font-black text-white">C. Story Template Control (स्टोरी टेम्पलेट कंट्रोल)</h4>
+                    <span className="px-2 py-0.5 text-[10px] bg-pink-500/20 text-pink-300 font-bold rounded-full border border-pink-500/40">
+                      9:16 वर्टिकल स्टोरीज़ • मास्टर एडमिन
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    सोशल मीडिया (Instagram, FB, WhatsApp) 9:16 स्टोरी टेम्पलेट्स, हेडर, 50% फोटो, हेडलाइन व फुटर कंट्रोल
+                  </p>
+                </div>
+              </div>
+              <div className="p-1.5 rounded-lg bg-slate-800 text-slate-300">
+                {isStoryExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+              </div>
+            </button>
+            {isStoryExpanded && (
+              <div className="p-4 sm:p-6 border-t border-pink-500/20 bg-slate-950/40 animate-in fade-in">
+                <AdminStoryTemplateControl
+                  onOpenStudioWithStory={onOpenStudioWithTemplate}
+                  onEditFrame={(frame) => {
+                    setSelectedEditFrame(frame);
+                    setSelectedGeneratorMode('photo');
+                    setIsDynamicFrameModalOpen(true);
+                  }}
+                  onNewStoryFrame={() => {
+                    setSelectedEditFrame(null);
+                    setSelectedGeneratorMode('photo');
+                    setIsDynamicFrameModalOpen(true);
+                  }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* 15.4 SECTION D: Custom Ad Reporter Approval */}
           <div id="custom-hf-approval-section" className="border border-indigo-500/30 rounded-2xl overflow-hidden bg-slate-900/60 shadow-xl">
             <button
               type="button"
@@ -1686,7 +1775,7 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h4 className="text-base font-black text-white">C. Custom Ad Reporter Approval</h4>
+                    <h4 className="text-base font-black text-white">D. Custom Ad Reporter Approval</h4>
                     <span className="px-2 py-0.5 text-[10px] bg-indigo-500/20 text-indigo-300 font-bold rounded-full border border-indigo-500/40">
                       PRO & VIP DESK अप्रूवल
                     </span>
@@ -2200,7 +2289,7 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h4 className="text-base font-black text-white">D. AI Frame Generator</h4>
+                      <h4 className="text-base font-black text-white">E. AI Frame Generator</h4>
                       <span className="px-2 py-0.5 text-[10px] bg-pink-500/20 text-pink-300 font-bold rounded-full border border-pink-500/40">
                         4:5 व 9:16 • Gemini AI विज़न
                       </span>

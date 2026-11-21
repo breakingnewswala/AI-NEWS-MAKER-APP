@@ -33,6 +33,22 @@ class AppFirebaseMessagingService : FirebaseMessagingService() {
             ?: "नई ताज़ा खबर उपलब्ध है"
         val newsId = remoteMessage.data["newsId"] ?: remoteMessage.data["postId"] ?: ""
 
+        // Trigger live In-App notification when WebView is active
+        try {
+            val safeTitle = title.replace("\\", "\\\\").replace("'", "\\'").replace("\n", " ").replace("\r", "")
+            val safeBody = body.replace("\\", "\\\\").replace("'", "\\'").replace("\n", " ").replace("\r", "")
+            val safeId = newsId.replace("\\", "\\\\").replace("'", "\\'")
+            MainActivity.activeWebView?.post {
+                MainActivity.activeWebView?.evaluateJavascript(
+                    "(function() { " +
+                    "window.dispatchEvent(new CustomEvent('ai_news_notification_received', { detail: { title: '$safeTitle', message: '$safeBody', body: '$safeBody', newsId: '$safeId', postId: '$safeId' } })); " +
+                    "if (window.addAppNotification) { window.addAppNotification({ title: '$safeTitle', message: '$safeBody', newsId: '$safeId', type: 'news', unread: true }); } " +
+                    "})();",
+                    null
+                )
+            }
+        } catch (_: Exception) {}
+
         sendNotification(title, body, newsId)
     }
 
