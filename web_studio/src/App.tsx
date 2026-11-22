@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { NewsCardData, AIAnalysisResult, ChannelProfile, FrameDesign } from './types';
 import { INITIAL_PRESETS, PLACEHOLDER_NEWS_IMG } from './data/presets';
 import { CardPreview } from './components/CardPreview';
@@ -89,8 +89,8 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import { VideoStudioWeb } from './components/VideoStudioWeb'; 
-import { RemotionTestStudio } from './components/RemotionTestStudio'; 
+const VideoStudioWeb = React.lazy(() => import('./components/VideoStudioWeb').then((m) => ({ default: m.VideoStudioWeb })));
+const RemotionTestStudio = React.lazy(() => import('./components/RemotionTestStudio').then((m) => ({ default: m.RemotionTestStudio })));
 import { FRAME_OPTIONS } from './lib/HeaderDesigns';
 import { AutoFillNewsData } from './components/InlineAiNewsTools';
 import { AppTopBarWeb } from './components/AppTopBarWeb';
@@ -104,11 +104,11 @@ import { DraftsScreenWeb } from './components/DraftsScreenWeb';
 import { addProjectToHistory } from './lib/projectHistoryManager';
 import { CategoriesScreenWeb } from './components/CategoriesScreenWeb';
 import { ExportScreenWeb } from './components/ExportScreenWeb';
-import { TermsPage } from './components/TermsPage';
-import { PrivacyPolicyPage } from './components/PrivacyPolicyPage';
-import { AccountDeletionPage } from './components/AccountDeletionPage';
-import { SupportContactPage } from './components/SupportContactPage';
-import { RefundCancellationPolicyPage } from './components/RefundCancellationPolicyPage';
+const TermsPage = React.lazy(() => import('./components/TermsPage').then((m) => ({ default: m.TermsPage })));
+const PrivacyPolicyPage = React.lazy(() => import('./components/PrivacyPolicyPage').then((m) => ({ default: m.PrivacyPolicyPage })));
+const AccountDeletionPage = React.lazy(() => import('./components/AccountDeletionPage').then((m) => ({ default: m.AccountDeletionPage })));
+const SupportContactPage = React.lazy(() => import('./components/SupportContactPage').then((m) => ({ default: m.SupportContactPage })));
+const RefundCancellationPolicyPage = React.lazy(() => import('./components/RefundCancellationPolicyPage').then((m) => ({ default: m.RefundCancellationPolicyPage })));
 import { AppFooterWeb } from './components/AppFooterWeb';
 import { GraphicStudioGuideModal } from './components/GraphicStudioGuideModal';
 import { PackagePurchaseModal } from './components/PackagePurchaseModal';
@@ -2249,7 +2249,7 @@ export default function App() {
       if (!trialToastShown) {
         sessionStorage.setItem('trial_notice_toast_shown', 'true');
         const timer = setTimeout(() => {
-          showToast(`ℹ️ आप 7-दिवसीय फ्री ट्रायल (PRO फीचर्स ₹999/माह मूल्य) उपयोग कर रहे हैं (${userSubscription.daysRemaining || 7} दिन शेष)`);
+          showToast(`ℹ️ आप 7-दिवसीय फ्री ट्रायल (PRO फीचर्स ₹4,199/माह मूल्य) उपयोग कर रहे हैं (${userSubscription.daysRemaining || 7} दिन शेष)`);
         }, 1500);
         return () => clearTimeout(timer);
       }
@@ -3139,12 +3139,11 @@ export default function App() {
       }
     } catch {}
 
-    // Validate card against safe-zone layout before download
+    // Validate card against safe-zone layout before download (diagnostics logged, no intrusive toast popup)
     try {
       const validation = validateCardBeforeDownload(card);
       if (!validation.isValid && validation.errors.length > 0) {
         console.warn('Card pre-download validation warning:', validation.errors);
-        showToast(`⚠️ सेफ-ज़ोन चेतावनी: ${validation.errors[0]}`);
       }
     } catch (valErr) {
       console.warn('Pre-download validation check:', valErr);
@@ -4725,7 +4724,7 @@ export default function App() {
                   ट्रायल पीरियड (7-Day Free Trial):{' '}
                 </span>
                 <span className="text-slate-200 text-[11px] sm:text-xs">
-                  अभी आप ट्रायल पीरियड ({userSubscription?.daysRemaining || 7} दिन शेष) की सेवाएं उपयोग कर रहे हैं। PRO फीचर्स (₹999/माह मूल्य) एक्टिव हैं। 7 दिन बाद पैकेज खरीदना होगा।
+                  अभी आप ट्रायल पीरियड ({userSubscription?.daysRemaining || 7} दिन शेष) की सेवाएं उपयोग कर रहे हैं। PRO फीचर्स (₹4,199/माह मूल्य) एक्टिव हैं। 7 दिन बाद पैकेज खरीदना होगा।
                 </span>
               </div>
             </div>
@@ -5024,14 +5023,23 @@ export default function App() {
           {studioMode === 'video' ? (
             <ErrorBoundary fallbackTitle="वीडियो स्टूडियो लोड करने में समस्या आई">
               <div className="w-full">
-                <VideoStudioWeb
-                  currentUser={currentUser}
-                  initialVideo={studioInitialItem}
-                  initialVideoUrl={studioInitialVideo || undefined}
-                  initialHeadline={studioInitialHeadline || undefined}
-                  onBackToGraphic={() => updateStudioMode('graphic')}
-                  onNavigateHome={() => setCurrentTab('home')}
-                />
+                <Suspense
+                  fallback={
+                    <div className="w-full h-96 flex flex-col items-center justify-center gap-3 bg-slate-950/80 rounded-2xl border border-slate-800 text-amber-400">
+                      <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-xs font-bold">वीडियो स्टूडियो लोड हो रहा है...</span>
+                    </div>
+                  }
+                >
+                  <VideoStudioWeb
+                    currentUser={currentUser}
+                    initialVideo={studioInitialItem}
+                    initialVideoUrl={studioInitialVideo || undefined}
+                    initialHeadline={studioInitialHeadline || undefined}
+                    onBackToGraphic={() => updateStudioMode('graphic')}
+                    onNavigateHome={() => setCurrentTab('home')}
+                  />
+                </Suspense>
               </div>
             </ErrorBoundary>
           ) : (
@@ -5832,47 +5840,49 @@ export default function App() {
       )}
 
       {/* 6. Terms & Conditions */}
-      {currentTab === 'terms' && (
-        <TermsPage
-          onBack={() => navigateToTab('home')}
-          onNavigateToSupport={() => navigateToTab('support')}
-        />
-      )}
+      <Suspense fallback={<div className="p-12 text-center text-slate-400 font-bold">लोड हो रहा है...</div>}>
+        {currentTab === 'terms' && (
+          <TermsPage
+            onBack={() => navigateToTab('home')}
+            onNavigateToSupport={() => navigateToTab('support')}
+          />
+        )}
 
-      {/* 7. Privacy Policy */}
-      {currentTab === 'privacy' && (
-        <PrivacyPolicyPage
-          onBack={() => navigateToTab('home')}
-          onNavigateToDeleteAccount={() => navigateToTab('delete-account')}
-          onNavigateToSupport={() => navigateToTab('support')}
-        />
-      )}
+        {/* 7. Privacy Policy */}
+        {currentTab === 'privacy' && (
+          <PrivacyPolicyPage
+            onBack={() => navigateToTab('home')}
+            onNavigateToDeleteAccount={() => navigateToTab('delete-account')}
+            onNavigateToSupport={() => navigateToTab('support')}
+          />
+        )}
 
-      {/* 8. Refunds & Cancellations Policy */}
-      {currentTab === 'refunds' && (
-        <RefundCancellationPolicyPage
-          onBack={() => navigateToTab('home')}
-          onNavigateToTab={navigateToTab}
-          onNavigateToSupport={() => navigateToTab('support')}
-        />
-      )}
+        {/* 8. Refunds & Cancellations Policy */}
+        {currentTab === 'refunds' && (
+          <RefundCancellationPolicyPage
+            onBack={() => navigateToTab('home')}
+            onNavigateToTab={navigateToTab}
+            onNavigateToSupport={() => navigateToTab('support')}
+          />
+        )}
 
-      {/* 9. Account Deletion */}
-      {currentTab === 'delete-account' && (
-        <AccountDeletionPage
-          onBack={() => navigateToTab('home')}
-          currentUser={currentUser}
-          onLogout={handleLogout}
-        />
-      )}
+        {/* 9. Account Deletion */}
+        {currentTab === 'delete-account' && (
+          <AccountDeletionPage
+            onBack={() => navigateToTab('home')}
+            currentUser={currentUser}
+            onLogout={handleLogout}
+          />
+        )}
 
-      {/* 9. Support & Contact Us */}
-      {currentTab === 'support' && (
-        <SupportContactPage
-          onBack={() => navigateToTab('home')}
-          currentUser={currentUser}
-        />
-      )}
+        {/* 9. Support & Contact Us */}
+        {currentTab === 'support' && (
+          <SupportContactPage
+            onBack={() => navigateToTab('home')}
+            currentUser={currentUser}
+          />
+        )}
+      </Suspense>
 
       {/* Website Footer — Shared on Home, Video & Reels, and Newsroom */}
       {(currentTab === 'home' || currentTab === 'videos' || currentTab === 'newsroom' || currentTab === 'drafts') && (

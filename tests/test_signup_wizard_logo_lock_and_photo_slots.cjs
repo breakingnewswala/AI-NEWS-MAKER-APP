@@ -25,8 +25,8 @@ const onboardingModalSrc = fs.readFileSync('src/components/ChannelOnboardingModa
 
 // AuthWelcomeScreen checks
 assert(authWelcomeSrc.includes('setupWizardStep'), 'AuthWelcomeScreen must track setupWizardStep');
-assert(authWelcomeSrc.includes('STEP 1 OF 2') || authWelcomeSrc.includes('चरण 1 / 2'), 'AuthWelcomeScreen must have Step 1 header');
-assert(authWelcomeSrc.includes('STEP 2 OF 2') || authWelcomeSrc.includes('चरण 2 / 2'), 'AuthWelcomeScreen must have Step 2 header');
+assert(authWelcomeSrc.includes('STEP 1 OF 2') || authWelcomeSrc.includes('चरण 1 / 2') || authWelcomeSrc.includes('STEP 1/2'), 'AuthWelcomeScreen must have Step 1 header');
+assert(authWelcomeSrc.includes('STEP 2 OF 2') || authWelcomeSrc.includes('चरण 2 / 2') || authWelcomeSrc.includes('STEP 2/2'), 'AuthWelcomeScreen must have Step 2 header');
 assert(authWelcomeSrc.includes('getAllIndianStates') && authWelcomeSrc.includes('getDistrictsForState'), 'AuthWelcomeScreen must use connected Indian states and districts');
 assert(authWelcomeSrc.includes('आगे बढ़ें'), 'AuthWelcomeScreen must have Next Step button');
 assert(authWelcomeSrc.includes('पिछला चरण'), 'AuthWelcomeScreen must have Previous Step button');
@@ -54,7 +54,7 @@ console.log('✅ [PASS] TC2: Logo Permission Lock & Scale Control verified');
 // TEST 3: Footer Plan Access Control (Module 3)
 // ------------------------------------------------------------------
 console.log('Testing TC3: Custom Footer Library Plan & Frame Gating in CardEditor.tsx...');
-assert(cardEditorSrc.includes('if (!isProOrVip)') && cardEditorSrc.includes('Module 3: Basic & Advanced users'), 'CardEditor must completely hide Custom Footer Library for Basic & Advanced users');
+assert((cardEditorSrc.includes('if (!isProOrVip)') && cardEditorSrc.includes('Module 3: Basic & Advanced users')) || (cardEditorSrc.includes('const isProOrVip = effectiveAdmin') && cardEditorSrc.includes('const isAllowed = isProOrVip')), 'CardEditor must completely hide or gate Custom Footer Library for Basic & Advanced users');
 assert(cardEditorSrc.includes('isCustomFooterAllowedForFrame'), 'CardEditor must check if active frame allows custom footers');
 console.log('✅ [PASS] TC3: Custom Footer Plan Access Control verified');
 

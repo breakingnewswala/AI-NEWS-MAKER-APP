@@ -20,6 +20,7 @@ import {
   getTitleSafeZone,
   resolveEffectiveHeadline,
 } from '../lib/canonicalLayoutEngine';
+import { getBasicNewsTheme, isBasicNewsTheme } from '../lib/basicNewsThemes';
 
 interface CardPreviewProps {
   card: NewsCardData;
@@ -677,6 +678,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
   const renderFormattedHeadline = (customColor?: string, customHighlight?: string) => {
     if (!canonicalLayout.lines || canonicalLayout.lines.length === 0) return null;
 
+    const isBasicTheme = !card.frameDesign || card.frameDesign === 'graphic_001' || isBasicNewsTheme(card.frameDesign);
+    const basicTheme = getBasicNewsTheme(card.frameDesign);
     const isGraphic1 = card.frameDesign === 'graphic_001';
     const isGraphic2 = card.frameDesign === 'graphic_002';
     const isGraphic3 = card.frameDesign === 'graphic_003';
@@ -687,24 +690,28 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     const isMorning = card.frameDesign === 'jacket-morning';
     const isIvory = isMorning && card.morningDesignStyle === 'editorial-ivory';
     const isEmerald = isMorning && card.morningDesignStyle === 'emerald-zen';
-    const isLightTemplate = isGraphic2 || isGraphic4 || isDefault || isSuperBreaking || isTextBreaking || isIvory;
+    const isLightTemplate = isGraphic2 || isGraphic4 || isDefault || isSuperBreaking || isTextBreaking || isIvory || (isBasicTheme && basicTheme.isLightPlate);
 
     // Base and highlight colors
-    const baseTextColor = customColor || ((isGraphic2 || isGraphic4 || isIvory || isDefault)
-      ? '#000000'
-      : (isGraphic1 || isGraphic3 ? '#FFFFFF' : (isMorning ? '#FFFFFF' : (isLightTemplate ? '#000000' : '#FFFFFF'))));
+    const baseTextColor = customColor || (isBasicTheme
+      ? (basicTheme.isLightPlate ? '#0B132B' : '#FFFFFF')
+      : ((isGraphic2 || isGraphic4 || isIvory || isDefault)
+        ? '#000000'
+        : (isGraphic1 || isGraphic3 ? '#FFFFFF' : (isMorning ? '#FFFFFF' : (isLightTemplate ? '#000000' : '#FFFFFF')))));
 
-    const defaultTemplateHighlight = df?.primaryHighlightColor || df?.quoteHighlightColor || (isGraphic4
-      ? '#DC2626'
-      : isGraphic2
-      ? '#EA580C'
-      : isIvory
-      ? '#B45309'
-      : isEmerald
-      ? '#FACC15'
-      : isLightTemplate
-      ? '#DC2626'
-      : '#FFE600');
+    const defaultTemplateHighlight = df?.primaryHighlightColor || df?.quoteHighlightColor || (isBasicTheme
+      ? (basicTheme.headlineHighlightColor || (basicTheme.isLightPlate ? '#DC2626' : '#FFE600'))
+      : (isGraphic4
+        ? '#DC2626'
+        : isGraphic2
+        ? '#EA580C'
+        : isIvory
+        ? '#B45309'
+        : isEmerald
+        ? '#FACC15'
+        : isLightTemplate
+        ? '#DC2626'
+        : '#FFE600'));
 
     const highlightColor = customHighlight || card.highlightColor || defaultTemplateHighlight;
     const isBlackText = baseTextColor.toLowerCase() === '#000000' || baseTextColor.toLowerCase() === 'black' || baseTextColor.toLowerCase() === '#0f172a';
@@ -1033,8 +1040,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         );
       })()}
 
-      {/* 0. BASE BACKGROUND FOR GRAPHIC_001 */}
-      {!df && card.frameDesign === 'graphic_001' && (
+      {/* 0. BASE BACKGROUND FOR GRAPHIC_001 & 22 BASIC THEMES */}
+      {!df && (!card.frameDesign || card.frameDesign === 'graphic_001' || isBasicNewsTheme(card.frameDesign)) && (
         <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none select-none">
           <img
             src="/assets/primary_news_graphic_bg.jpg"
@@ -1115,12 +1122,12 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         </div>
       ) : (!df) ? (
       <div
-        className={`absolute inset-x-0 z-10 overflow-hidden transition-all duration-150 ${card.frameDesign === 'graphic_001' ? 'bg-transparent' : 'bg-neutral-950'}`}
+        className={`absolute inset-x-0 z-10 overflow-hidden transition-all duration-150 ${(!card.frameDesign || card.frameDesign === 'graphic_001' || isBasicNewsTheme(card.frameDesign)) ? 'bg-transparent' : 'bg-neutral-950'}`}
         style={{
           top: card.frameDesign === 'graphic_004' ? '33.2%' : '0px',
           bottom: card.frameDesign === 'graphic_003'
             ? '0px'
-            : card.frameDesign === 'graphic_001'
+            : (!card.frameDesign || card.frameDesign === 'graphic_001' || isBasicNewsTheme(card.frameDesign))
             ? dynamicBannerMetrics.photoBottom
             : card.frameDesign === 'graphic_002'
             ? '47%'
@@ -1946,7 +1953,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                         top: `${calloutY}%`,
                         width: `${df.fullStoryCalloutConfig?.rect?.width ?? 80}%`,
                         height: `${calloutRawH}%`,
-                        transform: `rotate(${df.fullStoryCalloutConfig?.rotation || 0}deg) scale(${card.calloutScale ?? 1.4})`,
+                        transform: `rotate(${df.fullStoryCalloutConfig?.rotation || 0}deg) scale(${card.calloutScale ?? 1.1})`,
                         transformOrigin: 'center center',
                       }}
                     >
@@ -2083,8 +2090,11 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             </div>
           );
         })()
-      ) : card.frameDesign === 'graphic_001' ? (
-        /* ================= GRAPHIC 1 (AUTHENTIC DEFAULT 4:5 PRIMARY NEWS GRAPHIC) ================= */
+      ) : (!card.frameDesign || card.frameDesign === 'graphic_001' || isBasicNewsTheme(card.frameDesign)) ? (
+        /* ================= GRAPHIC 1 & 22 BASIC NEWS THEMES (AUTHENTIC 4:5 PRIMARY NEWS GRAPHIC) ================= */
+        (() => {
+          const activeBasicTheme = getBasicNewsTheme(card.frameDesign);
+          return (
         <div className="absolute inset-0 z-20 pointer-events-none select-none overflow-hidden">
           {/* Custom Header PNG if user assigned custom header */}
           {getActiveHeaderPng(card) && (
@@ -2258,33 +2268,45 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             );
           })()}
 
-          {/* Red Headline Area (Dynamic Top & Height Auto-Adjusted to line count):
-              - Always renders the authentic red banner overlay to ensure clean default slate.
+          {/* Headline Area (Dynamic Top & Height Auto-Adjusted to line count):
+              - Always renders the authentic theme banner overlay to ensure clean default slate.
               - When user writes a headline, text is rendered centered in real time. */}
           <div
             className="absolute inset-x-0 z-25 flex items-center justify-center px-4 sm:px-8 pointer-events-auto"
             style={{
               top: dynamicBannerMetrics.top,
               height: dynamicBannerMetrics.height,
-              background: 'linear-gradient(180deg, #E20000 0%, #BA0000 50%, #900000 100%)',
-              boxShadow: 'inset 0 2px 10px rgba(255, 255, 255, 0.25), inset 0 -2px 10px rgba(0, 0, 0, 0.4)',
+              background: activeBasicTheme.plateGradient,
+              boxShadow: activeBasicTheme.isLightPlate
+                ? 'inset 0 2px 6px rgba(0, 0, 0, 0.08), inset 0 -2px 6px rgba(0, 0, 0, 0.12)'
+                : 'inset 0 2px 10px rgba(255, 255, 255, 0.25), inset 0 -2px 10px rgba(0, 0, 0, 0.4)',
             }}
           >
             {/* Glowing Divider Beam above headline banner matching CanvasExporter */}
             <div
               className="absolute inset-x-0 -top-[3px] h-[6px] pointer-events-none"
               style={{
-                background: 'linear-gradient(90deg, rgba(255,26,26,0) 0%, rgba(255,77,0,0.85) 35%, #FFE600 50%, rgba(255,77,0,0.85) 65%, rgba(255,26,26,0) 100%)',
-                boxShadow: '0 0 10px #FFE600',
+                background: activeBasicTheme.beamGradient,
+                boxShadow: `0 0 10px ${activeBasicTheme.isLightPlate ? '#DC2626' : '#FFE600'}`,
               }}
             />
             {/* Subtle top & bottom banner highlight bevels */}
-            <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-transparent via-amber-200 to-transparent opacity-85 pointer-events-none" />
-            <div className="absolute inset-x-0 bottom-0 h-[3px] bg-gradient-to-r from-transparent via-amber-300 to-transparent opacity-75 pointer-events-none" />
+            <div
+              className="absolute inset-x-0 top-0 h-[3px] opacity-85 pointer-events-none"
+              style={{
+                background: `linear-gradient(90deg, transparent, ${activeBasicTheme.bevelTopColor}, transparent)`,
+              }}
+            />
+            <div
+              className="absolute inset-x-0 bottom-0 h-[3px] opacity-75 pointer-events-none"
+              style={{
+                background: `linear-gradient(90deg, transparent, ${activeBasicTheme.bevelBottomColor}, transparent)`,
+              }}
+            />
 
-            {/* Left & Right Dark Red Chevron Accent Stripes matching exported graphic */}
+            {/* Left & Right Chevron Accent Stripes matching exported graphic */}
             <svg className="absolute left-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
-              <g fill="#7A0005" opacity="0.6">
+              <g fill={activeBasicTheme.chevronColor} opacity={activeBasicTheme.isLightPlate ? 0.35 : 0.6}>
                 <polygon points="0,20 60,20 30,80 0,80" />
                 <polygon points="0,100 75,100 35,180 0,180" />
                 <polygon points="0,200 90,200 40,300 0,300" />
@@ -2292,7 +2314,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               </g>
             </svg>
             <svg className="absolute right-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
-              <g fill="#7A0005" opacity="0.6">
+              <g fill={activeBasicTheme.chevronColor} opacity={activeBasicTheme.isLightPlate ? 0.35 : 0.6}>
                 <polygon points="100,20 40,20 70,80 100,80" />
                 <polygon points="100,100 25,100 65,180 100,180" />
                 <polygon points="100,200 10,200 60,300 100,300" />
@@ -2325,7 +2347,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             className="absolute inset-x-0 bottom-0 z-30 flex items-center pointer-events-auto shadow-[0_-2px_10px_rgba(0,0,0,0.1)]"
             style={{
               height: '8.0%',
-              backgroundColor: card.footerBgColor || '#FFFFFF',
+              backgroundColor: card.footerBgColor || activeBasicTheme.footerBgColor,
             }}
           >
             <FooterGraphic
@@ -2337,15 +2359,18 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               showWebsite={card.showWebsite}
               showMobileNumber={card.showMobileNumber}
               activeSocialIcons={card.activeSocialIcons}
-              footerBgColor={card.footerBgColor || '#FFFFFF'}
-              footerTextColor={card.footerTextColor || '#000000'}
+              footerBgColor={card.footerBgColor || activeBasicTheme.footerBgColor}
+              footerTextColor={card.footerTextColor || activeBasicTheme.footerTextColor}
               footerIconStyle={card.footerIconStyle || 'color'}
               showMasterBranding={card.showMasterBranding}
               footerConfig={card.customFooterConfig || (df as any)?.footerConfig}
               previewScale={previewScale}
             />
           </div>
-        </div>) : card.frameDesign === 'graphic_002' ? (/* ================= GRAPHIC 2 (THIN ORANGE BORDER, 4:5 TOP PHOTO, LOGO & LOCATION BOXES, TEXTURED HEADLINE WITH ORANGE ACCENTS, "पूरी खबर कमेंट बॉक्स में" CTA, YELLOW FOOTER) ================= */
+        </div>
+          );
+        })()
+      ) : card.frameDesign === 'graphic_002' ? (/* ================= GRAPHIC 2 (THIN ORANGE BORDER, 4:5 TOP PHOTO, LOGO & LOCATION BOXES, TEXTURED HEADLINE WITH ORANGE ACCENTS, "पूरी खबर कमेंट बॉक्स में" CTA, YELLOW FOOTER) ================= */
         <div className="absolute inset-0 z-20 flex flex-col justify-between pointer-events-none select-none">
           {/* Top Overlay: Location Box (Left), Logo Box (Right) */}
           <div className="relative w-full h-[53%] p-3 sm:p-5 flex flex-col justify-between">

@@ -1566,7 +1566,8 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     setIsSubmitting(true);
     try {
       if (primaryMobileNumber.trim()) {
-        savePrimaryMobileNumber(primaryMobileNumber.trim());
+        const userEmail = (currentUser?.email || tempRegisteredUser?.email || '').toLowerCase().trim();
+        savePrimaryMobileNumber(primaryMobileNumber.trim(), userEmail);
       }
       activateFreeTrial();
 
@@ -2163,12 +2164,12 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         {/* STEP 2: CHANNEL & REPORTER DETAILS SETUP SCREEN                */}
         {/* ============================================================== */}
         {currentStep === 2 && (
-          <div className="w-full max-w-5xl text-left animate-in fade-in slide-in-from-bottom-3 duration-300">
+          <div className="w-full max-w-6xl text-left animate-in fade-in slide-in-from-bottom-3 duration-300">
             {/* Desktop 2-Column Responsive Layout for No-Scroll Formula */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-              {/* Left Column: AI News Maker Brand Panel & 7-Day PRO Trial Overview (Desktop Only) */}
-              <div className="hidden lg:flex lg:col-span-4 flex-col justify-between bg-gradient-to-b from-slate-900 via-slate-900/90 to-slate-950 border border-amber-500/30 rounded-3xl p-5 shadow-2xl relative overflow-hidden animate-ambient-glow">
-                <div className="space-y-4 relative z-10">
+              {/* Left Column: AI News Maker Brand Panel & 7-Day PRO Trial Overview (Desktop Only - Static & Richly Populated) */}
+              <div className="hidden lg:flex lg:col-span-4 flex-col justify-between bg-gradient-to-b from-slate-900 via-slate-900/95 to-slate-950 border border-amber-500/40 rounded-3xl p-5 shadow-2xl relative overflow-hidden">
+                <div className="space-y-3.5 relative z-10">
                   {/* Glowing Logo & Brand Title */}
                   <div className="flex items-center gap-3">
                     <div className="relative w-12 h-12 rounded-2xl bg-white border-2 border-amber-400 p-0.5 overflow-hidden shrink-0 shadow-lg shadow-amber-500/20">
@@ -2192,7 +2193,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   </div>
 
                   {/* Google Verified Account Chip */}
-                  <div className="p-3 bg-slate-950/90 rounded-2xl border border-emerald-500/40 space-y-1">
+                  <div className="p-2.5 bg-slate-950/90 rounded-2xl border border-emerald-500/40 space-y-1">
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] font-bold text-slate-400">सत्यापित खाता:</span>
                       <span className="text-[9px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-700 flex items-center gap-1">
@@ -2206,63 +2207,86 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   </div>
 
                   {/* 7-Day Free Trial (PRO User Features) Card */}
-                  <div className="p-3.5 bg-gradient-to-br from-amber-500/15 to-yellow-600/15 border border-amber-500/50 rounded-2xl space-y-2 shadow-inner">
+                  <div className="p-3 bg-gradient-to-br from-amber-500/15 to-yellow-600/15 border border-amber-500/50 rounded-2xl space-y-1.5 shadow-inner">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
                         <Crown className="w-4 h-4 text-amber-400" />
                         <span>7-Day Free Trial</span>
                       </span>
                       <span className="px-2 py-0.5 bg-amber-400 text-slate-950 text-[9px] font-black rounded-md">
-                        PRO फीचर्स सक्रिय
+                        PRO सक्रिय
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-300 leading-snug">
-                      7 दिन तक <strong>PRO फीचर्स (₹999/माह मूल्य)</strong> का निःशुल्क लाभ:
+                      7 दिन तक <strong>PRO फीचर्स (₹4,199/माह मूल्य)</strong> का निःशुल्क लाभ:
                     </p>
-                    <ul className="text-[11px] text-slate-300 space-y-1.5 pt-1">
+                    <ul className="text-[10.5px] text-slate-300 space-y-1 pt-0.5">
                       <li className="flex items-center gap-1.5">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span>50+ प्रीमियम फ्रेम्स (7 श्रेणियां)</span>
+                        <span>50+ प्रीमियम फ्रेम्स (22 बेसिक + एडवांस्ड)</span>
                       </li>
                       <li className="flex items-center gap-1.5">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span>1080p Full HD एक्सपोर्ट क्वालिटी</span>
+                        <span>1080p Full HD एक्सपोर्ट (ज़ीरो वाटरमार्क)</span>
                       </li>
                       <li className="flex items-center gap-1.5">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span>स्मार्ट AI हेडलाइन व ऑटो-फिल</span>
+                        <span>स्मार्ट AI हेडलाइन जनरेटर व ऑटो-फिल</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>सोशल मीडिया स्टोरी व रील्स एक्सपोर्टर</span>
                       </li>
                     </ul>
                   </div>
 
+                  {/* Dedicated Helpdesk & Security Guarantee Card */}
+                  <div className="p-2.5 bg-slate-950/80 border border-slate-800 rounded-2xl space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                        <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                        <span>आधिकारिक सुरक्षा व सहायता:</span>
+                      </span>
+                      <span className="text-[9px] text-amber-400 font-mono font-bold">
+                        24x7 Support
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-300 leading-tight">
+                      हेल्पलाइन: <span className="font-mono text-emerald-400 font-bold">+91 9425008598</span>
+                    </p>
+                    <p className="text-[9.5px] text-slate-400 leading-tight">
+                      भारत सरकार के IT नियमों और प्रेस काउंसिल दिशानिर्देशों के अनुरूप एन्क्रिप्टेड डेटा सुरक्षा।
+                    </p>
+                  </div>
+
                   {/* Step 2 Specific Linguistic Notice Note */}
                   {setupWizardStep === 2 && (
-                    <div className="p-3 bg-amber-500/10 border border-amber-500/50 rounded-2xl space-y-1">
-                      <span className="text-[11px] font-black text-amber-300 flex items-center gap-1">
-                        <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <div className="p-2.5 bg-amber-500/10 border border-amber-500/50 rounded-2xl space-y-1">
+                      <span className="text-[10.5px] font-black text-amber-300 flex items-center gap-1">
+                        <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
                         <span>स्थायी चैनल नाम:</span>
                       </span>
-                      <p className="text-[10px] text-slate-300 leading-snug">
+                      <p className="text-[9.5px] text-slate-300 leading-snug">
                         चैनल का नाम सावधानीपूर्वक लिखें। बाद में सुधार हेतु 24-48 घंटे का समय लग सकता है।
                       </p>
                     </div>
                   )}
 
                   {/* Important Channel Protection Guidance */}
-                  <div className="p-3 bg-red-950/40 border border-red-500/40 rounded-2xl space-y-1">
-                    <span className="text-[11px] font-black text-red-300 flex items-center gap-1">
-                      <ShieldAlert className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                  <div className="p-2.5 bg-red-950/40 border border-red-500/40 rounded-2xl space-y-1">
+                    <span className="text-[10.5px] font-black text-red-300 flex items-center gap-1">
+                      <ShieldAlert className="w-3 h-3 text-red-400 shrink-0" />
                       <span>ब्रांड सुरक्षा नियम:</span>
                     </span>
-                    <p className="text-[10px] text-slate-300 leading-snug">
+                    <p className="text-[9.5px] text-slate-300 leading-snug">
                       केवल अपने अधिकृत चैनल का उपयोग करें। राष्ट्रीय समाचार चैनलों के नाम/लोगो कॉपीराइट के तहत प्रतिबंधित हैं।
                     </p>
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-slate-800 text-center relative z-10">
-                  <span className="text-[10px] text-slate-500 font-medium">
-                    100% सुरक्षित • AI News Maker Onboarding
+                <div className="pt-2 border-t border-slate-800 text-center relative z-10">
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    100% सुरक्षित • 5,000+ पत्रकारों का भरोसा
                   </span>
                 </div>
               </div>
@@ -2464,40 +2488,39 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                     )}
                   </div>
 
-                  {/* Module 2: Row 1 Full Width State / UT */}
-                  <div className="w-full">
-                    <label className="block text-xs font-bold text-slate-300 mb-1">
-                      2. राज्य / केंद्र शासित प्रदेश *
-                    </label>
-                    <select
-                      value={reportingState}
-                      onChange={(e) => {
-                        const newState = e.target.value;
-                        setReportingState(newState);
-                        setReportingDistrict('');
-                      }}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden cursor-pointer"
-                    >
-                      <option value="">-- राज्य चुनें --</option>
-                      {getAllIndianStates().map((st) => (
-                        <option key={st} value={st}>
-                          {st}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Module 2: Row 2 Equal Columns: Left = District, Right = Manual City */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Module 2: State, District, and City in ONE 3-Column Line (No-Scroll Fit) */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
                     <div>
                       <label className="block text-xs font-bold text-slate-300 mb-1">
-                        3. ज़िला / ब्यूरो क्षेत्र *
+                        2. राज्य / प्रदेश *
+                      </label>
+                      <select
+                        value={reportingState}
+                        onChange={(e) => {
+                          const newState = e.target.value;
+                          setReportingState(newState);
+                          setReportingDistrict('');
+                        }}
+                        className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden cursor-pointer"
+                      >
+                        <option value="">-- राज्य चुनें --</option>
+                        {getAllIndianStates().map((st) => (
+                          <option key={st} value={st}>
+                            {st}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-300 mb-1">
+                        3. ज़िला / ब्यूरो *
                       </label>
                       <select
                         value={reportingDistrict}
                         onChange={(e) => setReportingDistrict(e.target.value)}
                         disabled={!reportingState}
-                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden disabled:opacity-50 cursor-pointer"
+                        className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden disabled:opacity-50 cursor-pointer"
                       >
                         {!reportingState && <option value="">पहले राज्य चुनें</option>}
                         {reportingState && (
@@ -2518,154 +2541,133 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
 
                     <div>
                       <label className="block text-xs font-bold text-slate-300 mb-1">
-                        शहर का नाम स्वयं लिखें *
+                        4. शहर का नाम *
                       </label>
                       <input
                         type="text"
                         required
                         value={detailCityName}
                         onChange={(e) => setDetailCityName(e.target.value)}
-                        placeholder="अपने शहर का नाम लिखें"
-                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 placeholder:font-normal"
+                        placeholder="शहर का नाम लिखें"
+                        className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 placeholder:font-normal"
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Primary Mobile Number with Mandatory Warning & OTP Verification */}
-                <div className="pt-2 space-y-2">
-                  {/* Prominent Mandatory Warning Alert */}
-                  <div className="p-3 bg-red-950/70 border border-red-500/70 rounded-xl flex items-start gap-2.5">
-                    <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-xs font-black text-red-200">
-                        महत्वपूर्ण सूचना: WhatsApp Number ही आपका स्थायी प्राइमरी नंबर होगा।
-                      </p>
-                      <p className="text-[11px] text-red-300/80 mt-0.5">
-                        खाता सुरक्षा व लॉगिन सत्यापन हेतु कृपया अपना सही 10-अंकों का WhatsApp नंबर दर्ज करें और OTP सत्यापित करें।
-                      </p>
-                    </div>
+                {/* Primary Mobile Number with Mandatory Warning & Single-Line WhatsApp Verification */}
+                <div className="pt-1 space-y-1.5">
+                  {/* Compact Mandatory Warning Alert */}
+                  <div className="p-2 bg-red-950/60 border border-red-500/60 rounded-xl flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                    <p className="text-[11px] text-red-200 leading-tight">
+                      <strong>महत्वपूर्ण सूचना:</strong> WhatsApp Number ही आपका स्थायी प्राइमरी नंबर होगा। खाता सुरक्षा व लॉगिन सत्यापन हेतु सही 10-अंकों का नंबर दर्ज करें।
+                    </p>
                   </div>
 
                   {subscription.isMobileLocked || (isWhatsappVerified && verifiedWhatsappNumber && primaryMobileNumber.replace(/\D/g, '').slice(-10) === verifiedWhatsappNumber) ? (
-                    <div className="p-3.5 bg-emerald-950/70 rounded-xl border border-emerald-500/70 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-black text-emerald-300 flex items-center gap-1.5">
-                          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                          <span>3. WhatsApp नंबर (प्राइमरी नंबर — सत्यापित ✅)</span>
-                        </label>
-                        <span className="text-[10px] text-emerald-300 font-bold bg-emerald-900/90 px-2.5 py-0.5 rounded-full border border-emerald-600 flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                          सत्यापित / Locked
-                        </span>
+                    <div className="p-2.5 bg-emerald-950/70 rounded-xl border border-emerald-500/70 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span className="text-xs font-bold text-emerald-300 shrink-0">WhatsApp (प्राइमरी नंबर):</span>
+                        <span className="text-xs font-mono font-black text-white truncate">+91 {verifiedWhatsappNumber || subscription.primaryMobile || primaryMobileNumber}</span>
                       </div>
-                      <div className="text-base font-mono font-black text-white flex items-center gap-2">
-                        <span>+91</span>
-                        <span>{verifiedWhatsappNumber || subscription.primaryMobile || primaryMobileNumber}</span>
-                      </div>
-                      <p className="text-[11px] text-emerald-400/90">
-                        ✅ आपका WhatsApp नंबर सफलतापूर्वक सत्यापित है और प्राइमरी नंबर के रूप में सुरक्षित है।
-                      </p>
+                      <span className="text-[10px] text-emerald-300 font-bold bg-emerald-900/90 px-2 py-0.5 rounded-full border border-emerald-600 flex items-center gap-1 shrink-0">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                        सत्यापित / Locked
+                      </span>
                     </div>
                   ) : (
-                    <div className="p-3.5 bg-slate-900 rounded-xl border border-slate-700 space-y-3">
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-xs font-bold text-slate-300 flex items-center gap-1">
-                            <Lock className="w-3.5 h-3.5 text-amber-400" />
-                            <span>3. WhatsApp नंबर (प्राइमरी नंबर) *</span>
-                          </label>
-                          <span className="text-[10px] text-amber-400 font-bold">
-                            🔒 OTP सत्यापन अनिवार्य
-                          </span>
+                    <div className="p-2.5 bg-slate-900 rounded-xl border border-slate-700 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-300 flex items-center gap-1">
+                          <Lock className="w-3.5 h-3.5 text-amber-400" />
+                          <span>5. WhatsApp नंबर (प्राइमरी नंबर) *</span>
+                        </label>
+                        <span className="text-[10px] text-amber-400 font-bold">
+                          🔒 OTP सत्यापन अनिवार्य
+                        </span>
+                      </div>
+                      
+                      {/* Number Input with Country Code and Send OTP button in ONE Single Line */}
+                      <div className="flex items-center gap-2">
+                        <div className="px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-slate-300 text-xs font-mono font-bold shrink-0">
+                          +91
                         </div>
-                        
-                        {/* Number Input with Country Code and Send OTP button */}
-                        <div className="flex items-center gap-2">
-                          <div className="px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-slate-300 text-xs sm:text-sm font-mono font-bold shrink-0">
-                            +91
-                          </div>
-                          <div className="relative flex-1">
-                            <Phone className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-                            <input
-                              type="tel"
-                              maxLength={10}
-                              required
-                              value={primaryMobileNumber}
-                              onChange={(e) => {
-                                const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
-                                setPrimaryMobileNumber(val);
-                                if (!graphicContactNumber) {
-                                  setGraphicContactNumber(val);
-                                }
-                                if (isWhatsappVerified && val !== verifiedWhatsappNumber) {
-                                  setIsWhatsappVerified(false);
-                                }
-                              }}
-                              placeholder="10-अंकों का WhatsApp नंबर (उदा. 9876543210)"
-                              className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs sm:text-sm font-mono text-white placeholder:text-slate-500/80 focus:border-amber-400 focus:outline-hidden"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={handleSendWhatsAppOtp}
-                            disabled={isSendingOtp || otpCooldown > 0 || primaryMobileNumber.replace(/\D/g, '').length !== 10}
-                            className={`px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition-all flex items-center gap-1.5 ${
-                              isSendingOtp || otpCooldown > 0 || primaryMobileNumber.replace(/\D/g, '').length !== 10
-                                ? 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700'
-                                : 'bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white shadow-md active:scale-95'
-                            }`}
-                          >
-                            {isSendingOtp ? (
-                              <>
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                <span>भेज रहे हैं...</span>
-                              </>
-                            ) : otpCooldown > 0 ? (
-                              <span>पुनः भेजें ({otpCooldown}s)</span>
-                            ) : (
-                              <span>OTP भेजें</span>
-                            )}
-                          </button>
+                        <div className="relative flex-1">
+                          <Phone className="absolute left-2.5 top-2 w-3.5 h-3.5 text-slate-500" />
+                          <input
+                            type="tel"
+                            maxLength={10}
+                            required
+                            value={primaryMobileNumber}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 10);
+                              setPrimaryMobileNumber(val);
+                              if (!graphicContactNumber) {
+                                setGraphicContactNumber(val);
+                              }
+                              if (isWhatsappVerified && val !== verifiedWhatsappNumber) {
+                                setIsWhatsappVerified(false);
+                              }
+                            }}
+                            placeholder="10-अंकों का WhatsApp नंबर दर्ज करें"
+                            className="w-full pl-8 pr-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded-xl text-xs sm:text-sm font-mono text-white placeholder:text-slate-500/80 focus:border-amber-400 focus:outline-hidden"
+                          />
                         </div>
+                        <button
+                          type="button"
+                          onClick={handleSendWhatsAppOtp}
+                          disabled={isSendingOtp || otpCooldown > 0 || primaryMobileNumber.replace(/\D/g, '').length !== 10}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all flex items-center gap-1.5 ${
+                            isSendingOtp || otpCooldown > 0 || primaryMobileNumber.replace(/\D/g, '').length !== 10
+                              ? 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700'
+                              : 'bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white shadow-md active:scale-95'
+                          }`}
+                        >
+                          {isSendingOtp ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>भेज रहे हैं...</span>
+                            </>
+                          ) : otpCooldown > 0 ? (
+                            <span>पुनः भेजें ({otpCooldown}s)</span>
+                          ) : (
+                            <span>OTP भेजें</span>
+                          )}
+                        </button>
                       </div>
 
                       {/* OTP Input & Verification Row (Appears once OTP is requested) */}
                       {otpSent && !isWhatsappVerified && (
-                        <div className="pt-2 border-t border-slate-800 space-y-2">
-                          <label className="block text-xs font-bold text-emerald-400 flex items-center justify-between">
-                            <span>WhatsApp पर प्राप्त 6-अंकों का OTP दर्ज करें:</span>
-                            <span className="text-[10px] text-slate-400">आधिकारिक बॉट (+1 555-706-1955) से प्राप्त | वैधता: 5 मिनट</span>
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              maxLength={6}
-                              value={whatsappOtp}
-                              onChange={(e) => setWhatsappOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                              placeholder="6-अंकों का OTP (उदा. 123456)"
-                              className="flex-1 px-3.5 py-2 bg-slate-950 border border-emerald-500/60 rounded-xl text-sm font-mono font-bold tracking-widest text-center text-white focus:border-emerald-400 focus:outline-hidden"
-                            />
-                            <button
-                              type="button"
-                              onClick={handleVerifyWhatsAppOtp}
-                              disabled={isVerifyingOtp || whatsappOtp.trim().length !== 6}
-                              className={`px-4 py-2 rounded-xl text-xs font-black shrink-0 transition-all flex items-center gap-1.5 ${
-                                isVerifyingOtp || whatsappOtp.trim().length !== 6
-                                  ? 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700'
-                                  : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-md font-bold active:scale-95'
-                              }`}
-                            >
-                              {isVerifyingOtp ? (
-                                <>
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                  <span>जाँच रहे हैं...</span>
-                                </>
-                              ) : (
-                                <span>सत्यापित करें</span>
-                              )}
-                            </button>
-                          </div>
+                        <div className="pt-2 border-t border-slate-800 flex items-center gap-2">
+                          <input
+                            type="text"
+                            maxLength={6}
+                            value={whatsappOtp}
+                            onChange={(e) => setWhatsappOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                            placeholder="6-अंकों का OTP (उदा. 123456)"
+                            className="flex-1 px-3 py-1.5 bg-slate-950 border border-emerald-500/60 rounded-xl text-xs sm:text-sm font-mono font-bold tracking-widest text-center text-white focus:border-emerald-400 focus:outline-hidden"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleVerifyWhatsAppOtp}
+                            disabled={isVerifyingOtp || whatsappOtp.trim().length !== 6}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-black shrink-0 transition-all flex items-center gap-1.5 ${
+                              isVerifyingOtp || whatsappOtp.trim().length !== 6
+                                ? 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700'
+                                : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 shadow-md font-bold active:scale-95'
+                            }`}
+                          >
+                            {isVerifyingOtp ? (
+                              <>
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                                <span>सत्यापित हो रहा है...</span>
+                              </>
+                            ) : (
+                              <span>सत्यापित करें</span>
+                            )}
+                          </button>
                         </div>
                       )}
 
@@ -2717,7 +2719,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   />
                   <div className="text-xs text-slate-300 leading-snug">
                     <span className="font-bold text-white">
-                      1. मुझे 7-दिवसीय फ्री ट्रायल (PRO फीचर्स ₹999/माह मूल्य) स्वीकार हैं एवं मैंने{' '}
+                      1. मुझे 7-दिवसीय फ्री ट्रायल (PRO फीचर्स ₹4,199/माह मूल्य) स्वीकार हैं एवं मैंने{' '}
                       <button
                         type="button"
                         onClick={() => setLegalModalTab('terms')}

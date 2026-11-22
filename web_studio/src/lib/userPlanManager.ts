@@ -1078,7 +1078,15 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
       ? 'VIP DESK'
       : (PLAN_KEY_MAP[effectiveTier] || matchedUser?.planName || 'PRO');
 
-    const primaryMobile = matchedUser?.mobile || localStorage.getItem(STORAGE_KEY_PRIMARY_MOBILE) || '';
+    // Clean up any residual test phone numbers that might leak globally
+    if (typeof window !== 'undefined') {
+      const legacy = localStorage.getItem(STORAGE_KEY_PRIMARY_MOBILE);
+      if (legacy === '9876543211' || legacy === '9876543210') {
+        localStorage.removeItem(STORAGE_KEY_PRIMARY_MOBILE);
+      }
+    }
+    const userScopedMobile = activeEmail ? localStorage.getItem(`user_primary_mobile_${activeEmail.toLowerCase().trim()}`) : null;
+    const primaryMobile = matchedUser?.mobile || userScopedMobile || '';
     const isMobileLocked = Boolean(primaryMobile.trim());
 
     return {
@@ -1117,7 +1125,8 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
   const effectiveTier: UserPlanTier = isTrialActive ? 'professional' : 'basic';
   const effectivePlanName: PlanKeyName = isTrialActive ? 'TRIAL' : 'BASIC';
 
-  const primaryMobile = matchedUser?.mobile || localStorage.getItem(STORAGE_KEY_PRIMARY_MOBILE) || '';
+  const userScopedMobile = activeEmail ? localStorage.getItem(`user_primary_mobile_${activeEmail.toLowerCase().trim()}`) : null;
+  const primaryMobile = matchedUser?.mobile || userScopedMobile || '';
   const isMobileLocked = Boolean(primaryMobile.trim());
 
   return {
@@ -1295,14 +1304,13 @@ export function canAccessTemplateManager(currentUser?: any): boolean {
 }
 
 // Lock Primary Mobile Number (Permanent, non-editable)
-export function savePrimaryMobileNumber(phone: string): boolean {
+export function savePrimaryMobileNumber(phone: string, email?: string): boolean {
   if (typeof window === 'undefined') return false;
-  const existing = localStorage.getItem(STORAGE_KEY_PRIMARY_MOBILE);
-  if (existing && existing.trim()) {
-    return false;
-  }
   const clean = phone.trim().replace(/[^0-9]/g, '');
   if (clean.length >= 10) {
+    if (email && email.trim()) {
+      localStorage.setItem(`user_primary_mobile_${email.toLowerCase().trim()}`, clean);
+    }
     localStorage.setItem(STORAGE_KEY_PRIMARY_MOBILE, clean);
     return true;
   }

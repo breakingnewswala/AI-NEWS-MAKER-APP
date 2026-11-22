@@ -2166,31 +2166,33 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       alert('कस्टम फ्रेम अपलोड केवल प्रो और वीआईपी डेस्क प्लान के लिए उपलब्ध है। कृपया अपना प्लान अपग्रेड करें।');
                     }
                   }}
-                  className="p-3.5 rounded-xl border border-purple-500/50 bg-neutral-950/80 hover:border-purple-400 hover:bg-neutral-900/80 text-left flex flex-col justify-between gap-2.5 transition-all cursor-pointer relative overflow-hidden select-none shadow-md group"
+                  className="col-span-full p-2.5 sm:p-3 rounded-xl border border-purple-500/50 bg-gradient-to-r from-purple-950/40 via-neutral-950 to-neutral-950 hover:border-purple-400 flex flex-col sm:flex-row sm:items-center justify-between gap-2 transition-all cursor-pointer relative overflow-hidden select-none shadow-md group"
                 >
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-xs font-black tracking-wide truncate text-white flex items-center gap-1.5">
-                      <span>✨</span>
-                      <span>कस्टम फ्रेम अपलोडर (PRO/VIP)</span>
-                    </span>
-                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded border shrink-0 bg-purple-500/20 text-purple-300 border-purple-500/40">
-                      PRO / VIP DESK
-                    </span>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-purple-500/20 border border-purple-500/40 flex items-center justify-center shrink-0">
+                      <Upload className="w-4 h-4 text-purple-300" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-white truncate">
+                          ✨ कस्टम फ्रेम अपलोडर (Custom Frame Uploader)
+                        </span>
+                        <span className="text-[9px] font-black px-1.5 py-0.5 rounded border shrink-0 bg-purple-500/20 text-purple-300 border-purple-500/40">
+                          PRO / VIP DESK
+                        </span>
+                      </div>
+                      <p className="text-[10.5px] text-neutral-400 truncate hidden sm:block">
+                        4:5 ट्रांसपेरेंट PNG, हेडर व फुटर अपलोड करने के लिए टेम्पलेट मैनेजर खोलें
+                      </p>
+                    </div>
                   </div>
-
-                  <p className="text-[11px] text-neutral-300 line-clamp-2 leading-relaxed">
-                    अपनी 4:5 सिंगल फ्रेम PNG अथवा हेडर व फुटर स्वतंत्र रूप से अपलोड करने के लिए टेम्पलेट व कस्टम फ्रेम मैनेजर खोलें।
-                  </p>
-
-                  <div className="pt-2 border-t border-neutral-800/80 flex items-center justify-between text-[10px]">
-                    <span className="text-amber-400 font-bold flex items-center gap-1.5 group-hover:text-amber-300">
-                      <Upload className="w-3.5 h-3.5 text-amber-400" />
-                      <span>टेम्पलेट व कस्टम फ्रेम मैनेजर में जाएं</span>
-                    </span>
-                    <span className="text-[9px] text-purple-300 font-mono bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-800/40">
-                      अपलोड पोर्टल
-                    </span>
-                  </div>
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold shrink-0 transition flex items-center justify-center gap-1.5 shadow-sm group-hover:scale-105"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>फ्रेम अपलोड पोर्टल खोलें →</span>
+                  </button>
                 </div>
               )}
 
@@ -5856,41 +5858,41 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   })}
               </div>
 
-              {/* Callout Size Slider (Default locked at 140% with minor space to increase to 170%) */}
+              {/* Callout Size Slider (Default 110% with user control up to 140%) */}
               {(() => {
-                const isBasicTier = !effectiveAdmin && (!effectiveTier || effectiveTier === 'basic');
-                const minScale = 1.40;
-                const maxScale = isBasicTier ? 1.40 : 1.70;
-                const currentScale = Math.max(minScale, Math.min(maxScale, card.calloutScale ?? 1.40));
+                const isBasicTier = !effectiveAdmin && (!effectiveTier || effectiveTier === 'basic') && !subscription.isTrialActive;
+                const minScale = 1.00;
+                const maxScale = 1.40;
+                const currentScale = Math.max(minScale, Math.min(maxScale, card.calloutScale ?? 1.10));
 
                 return (
                   <div className="p-2.5 bg-neutral-900 rounded-xl border border-neutral-800 space-y-1.5">
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="font-bold text-neutral-300">कॉलआउट साइज (Callout Size):</span>
                       <span className="font-mono text-amber-400 font-bold">
-                        {Math.round(currentScale * 100)}% {Math.round(currentScale * 100) === 140 ? '(डिफ़ॉल्ट)' : ''}
+                        {Math.round(currentScale * 100)}% {Math.round(currentScale * 100) === 110 ? '(डिफ़ॉल्ट)' : ''}
                       </span>
                     </div>
                     {isBasicTier ? (
                       <div className="py-1 px-2 bg-neutral-950/80 rounded border border-neutral-800 text-[10px] text-amber-300 font-semibold flex items-center justify-between">
-                        <span>🔒 140% डिफ़ॉल्ट साइज (बेसिक प्लान में लॉक)</span>
-                        <span className="text-neutral-400 font-normal">साइज बढ़ाने हेतु एडवांस/प्रो अपग्रेड करें</span>
+                        <span>🔒 110% डिफ़ॉल्ट साइज (बेसिक प्लान)</span>
+                        <span className="text-neutral-400 font-normal">साइज 140% तक बढ़ाने हेतु प्रो अपग्रेड करें</span>
                       </div>
                     ) : (
                       <>
                         <input
                           type="range"
-                          min="1.40"
-                          max="1.70"
+                          min="1.00"
+                          max="1.40"
                           step="0.05"
                           value={currentScale}
                           onChange={(e) => onChange({ calloutScale: parseFloat(e.target.value) })}
                           className="w-full accent-amber-400 cursor-pointer"
                         />
                         <div className="flex justify-between text-[9px] text-neutral-500 font-medium">
-                          <span>140% (डिफ़ॉल्ट / सामान्य)</span>
-                          <span>155%</span>
-                          <span>170% (बड़ा)</span>
+                          <span>100%</span>
+                          <span>110% (डिफ़ॉल्ट)</span>
+                          <span>140% (अधिकतम)</span>
                         </div>
                       </>
                     )}

@@ -19,7 +19,7 @@ assert(
   'CardEditor.tsx must pass customDynamicFrame: match ? match : null when switching frames'
 );
 assert(
-  cardEditorTsx.includes('loc_style_classic_ribbon_pin'),
+  cardEditorTsx.includes('loc_style_classic_ribbon_pin') || cardEditorTsx.includes('loc_style_split_duotone'),
   'CardEditor.tsx must preserve or fallback to location badge style when switching to static frames'
 );
 console.log('✅ [PASS] TC1: Frame Switching & customDynamicFrame Reset verified');

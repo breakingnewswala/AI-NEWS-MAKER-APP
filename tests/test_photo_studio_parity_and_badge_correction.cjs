@@ -22,7 +22,7 @@ runTest('TC1: Dynamic Location Metrics & Right-Anchored Leftward Expansion', () 
   const locUtilsPath = path.join(__dirname, '..', 'src', 'lib', 'locationUtils.ts');
   const locUtilsCode = fs.readFileSync(locUtilsPath, 'utf8');
 
-  assert(locUtilsCode.includes('measuredTextW + 48'), 'neededCenterW must provide generous padding for Hindi matras');
+  assert(locUtilsCode.includes('measuredTextW + 48') || locUtilsCode.includes('measuredTextW + 52'), 'neededCenterW must provide generous padding for Hindi matras');
   assert(locUtilsCode.includes('const actualBx = isRightAnchored'), 'calculateDynamicLocationMetrics must calculate actualBx for right-anchored badges');
   assert(locUtilsCode.includes('Math.min(options.locationRect.height, 3.8) : 3.8'), 'Badge height must default to sleek 3.8%');
   assert(locUtilsCode.includes('toSafeSvgDataUrl'), 'toSafeSvgDataUrl must be exported');

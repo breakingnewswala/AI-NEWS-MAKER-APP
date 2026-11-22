@@ -115,7 +115,7 @@ export const PackagePurchaseModal: React.FC<PackagePurchaseModalProps> = ({
                     ट्रायल पीरियड (7-Day Free Trial) — {currentSub.daysRemaining} दिन शेष
                   </div>
                   <div className="text-xs text-slate-300 mt-0.5 leading-relaxed">
-                    आप <strong>7-दिवसीय फ्री ट्रायल</strong> का उपयोग कर रहे हैं (₹999/माह मूल्य के <strong>PRO फीचर्स</strong> निःशुल्क मिले हैं)। ट्रायल समाप्त होने के बाद सेवा सुचारू रखने के लिए अभी अपना पसंदीदा पैकेज चुनें।
+                    आप <strong>7-दिवसीय फ्री ट्रायल</strong> का उपयोग कर रहे हैं (₹4,199/माह मूल्य के <strong>PRO फीचर्स</strong> निःशुल्क मिले हैं)। ट्रायल समाप्त होने के बाद सेवा सुचारू रखने के लिए अभी अपना पसंदीदा पैकेज चुनें।
                   </div>
                 </div>
               </div>

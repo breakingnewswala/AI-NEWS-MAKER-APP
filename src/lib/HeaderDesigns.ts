@@ -6,6 +6,7 @@ import {
   categoryToPlanTier,
   getTemplateConfig,
 } from './graphicTemplatesRegistry';
+import { BASIC_NEWS_THEMES } from './basicNewsThemes';
 
 export interface FrameOption {
   id: FrameDesign;
@@ -21,24 +22,24 @@ export interface FrameOption {
   isTestFrame?: boolean;
 }
 
-export const GRAPHIC_1_FRAME_OPTION: FrameOption = {
-  id: 'graphic_001',
-  name: 'बेसिक फ्रेम (Basic Frame)',
-  description: 'बेसिक प्लान: 4:5 सैंपल न्यूज़ ग्राफ़िक फ्रेम लेआउट।',
-  badge: 'BASIC',
-  requiredTier: 'basic',
-  planCategory: 'BASIC',
+export const BASIC_THEME_FRAME_OPTIONS: FrameOption[] = BASIC_NEWS_THEMES.map((theme, idx) => ({
+  id: theme.id as FrameDesign,
+  name: theme.name,
+  description: theme.description,
+  badge: theme.badge,
+  requiredTier: theme.requiredTier,
+  planCategory: theme.planCategory,
   categoryLabel: 'BASIC PACKAGE FRAMES',
-  graphicNumber: 1,
+  graphicNumber: idx + 1,
   aspectRatio: '4:5',
-};
+}));
 
-export const REPORTER_ALLOWED_FRAMES: FrameDesign[] = [
-  'graphic_001',
-];
+export const GRAPHIC_1_FRAME_OPTION: FrameOption = BASIC_THEME_FRAME_OPTIONS[0];
+
+export const REPORTER_ALLOWED_FRAMES: FrameDesign[] = BASIC_NEWS_THEMES.map((t) => t.id as FrameDesign);
 
 export const FRAME_OPTIONS: FrameOption[] = [
-  GRAPHIC_1_FRAME_OPTION,
+  ...BASIC_THEME_FRAME_OPTIONS,
 ];
 
 export function registerFrameOption(option: FrameOption) {

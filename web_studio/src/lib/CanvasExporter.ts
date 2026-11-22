@@ -25,6 +25,7 @@ import { getApiUrl } from './apiConfig';
 import { getDynamicFrameById, normalizeDynamicFrame, getAssetLibraryItemById } from './dynamicFramesManager';
 import { formatCleanLocationText, toSafeSvgDataUrl } from './locationUtils';
 import { DynamicFrame, resolveEffectivePhotoSlots } from '../types/dynamicFrame';
+import { getBasicNewsTheme, isBasicNewsTheme } from './basicNewsThemes';
 
 const FALLBACK_NEWS_BG = '/assets/preview_placeholder.jpg';
 
@@ -570,8 +571,8 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
     return canvas;
   }
 
-  // 1B. Draw Legacy Static Templates
-  if (card.frameDesign === 'graphic_001') {
+  // 1B. Draw Legacy Static Templates & 22 Basic News Themes
+  if (!card.frameDesign || card.frameDesign === 'graphic_001' || isBasicNewsTheme(card.frameDesign)) {
     await drawGraphic001Canvas(ctx, width, height, card, customLogoImg);
     return canvas;
   }
@@ -2285,7 +2286,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
       const cw = (cRect.width / 100) * width;
       const ch = (cRect.height / 100) * height;
       const cRot = df.fullStoryCalloutConfig.rotation || 0;
-      const userScale = Math.max(0.6, Math.min(2.0, card.calloutScale ?? 1.4));
+      const userScale = Math.max(0.6, Math.min(2.0, card.calloutScale ?? 1.1));
 
       ctx.save();
       ctx.translate(cx + cw / 2, cy + ch / 2);
@@ -2955,7 +2956,8 @@ async function drawGraphic001Canvas(
     const rawLoc = card.location || '';
     const cleanLoc = formatCleanLocationText(rawLoc) || 'लोकेशन';
 
-    const userSelectedBadge = card.selectedLocationBadgeId ? getAssetLibraryItemById(card.selectedLocationBadgeId) : undefined;
+    const isBasicTheme = !card.frameDesign || card.frameDesign === 'graphic_001' || isBasicNewsTheme(card.frameDesign);
+    const userSelectedBadge = (!isBasicTheme && card.selectedLocationBadgeId) ? getAssetLibraryItemById(card.selectedLocationBadgeId) : undefined;
     const badgeAsset = card.customLocationBadgeUrl || userSelectedBadge?.url;
 
     let badgeDrawn = false;
@@ -3072,38 +3074,25 @@ async function drawGraphic001Canvas(
       ctx.fill();
 
       // Part F: Crisp White Vector Map Pin Icon (100% reliable vector, zero network asset dependency)
-      let locIconLoaded = false;
-      try {
-        const locIconImg = await loadImage('/assets/location_white_icon.png');
-        if (locIconImg && locIconImg.width > 0) {
-          const iconSize = Math.round(pinR * 1.35);
-          ctx.drawImage(locIconImg, pinCenterX - iconSize / 2, pinCenterY - iconSize / 2, iconSize, iconSize);
-          locIconLoaded = true;
-        }
-      } catch {}
+      const pinHeadR = pinR * 0.44;
+      const pinHeadY = pinCenterY - pinR * 0.16;
 
-      if (!locIconLoaded) {
-        // Draw crisp white vector map pin matching Lucide MapPin icon
-        const pinHeadR = pinR * 0.44;
-        const pinHeadY = pinCenterY - pinR * 0.16;
+      ctx.save();
+      ctx.fillStyle = '#FFFFFF';
+      ctx.beginPath();
+      // Top circular arc of pin
+      ctx.arc(pinCenterX, pinHeadY, pinHeadR, Math.PI * 0.85, Math.PI * 0.15, false);
+      // Pointed tip extending to bottom
+      ctx.lineTo(pinCenterX, pinCenterY + pinR * 0.62);
+      ctx.closePath();
+      ctx.fill();
 
-        ctx.save();
-        ctx.fillStyle = '#FFFFFF';
-        ctx.beginPath();
-        // Top circular arc of pin
-        ctx.arc(pinCenterX, pinHeadY, pinHeadR, Math.PI * 0.85, Math.PI * 0.15, false);
-        // Pointed tip extending to bottom
-        ctx.lineTo(pinCenterX, pinCenterY + pinR * 0.62);
-        ctx.closePath();
-        ctx.fill();
-
-        // Inner cutout circle (red)
-        ctx.fillStyle = '#DC2626';
-        ctx.beginPath();
-        ctx.arc(pinCenterX, pinHeadY, pinHeadR * 0.45, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
+      // Inner cutout circle (red)
+      ctx.fillStyle = '#DC2626';
+      ctx.beginPath();
+      ctx.arc(pinCenterX, pinHeadY, pinHeadR * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
 
       // Location Text (Bold Dark Black, centered horizontally & vertically inside composite)
       ctx.fillStyle = card.locationTextColor || '#090A0E';
@@ -3126,22 +3115,24 @@ async function drawGraphic001Canvas(
     !card.headline.includes('आप स्टेप 3')
   );
 
-  // Always draw authentic red headline gradient banner with chevrons and streak beam
+  const activeBasicTheme = getBasicNewsTheme(card.frameDesign);
+
+  // Always draw authentic headline gradient banner with chevrons and streak beam
   ctx.save();
   const redGrad = ctx.createLinearGradient(0, bannerY, 0, bannerY + bannerH);
-  redGrad.addColorStop(0, '#E20000');
-  redGrad.addColorStop(0.5, '#BA0000');
-  redGrad.addColorStop(1, '#900000');
+  activeBasicTheme.canvasGradientStops.forEach(([pos, col]) => {
+    redGrad.addColorStop(pos, col);
+  });
   ctx.fillStyle = redGrad;
   ctx.fillRect(0, bannerY, width, bannerH);
 
-  // Left & Right Dark Red Chevron Accent Stripes (strictly bounded to bannerY .. bannerY + bannerH)
+  // Left & Right Chevron Accent Stripes (strictly bounded to bannerY .. bannerY + bannerH)
   ctx.save();
   ctx.beginPath();
   ctx.rect(0, bannerY, width, bannerH);
   ctx.clip();
-  ctx.fillStyle = '#7A0005';
-  ctx.globalAlpha = 0.6;
+  ctx.fillStyle = activeBasicTheme.chevronColor;
+  ctx.globalAlpha = activeBasicTheme.isLightPlate ? 0.35 : 0.6;
   const chevronW = width * 0.10; // 10% width matching CardPreview
 
   const drawChevronLeft = (pts: [number, number][]) => {
@@ -3179,25 +3170,24 @@ async function drawGraphic001Canvas(
 
   // Glowing Divider Beam above headline banner (matching SVG streakGlow / CardPreview)
   const streakGrad = ctx.createLinearGradient(0, bannerY, width, bannerY);
-  streakGrad.addColorStop(0, 'rgba(255, 26, 26, 0)');
-  streakGrad.addColorStop(0.35, 'rgba(255, 77, 0, 0.85)');
-  streakGrad.addColorStop(0.5, '#FFE600');
-  streakGrad.addColorStop(0.65, 'rgba(255, 77, 0, 0.85)');
-  streakGrad.addColorStop(1, 'rgba(255, 26, 26, 0)');
+  activeBasicTheme.beamCanvasStops.forEach(([pos, col]) => {
+    streakGrad.addColorStop(pos, col);
+  });
   ctx.fillStyle = streakGrad;
   ctx.fillRect(0, bannerY - 3, width, 6);
 
   // Bevel highlight lines matching banner edges
-  ctx.fillStyle = 'rgba(255, 230, 160, 0.85)';
+  ctx.fillStyle = activeBasicTheme.bevelTopColor;
   ctx.fillRect(0, bannerY, width, 3);
-  ctx.fillStyle = 'rgba(255, 215, 0, 0.75)';
+  ctx.fillStyle = activeBasicTheme.bevelBottomColor;
   ctx.fillRect(0, bannerY + bannerH - 3, width, 3);
 
   if (hasUserHeadline) {
     // Render headline text using Canonical Layout & Safe-Zone Engine (Part E: Up to 4 lines support)
     const rawHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
     const fontFam = card.headlineFontFamily || 'Baloo 2';
-    const highlightColor = card.highlightColor || '#FFE600';
+    const highlightColor = card.highlightColor || activeBasicTheme.headlineHighlightColor || (activeBasicTheme.isLightPlate ? '#DC2626' : '#FFE600');
+    const defaultTextColor = activeBasicTheme.isLightPlate ? '#0B132B' : (card.headlineColor || '#FFFFFF');
 
     // Use previewHeadlineLayout to maintain 100% WYSIWYG line-break parity with CardPreview
     const layout = (previewHeadlineLayout && previewHeadlineLayout.lines && previewHeadlineLayout.lines.length > 0)
@@ -3217,9 +3207,15 @@ async function drawGraphic001Canvas(
 
     ctx.font = `900 ${layout.fontSize}px "${fontFam}", "Noto Sans Devanagari", sans-serif`;
     ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-    ctx.shadowBlur = 14;
-    ctx.shadowOffsetY = 4;
+    if (activeBasicTheme.isLightPlate) {
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetY = 1;
+    } else {
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+      ctx.shadowBlur = 14;
+      ctx.shadowOffsetY = 4;
+    }
 
     layout.lines.forEach((line, lineIdx) => {
       const metric = layout.lineMetrics[lineIdx] || { startX: Math.round(width / 2), y: Math.round(startY + lineIdx * layout.lineHeight) };
@@ -3231,7 +3227,7 @@ async function drawGraphic001Canvas(
         const nextToken = line[i + 1];
         const isNextPunctuation = nextToken && /^[\,\.\!\?\:\;।\-]/.test(nextToken.text);
         const spacing = (i < line.length - 1 && !isNextPunctuation) ? ' ' : '';
-        ctx.fillStyle = token.isHighlight ? highlightColor : '#FFFFFF';
+        ctx.fillStyle = token.isHighlight ? highlightColor : defaultTextColor;
         ctx.fillText(token.text, curX, lineY);
         curX += ctx.measureText(token.text + spacing).width;
       }
@@ -3254,8 +3250,8 @@ async function drawGraphic001Canvas(
       card.websiteUrl,
       card.activeSocialIcons,
       card.showMobileNumber,
-      card.footerBgColor || '#FFFFFF',
-      card.footerTextColor || '#000000',
+      card.footerBgColor || activeBasicTheme.footerBgColor,
+      card.footerTextColor || activeBasicTheme.footerTextColor,
       card.footerIconStyle || 'color',
       card.showWebsite
     );
