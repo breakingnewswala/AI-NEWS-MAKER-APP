@@ -3158,6 +3158,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   backgroundColor: '#DC2626',
                   fontSize: 24,
                   isBold: true,
+                  boxStyle: 'curve',
                   x: 50,
                   y: 45,
                 };
@@ -3368,6 +3369,43 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       </div>
                     </div>
                   </div>
+
+                  {/* Box Style Selector: Square, Round, Curve, News Style */}
+                  {item.backgroundColor && item.backgroundColor !== 'transparent' && (
+                    <div className="pt-2 border-t border-neutral-800">
+                      <label className="text-[10px] text-neutral-400 font-semibold block mb-1">
+                        बॉक्स स्टाइल (Box Style):
+                      </label>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {[
+                          { id: 'square', label: 'स्क्वायर', desc: 'सीधा चौकोर', icon: '⏹️' },
+                          { id: 'round', label: 'राउंड', desc: 'पिल कैप्सूल', icon: '💊' },
+                          { id: 'curve', label: 'कर्व', desc: 'सॉफ्ट गोल', icon: '🔲' },
+                          { id: 'news_style', label: 'न्यूज़ स्टाइल', desc: 'स्लंटेड बैज', icon: '⚡' },
+                        ].map((bStyle) => (
+                          <button
+                            key={bStyle.id}
+                            type="button"
+                            onClick={() => {
+                              const updated = card.customTextOverlays?.map((t) =>
+                                t.id === item.id ? { ...t, boxStyle: bStyle.id as any } : t
+                              );
+                              onChange({ customTextOverlays: updated });
+                            }}
+                            className={`py-1 px-1.5 rounded-lg text-[10px] font-bold border transition flex flex-col items-center justify-center cursor-pointer ${
+                              (item.boxStyle || 'curve') === bStyle.id
+                                ? 'bg-amber-400 text-slate-950 border-amber-400 font-black shadow-sm'
+                                : 'bg-neutral-950 text-neutral-300 border-neutral-700 hover:border-neutral-500'
+                            }`}
+                            title={bStyle.desc}
+                          >
+                            <span className="text-xs">{bStyle.icon}</span>
+                            <span className="text-[9.5px] mt-0.5 truncate">{bStyle.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Position Sliders & Quick Placement */}
                   <div className="space-y-1.5 pt-1 border-t border-neutral-800 text-xs">

@@ -369,6 +369,7 @@ export interface CustomTextOverlay {
   isBold?: boolean;
   x: number; // Left coordinate % (0 - 100)
   y: number; // Top coordinate % (0 - 100)
+  boxStyle?: 'square' | 'round' | 'curve' | 'news_style'; // Background box styling
 }
 
 export type ImageFilterPreset =

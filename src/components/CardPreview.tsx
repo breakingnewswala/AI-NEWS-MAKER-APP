@@ -607,7 +607,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
     const activeFont = card.headlineFontFamily || activeDf?.typographyConfig?.primaryFontFamily || activeDf?.textSlots?.[0]?.fontFamily || 'Baloo 2';
     const textSlotRect = activeDf?.textSlots?.[0]?.rect;
     const canvasH = (activeDf?.aspectRatio === '9:16' || card.aspectRatio === '9:16') ? 1920 : (activeDf?.aspectRatio === '1:1' || card.aspectRatio === '1:1') ? 1080 : 1350;
-    const paddedHw = textSlotRect ? Math.max(50, ((textSlotRect.width / 100) * 1080) - 30) : 0;
+    const paddedHw = textSlotRect ? Math.max(50, ((textSlotRect.width / 100) * 1080) - 10) : 0;
 
     // Check if callout is active to avoid headline overlapping or cropping into callout strip
     const isCalloutActive = Boolean(
@@ -622,7 +622,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
       : (textSlotRect?.height ?? 27);
 
     const customBounds = textSlotRect ? {
-      x: ((textSlotRect.x / 100) * 1080) + 15,
+      x: ((textSlotRect.x / 100) * 1080) + 5,
       y: (textSlotRect.y / 100) * canvasH,
       width: paddedHw,
       height: (maxAvailableSlotH / 100) * canvasH,
@@ -2021,9 +2021,9 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   <div
                     className={`absolute pointer-events-auto flex items-center overflow-visible z-15 ${slot0?.alignment === 'left' ? 'justify-start text-left' : slot0?.alignment === 'right' ? 'justify-end text-right' : 'justify-center text-center'}`}
                     style={{
-                      left: `${slot0?.rect?.x ?? 7}%`,
+                      left: `${slot0?.rect?.x ?? 5}%`,
                       top: `${slotY}%`,
-                      width: `${slot0?.rect?.width ?? 86}%`,
+                      width: `${slot0?.rect?.width ?? 90}%`,
                       height: `${effectiveSlotH}%`,
                       backgroundColor: hbBg,
                       opacity: hbOpacity,
@@ -2293,8 +2293,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               </g>
             </svg>
 
-            {/* Headline Text: Center vertically & horizontally within Title Safe bounds (balanced into optical red center) */}
-            <div className="relative z-10 w-full h-full flex items-center justify-center px-[10%] pt-2 sm:pt-3">
+            {/* Headline Text: Center vertically & horizontally within 90% Action Safe bounds */}
+            <div className="relative z-10 w-full h-full flex items-center justify-center px-[5%] pt-2 sm:pt-3">
               <div className="w-full flex items-center justify-center text-center">
                 {Boolean(
                   card.headline &&
@@ -4386,35 +4386,58 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         </div>
       )}
 
-      {/* Floating Custom Text Overlays with custom fonts, colors and positions */}
+      {/* Floating Custom Text Overlays with custom fonts, colors, box styles (square, round, curve, news_style) */}
       {card.customTextOverlays && card.customTextOverlays.length > 0 && (
         <div className="absolute inset-0 pointer-events-none z-30 overflow-hidden">
-          {card.customTextOverlays.map((item) => (
-            <div
-              key={item.id}
-              className="absolute select-none pointer-events-auto shadow-md transition-transform"
-              style={{
-                left: `${Math.max(8, Math.min(92, item.x))}%`,
-                top: `${Math.max(8, Math.min(92, item.y))}%`,
-                transform: 'translate(-50%, -50%)',
-                fontFamily: item.fontFamily ? `"${item.fontFamily}", sans-serif` : 'inherit',
-                fontSize: `${Math.max(11, Math.round(item.fontSize * previewScale * 1.6))}px`,
-                color: item.color || '#FFFFFF',
-                backgroundColor: item.backgroundColor && item.backgroundColor !== 'transparent' ? item.backgroundColor : 'transparent',
-                fontWeight: item.isBold !== false ? 800 : 500,
-                padding: item.backgroundColor && item.backgroundColor !== 'transparent' ? '4px 12px' : '2px 6px',
-                borderRadius: '8px',
-                border: item.backgroundColor && item.backgroundColor !== 'transparent' ? '1px solid rgba(255,255,255,0.2)' : 'none',
-                textShadow: item.backgroundColor && item.backgroundColor !== 'transparent' ? 'none' : '0 2px 4px rgba(0,0,0,0.9), 0 0 3px #000',
-                whiteSpace: 'nowrap',
-                maxWidth: '85%',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {item.text}
-            </div>
-          ))}
+          {card.customTextOverlays.map((item) => {
+            const hasBg = Boolean(item.backgroundColor && item.backgroundColor !== 'transparent');
+            const bStyle = item.boxStyle || 'curve';
+
+            let borderRadius = '10px';
+            let clipPath: string | undefined = undefined;
+            const transform = 'translate(-50%, -50%)';
+
+            if (hasBg) {
+              if (bStyle === 'square') {
+                borderRadius = '0px';
+              } else if (bStyle === 'round') {
+                borderRadius = '9999px';
+              } else if (bStyle === 'news_style') {
+                borderRadius = '2px';
+                clipPath = 'polygon(10px 0%, 100% 0%, calc(100% - 10px) 100%, 0% 100%)';
+              } else {
+                borderRadius = '12px';
+              }
+            }
+
+            return (
+              <div
+                key={item.id}
+                className="absolute select-none pointer-events-auto shadow-md transition-transform"
+                style={{
+                  left: `${Math.max(8, Math.min(92, item.x))}%`,
+                  top: `${Math.max(8, Math.min(92, item.y))}%`,
+                  transform,
+                  fontFamily: item.fontFamily ? `"${item.fontFamily}", sans-serif` : 'inherit',
+                  fontSize: `${Math.max(11, Math.round(item.fontSize * previewScale * 1.6))}px`,
+                  color: item.color || '#FFFFFF',
+                  backgroundColor: hasBg ? item.backgroundColor : 'transparent',
+                  fontWeight: item.isBold !== false ? 800 : 500,
+                  padding: hasBg ? (bStyle === 'news_style' ? '4px 18px' : '4px 12px') : '2px 6px',
+                  borderRadius: hasBg ? borderRadius : undefined,
+                  clipPath: hasBg ? clipPath : undefined,
+                  border: hasBg && bStyle !== 'news_style' ? '1px solid rgba(255,255,255,0.25)' : 'none',
+                  textShadow: hasBg ? 'none' : '0 2px 4px rgba(0,0,0,0.9), 0 0 3px #000',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '85%',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {item.text}
+              </div>
+            );
+          })}
         </div>
       )}
 

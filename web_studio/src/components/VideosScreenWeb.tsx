@@ -903,7 +903,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
   }, [activeVideos, selectedRatioFilter]);
 
   const filteredVideos = useMemo(() => {
-    return activeVideos.filter((v) => {
+    const list = activeVideos.filter((v) => {
       if (isBonusOnlyFilter && !v.isBonus) {
         return false;
       }
@@ -911,6 +911,17 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
         return false;
       }
       return true;
+    });
+
+    // Requirement: Master Admin & Admin Video Feed Sorting
+    // Latest video appears first (newest createdAt / timestamp descending)
+    return [...list].sort((a, b) => {
+      const timeA = typeof a.createdAt === 'number' && a.createdAt > 0 ? a.createdAt : ((a as any).timestamp || 0);
+      const timeB = typeof b.createdAt === 'number' && b.createdAt > 0 ? b.createdAt : ((b as any).timestamp || 0);
+      if (timeB !== timeA) {
+        return timeB - timeA;
+      }
+      return String(b.id || '').localeCompare(String(a.id || ''));
     });
   }, [activeVideos, selectedRatioFilter, isBonusOnlyFilter]);
 
@@ -1227,6 +1238,14 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               <Flame className="w-3.5 h-3.5 text-red-500" />
               {activeVideos.length} वीडियो
             </span>
+
+            {/* Admin Latest Sort Indicator */}
+            {isAdmin && (
+              <span className="px-3 py-1.5 bg-amber-500/20 border border-amber-400/40 text-amber-300 text-xs font-black rounded-xl flex items-center gap-1.5 shadow-sm">
+                <Clock className="w-3.5 h-3.5 text-amber-400" />
+                <span>🕒 नवीनतम प्रथम (Latest)</span>
+              </span>
+            )}
 
             {/* Ratio Filter Dropdown */}
             <div className="relative">

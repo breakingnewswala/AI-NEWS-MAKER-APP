@@ -177,10 +177,10 @@ export function getTemplateLayoutSpec(
   let bannerH = height - photoH - footerH;
 
   // Action Safe 90% bounds provide headline expansion baseline per Part 6
-  let headlineSafeLeft = actionSafe.x + 8;
-  let headlineSafeRight = actionSafe.right - 8;
-  let headlineSafeTop = bannerY + 18;
-  let headlineSafeBottom = bannerY + bannerH - 18;
+  let headlineSafeLeft = actionSafe.x + 4;
+  let headlineSafeRight = actionSafe.right - 4;
+  let headlineSafeTop = bannerY + 14;
+  let headlineSafeBottom = bannerY + bannerH - 14;
   let maxHeadlineW = headlineSafeRight - headlineSafeLeft;
   let maxHeadlineH = headlineSafeBottom - headlineSafeTop;
   let maxLines = 4;
@@ -191,17 +191,17 @@ export function getTemplateLayoutSpec(
 
   if (templateId === 'graphic_001') {
     // Graphic 1: Red Headline Banner with Left & Right Chevrons
-    // Headline expands up to 90% Action Safe boundary (84..996), clearing chevrons while utilizing full space
+    // Headline expands up to 90% Action Safe boundary (54..1026 = 972px, 90% width)
     photoH = Math.round(height * 0.6133); // ~828px
     bannerY = photoH;
     bannerH = Math.round(height * 0.3067); // ~414px
     footerH = height - (bannerY + bannerH); // ~108px (8.0%)
 
-    headlineSafeLeft = 84;
-    headlineSafeRight = 996;
-    maxHeadlineW = headlineSafeRight - headlineSafeLeft; // 912px (expands to Action Safe while clearing chevrons)
+    headlineSafeLeft = 54;
+    headlineSafeRight = 1026;
+    maxHeadlineW = headlineSafeRight - headlineSafeLeft; // 972px (full 90% Action Safe boundary)
 
-    headlineSafeTop = bannerY + 12;
+    headlineSafeTop = bannerY + 10;
     headlineSafeBottom = bannerY + bannerH - 8;
     // Allow maxHeadlineH to accommodate 4-line expanded red banner (bannerHFraction = 0.35 -> ~472px)
     maxHeadlineH = Math.max(headlineSafeBottom - headlineSafeTop, Math.round(height * 0.35) - 20);

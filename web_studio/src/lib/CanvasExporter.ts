@@ -1332,8 +1332,30 @@ export async function renderCardToCanvas(card: NewsCardData): Promise<HTMLCanvas
         ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
         ctx.shadowBlur = 12;
         ctx.shadowOffsetY = 4;
-        drawRoundedRect(ctx, posX - textW / 2 - padX, posY - textH / 2 - padY, textW + padX * 2, textH + padY * 2, 12);
-        ctx.fill();
+        const bStyle = item.boxStyle || 'curve';
+        const boxX = posX - textW / 2 - padX;
+        const boxY = posY - textH / 2 - padY;
+        const totalW = textW + padX * 2;
+        const totalH = textH + padY * 2;
+
+        if (bStyle === 'square') {
+          ctx.fillRect(boxX, boxY, totalW, totalH);
+        } else if (bStyle === 'round') {
+          drawRoundedRect(ctx, boxX, boxY, totalW, totalH, totalH / 2);
+          ctx.fill();
+        } else if (bStyle === 'news_style') {
+          const slant = Math.round(totalH * 0.28);
+          ctx.beginPath();
+          ctx.moveTo(boxX + slant, boxY);
+          ctx.lineTo(boxX + totalW, boxY);
+          ctx.lineTo(boxX + totalW - slant, boxY + totalH);
+          ctx.lineTo(boxX, boxY + totalH);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          drawRoundedRect(ctx, boxX, boxY, totalW, totalH, 14);
+          ctx.fill();
+        }
         ctx.shadowColor = 'transparent';
       } else {
         ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
@@ -3285,9 +3307,30 @@ async function drawGraphic001Canvas(
 
       if (item.backgroundColor && item.backgroundColor !== 'transparent') {
         ctx.fillStyle = item.backgroundColor;
-        ctx.beginPath();
-        ctx.roundRect(posX - boxW / 2, posY - boxH / 2, boxW, boxH, 10);
-        ctx.fill();
+        const bStyle = item.boxStyle || 'curve';
+        const boxX = posX - boxW / 2;
+        const boxY = posY - boxH / 2;
+
+        if (bStyle === 'square') {
+          ctx.fillRect(boxX, boxY, boxW, boxH);
+        } else if (bStyle === 'round') {
+          ctx.beginPath();
+          drawRoundedRect(ctx, boxX, boxY, boxW, boxH, boxH / 2);
+          ctx.fill();
+        } else if (bStyle === 'news_style') {
+          const slant = Math.round(boxH * 0.28);
+          ctx.beginPath();
+          ctx.moveTo(boxX + slant, boxY);
+          ctx.lineTo(boxX + boxW, boxY);
+          ctx.lineTo(boxX + boxW - slant, boxY + boxH);
+          ctx.lineTo(boxX, boxY + boxH);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          ctx.beginPath();
+          drawRoundedRect(ctx, boxX, boxY, boxW, boxH, 12);
+          ctx.fill();
+        }
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
         ctx.lineWidth = 1.5;
         ctx.stroke();

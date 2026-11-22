@@ -1743,6 +1743,25 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     });
   }, []);
 
+  // Requirement: RSS Feed auto-sync every 10 minutes (600,000 ms)
+  useEffect(() => {
+    const handleTenMinuteRssSync = async () => {
+      try {
+        if (onRefreshLiveNews) {
+          await onRefreshLiveNews();
+        } else {
+          await syncAllSourcesLive().catch(() => {});
+        }
+        setActiveRssPosts(getActiveRssNewsPosts());
+      } catch (err) {
+        console.error('[RSS 10-Min AutoSync] error:', err);
+      }
+    };
+
+    const tenMinuteInterval = setInterval(handleTenMinuteRssSync, 10 * 60 * 1000);
+    return () => clearInterval(tenMinuteInterval);
+  }, [onRefreshLiveNews]);
+
   useEffect(() => {
     // Keep approved IDs strictly in sync with authoritative server posts
     if (Array.isArray(posts) && posts.length > 0) {
@@ -2090,6 +2109,32 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       return postCat === selectedCategory.toLowerCase() || postCatName.includes(catName) || catName.includes(postCatName);
     });
 
+    const getPostTime = (p: any): number => {
+      if (typeof p?.timestamp === 'number' && !isNaN(p.timestamp) && p.timestamp > 0) return p.timestamp;
+      if (p?.publishedAt) {
+        const t = new Date(p.publishedAt).getTime();
+        if (!isNaN(t) && t > 0) return t;
+      }
+      if (p?.createdAt) {
+        const t = new Date(p.createdAt).getTime();
+        if (!isNaN(t) && t > 0) return t;
+      }
+      return 0;
+    };
+
+    // Requirement: Master Admin & Admin Feed Sorting
+    // All news and especially Pending news MUST be sorted with the latest item first (descending timestamp)
+    if (canModerate) {
+      return [...baseFiltered].sort((a, b) => {
+        const timeA = getPostTime(a);
+        const timeB = getPostTime(b);
+        if (timeB !== timeA) {
+          return timeB - timeA;
+        }
+        return String(b?.id || '').localeCompare(String(a?.id || ''));
+      });
+    }
+
     // Part 18: Local News Personalization & Local Alerts Ranking (Requirement 9)
     if (selectedCategory === 'local_alerts' || userDistrict || userState) {
       const cleanDist = (userDistrict || localAlertPrefs?.district || '').toLowerCase();
@@ -2130,11 +2175,11 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
           return scoreB - scoreA;
         }
 
-        return (b.timestamp || 0) - (a.timestamp || 0);
+        return getPostTime(b) - getPostTime(a);
       });
     }
 
-    return baseFiltered;
+    return [...baseFiltered].sort((a, b) => getPostTime(b) - getPostTime(a));
   }, [combinedPosts, canModerate, adminPendingOnly, adminPublishedOnly, adminBonusOnly, adminFilterChannel, selectedCategory, feedCategories, approvedRssIds, userDistrict, userState, userFavorites]);
 
   const breakingPosts = visiblePosts.filter((p) => p.breaking).length > 0
@@ -2420,7 +2465,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                 <span>बोनस खबरें ({bonusCount})</span>
               </button>
 
-              {/* 5. RSS Pending Approval Toggle */}
+              {/* 5. RSS Pending Approval Toggle (Strictly sorted by Latest Pending First) */}
               <button
                 type="button"
                 onClick={() => {
@@ -2432,9 +2477,20 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                     ? 'bg-amber-500 text-slate-950 font-black shadow-md'
                     : 'bg-slate-950 text-amber-300 border border-slate-800 hover:border-slate-700'
                 }`}
+                title="केवल पेंडिंग RSS खबरें देखें (नवीनतम पेंडिंग खबर सबसे पहले दिखेगी)"
               >
                 <span>⏳ पेंडिंग RSS ({pendingRssCount})</span>
+                {adminPendingOnly && <span className="text-[10px] bg-slate-900/80 text-amber-300 px-1.5 py-0.2 rounded font-black">नवीनतम</span>}
               </button>
+
+              {/* 6. RSS 10-Minute Auto-Sync Indicator */}
+              <div
+                className="px-2.5 py-1.5 bg-slate-900/90 border border-slate-800 text-slate-400 text-[11px] font-bold rounded-lg flex items-center gap-1.5"
+                title="RSS फ़ीड हर 10 मिनट में स्वचालित रूप से सिंक होती है"
+              >
+                <RefreshCw className="w-3 h-3 text-amber-400" />
+                <span>10 मि. ऑटो-सिंक</span>
+              </div>
 
               {/* Raw News Button */}
               <button
@@ -3521,23 +3577,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         <span>Select</span>
                       </label>
 
-                      {/* Admin Toggle for Special Notification Board (Phase 14) */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleNotificationBoard(post.id);
-                        }}
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition ${
-                          adminNotificationBoardIds.has(post.id)
-                            ? 'bg-amber-500 text-slate-950 font-black'
-                            : 'bg-slate-800 text-slate-300 hover:text-white'
-                        }`}
-                        title={adminNotificationBoardIds.has(post.id) ? 'नोटिफिकेशन बोर्ड से हटाएं' : 'नोटिफिकेशन बोर्ड में जोड़ें'}
-                      >
-                        <Sparkles className="w-2.5 h-2.5" />
-                        <span>{adminNotificationBoardIds.has(post.id) ? 'बोर्ड में शामिल ✓' : '+ बोर्ड'}</span>
-                      </button>
+
 
                       {/* RSS/Web Approval Button if pending */}
                       {(post.id.startsWith('rss-') || post.id.startsWith('web-')) && !isRssPostApproved(post, approvedRssIds) && (

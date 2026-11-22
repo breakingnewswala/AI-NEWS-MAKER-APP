@@ -63,6 +63,7 @@ import {
   Eye,
   TrendingUp,
   Tag,
+  Film,
 } from 'lucide-react';
 import { PackageCoupon } from '../types';
 import { GoogleSheetsUserSyncModal } from './GoogleSheetsUserSyncModal';
@@ -7261,9 +7262,34 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   <p className="text-xs">एनालिटिक्स डेटा लोड हो रहा है...</p>
                 </div>
               ) : analyticsTab === 'news' ? (
-                /* SECTION A: समाचार विश्लेषण (NEWS ANALYTICS) */
+                /* SECTION A: समाचार विश्लेषण (NEWS ANALYTICS) - REDESIGNED WITH LIVE DATA */
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                    {/* 1. कितनी खबरें पब्लिश हैं अभी */}
+                    <div className="bg-slate-900 border border-emerald-500/30 rounded-xl p-3 shadow-md">
+                      <div className="flex items-center justify-between text-emerald-400 text-[11px] font-bold">
+                        <span>प्रकाशित खबरें</span>
+                        <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black font-mono text-emerald-300 mt-1">
+                        {analyticsData?.news?.publishedNewsCount ?? analyticsData?.news?.publishedCount ?? 0}
+                      </div>
+                      <span className="text-[10px] text-slate-400">लाइव व स्वीकृत खबरें</span>
+                    </div>
+
+                    {/* 2. कितनी पेंडिंग में हैं */}
+                    <div className="bg-slate-900 border border-amber-500/30 rounded-xl p-3 shadow-md">
+                      <div className="flex items-center justify-between text-amber-400 text-[11px] font-bold">
+                        <span>पेंडिंग समीक्षा</span>
+                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black font-mono text-amber-300 mt-1">
+                        {analyticsData?.news?.pendingNewsCount ?? analyticsData?.news?.pendingCount ?? 0}
+                      </div>
+                      <span className="text-[10px] text-slate-400">समीक्षा व अप्रूवल शेष</span>
+                    </div>
+
+                    {/* 3. खबरें देखीं */}
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
                       <div className="flex items-center justify-between text-slate-400 text-[11px] font-bold">
                         <span>खबरें देखीं</span>
@@ -7272,9 +7298,10 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       <div className="text-xl sm:text-2xl font-black font-mono text-white mt-1">
                         {analyticsData?.news?.totalViews ?? 0}
                       </div>
-                      <span className="text-[10px] text-slate-500">कुल रीडर व्यूज</span>
+                      <span className="text-[10px] text-slate-500">कुल पाठक रीडर व्यूज</span>
                     </div>
 
+                    {/* 4. ग्राफिक क्लिक */}
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
                       <div className="flex items-center justify-between text-amber-400 text-[11px] font-bold">
                         <span>ग्राफिक क्लिक</span>
@@ -7286,28 +7313,19 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       <span className="text-[10px] text-slate-500">"खबर से ग्राफिक बनाएं"</span>
                     </div>
 
+                    {/* 5. ग्राफिक पूर्ण */}
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                      <div className="flex items-center justify-between text-indigo-400 text-[11px] font-bold">
-                        <span>प्रक्रिया शुरू</span>
-                        <Activity className="w-3.5 h-3.5 text-indigo-400" />
-                      </div>
-                      <div className="text-xl sm:text-2xl font-black font-mono text-indigo-300 mt-1">
-                        {analyticsData?.news?.generationStarts ?? 0}
-                      </div>
-                      <span className="text-[10px] text-slate-500">एडिटर में खोला गया</span>
-                    </div>
-
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                      <div className="flex items-center justify-between text-emerald-400 text-[11px] font-bold">
+                      <div className="flex items-center justify-between text-purple-400 text-[11px] font-bold">
                         <span>ग्राफिक पूर्ण</span>
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <Sparkles className="w-3.5 h-3.5 text-purple-400" />
                       </div>
-                      <div className="text-xl sm:text-2xl font-black font-mono text-emerald-400 mt-1">
+                      <div className="text-xl sm:text-2xl font-black font-mono text-purple-300 mt-1">
                         {analyticsData?.news?.generationSuccess ?? 0}
                       </div>
-                      <span className="text-[10px] text-slate-500">सफलतापूर्वक बना</span>
+                      <span className="text-[10px] text-slate-500">सफलतापूर्वक बने कार्ड्स</span>
                     </div>
 
+                    {/* 6. डाउनलोड्स */}
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
                       <div className="flex items-center justify-between text-cyan-400 text-[11px] font-bold">
                         <span>डाउनलोड्स</span>
@@ -7317,17 +7335,6 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         {analyticsData?.news?.downloads ?? 0}
                       </div>
                       <span className="text-[10px] text-slate-500">सफल कार्ड सेव</span>
-                    </div>
-
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                      <div className="flex items-center justify-between text-rose-400 text-[11px] font-bold">
-                        <span>अधूरी छोड़ी</span>
-                        <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
-                      </div>
-                      <div className="text-xl sm:text-2xl font-black font-mono text-rose-400 mt-1">
-                        {Math.max(0, (analyticsData?.news?.generationStarts ?? 0) - (analyticsData?.news?.generationSuccess ?? 0))}
-                      </div>
-                      <span className="text-[10px] text-slate-500">ड्रॉप-ऑफ प्रक्रिया</span>
                     </div>
                   </div>
 
@@ -7446,9 +7453,22 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                   )}
                 </div>
               ) : (
-                /* SECTION B: वीडियो विश्लेषण (VIDEO ANALYTICS) */
+                /* SECTION B: वीडियो विश्लेषण (VIDEO ANALYTICS) - REDESIGNED WITH LIVE DATA */
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+                    {/* 1. कुल वीडियो */}
+                    <div className="bg-slate-900 border border-purple-500/30 rounded-xl p-3 shadow-md">
+                      <div className="flex items-center justify-between text-purple-400 text-[11px] font-bold">
+                        <span>कुल वीडियो</span>
+                        <Film className="w-3.5 h-3.5 text-purple-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black font-mono text-purple-300 mt-1">
+                        {analyticsData?.video?.statusBreakdown?.totalCreated ?? 0}
+                      </div>
+                      <span className="text-[10px] text-slate-400">सक्रिय वीडियो लाइब्रेरी</span>
+                    </div>
+
+                    {/* 2. वीडियो देखे */}
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
                       <div className="flex items-center justify-between text-slate-400 text-[11px] font-bold">
                         <span>वीडियो देखे</span>
@@ -7457,31 +7477,22 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       <div className="text-xl sm:text-2xl font-black font-mono text-white mt-1">
                         {analyticsData?.video?.totalViews ?? 0}
                       </div>
-                      <span className="text-[10px] text-slate-500">कुल वीडियो व्यूज</span>
+                      <span className="text-[10px] text-slate-500">कुल वीडियो दर्शक</span>
                     </div>
 
+                    {/* 3. वीडियो का उपयोग */}
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                      <div className="flex items-center justify-between text-purple-400 text-[11px] font-bold">
-                        <span>वीडियो का उपयोग</span>
-                        <TrendingUp className="w-3.5 h-3.5 text-purple-400" />
+                      <div className="flex items-center justify-between text-amber-400 text-[11px] font-bold">
+                        <span>स्टूडियो उपयोग</span>
+                        <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
                       </div>
-                      <div className="text-xl sm:text-2xl font-black font-mono text-purple-300 mt-1">
+                      <div className="text-xl sm:text-2xl font-black font-mono text-amber-300 mt-1">
                         {analyticsData?.video?.clickCreate ?? 0}
                       </div>
-                      <span className="text-[10px] text-slate-500">स्टूडियो में उपयोग</span>
+                      <span className="text-[10px] text-slate-500">एडिटर में उपयोग</span>
                     </div>
 
-                    <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                      <div className="flex items-center justify-between text-emerald-400 text-[11px] font-bold">
-                        <span>कार्य पूरे किए</span>
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                      </div>
-                      <div className="text-xl sm:text-2xl font-black font-mono text-emerald-400 mt-1">
-                        {analyticsData?.video?.generationSuccess ?? 0}
-                      </div>
-                      <span className="text-[10px] text-slate-500">सफल रेंडरिंग/एडिट</span>
-                    </div>
-
+                    {/* 4. सफल डाउनलोड्स */}
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-3">
                       <div className="flex items-center justify-between text-cyan-400 text-[11px] font-bold">
                         <span>डाउनलोड्स</span>
@@ -7490,7 +7501,31 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                       <div className="text-xl sm:text-2xl font-black font-mono text-cyan-400 mt-1">
                         {analyticsData?.video?.downloads ?? 0}
                       </div>
-                      <span className="text-[10px] text-slate-500">सफल वीडियो डाउनलोड्स</span>
+                      <span className="text-[10px] text-slate-500">सफल वीडियो एक्सपोर्ट्स</span>
+                    </div>
+
+                    {/* 5. आज के डाउनलोड्स */}
+                    <div className="bg-slate-900 border border-emerald-500/30 rounded-xl p-3 shadow-md">
+                      <div className="flex items-center justify-between text-emerald-400 text-[11px] font-bold">
+                        <span>आज के डाउनलोड्स</span>
+                        <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black font-mono text-emerald-300 mt-1">
+                        {analyticsData?.video?.downloadsToday ?? 0}
+                      </div>
+                      <span className="text-[10px] text-slate-400">आज का वीडियो वॉल्यूम</span>
+                    </div>
+
+                    {/* 6. मासिक डाउनलोड्स */}
+                    <div className="bg-slate-900 border border-rose-500/30 rounded-xl p-3 shadow-md">
+                      <div className="flex items-center justify-between text-rose-400 text-[11px] font-bold">
+                        <span>मासिक डाउनलोड्स</span>
+                        <BarChart3 className="w-3.5 h-3.5 text-rose-400" />
+                      </div>
+                      <div className="text-xl sm:text-2xl font-black font-mono text-rose-300 mt-1">
+                        {analyticsData?.video?.downloadsThisMonth ?? 0}
+                      </div>
+                      <span className="text-[10px] text-slate-400">इस महीने कुल डाउनलोड्स</span>
                     </div>
                   </div>
 
