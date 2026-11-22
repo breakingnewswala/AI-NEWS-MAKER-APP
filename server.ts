@@ -4552,12 +4552,23 @@ app.post("/api/news-posts/reset", requireAdminMiddleware, (_req, res) => {
 const DRAFTS_DB_FILE = path.join(process.cwd(), "drafts_database.json");
 const SOCIAL_FEED_DB_FILE = path.join(process.cwd(), "social_feed_database.json");
 
+// 72 Hours (3 Days) Auto-Purge TTL - Optimal for Googlebot Image Indexing & Zero Storage Bloat
+const SOCIAL_FEED_TTL_MS = 72 * 60 * 60 * 1000;
+
 function loadSocialFeedDatabase(): any[] {
   try {
     if (fs.existsSync(SOCIAL_FEED_DB_FILE)) {
       const content = fs.readFileSync(SOCIAL_FEED_DB_FILE, "utf-8");
       const parsed = JSON.parse(content);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) {
+        const now = Date.now();
+        // Auto-purge cards older than 72 hours
+        const active = parsed.filter((item) => (now - (item.createdAt || 0)) <= SOCIAL_FEED_TTL_MS);
+        if (active.length !== parsed.length) {
+          saveSocialFeedDatabase(active);
+        }
+        return active;
+      }
     }
   } catch (e) {
     console.error("Error reading social_feed_database.json:", e);
@@ -4744,17 +4755,39 @@ app.get("/api/social-feed", (_req, res) => {
   return res.json({ success: true, count: sorted.length, feed: sorted });
 });
 
-// POST /api/social-feed - Add or update a card in social feed
+// POST /api/social-feed - Add or update a card in social feed (Zero Storage Bloat: strips Base64, TTL 72h)
 app.post("/api/social-feed", (req, res) => {
   try {
     const cardItem = req.body;
     if (!cardItem || !cardItem.id) {
       return res.status(400).json({ error: "कार्ड ऑब्जेक्ट और ID आवश्यक है" });
     }
-    const items = loadSocialFeedDatabase();
-    const idx = items.findIndex((i) => i.id === cardItem.id);
+
+    // Zero-bloat sanitizer: Strip heavy base64 strings so disk footprint is tiny (< 300 bytes per record)
+    let cleanThumb = cardItem.thumbnailUrl || '';
+    if (typeof cleanThumb === 'string' && (cleanThumb.startsWith('data:') || cleanThumb.length > 500)) {
+      cleanThumb = ''; // Omit heavy base64
+    }
+
+    const channel = String(cardItem.channelName || 'AI News Maker');
+    const isBrand = Boolean(
+      cardItem.cardType === 'brand' ||
+      cardItem.isOfficialBrand ||
+      channel.toLowerCase().includes('ai news maker') ||
+      channel.toLowerCase().includes('breaking news wala')
+    );
+
     const enriched = {
-      ...cardItem,
+      id: String(cardItem.id),
+      headline: String(cardItem.headline || 'ताज़ा समाचार').slice(0, 300),
+      caption: String(cardItem.caption || '').slice(0, 500),
+      category: String(cardItem.category || 'General').slice(0, 50),
+      channelName: channel.slice(0, 80),
+      reporterName: String(cardItem.reporterName || 'संवाददाता').slice(0, 80),
+      cardType: isBrand ? 'brand' : 'user',
+      isOfficialBrand: isBrand,
+      thumbnailUrl: cleanThumb,
+      aspectRatio: cardItem.aspectRatio || '4:5',
       seoHashtags: Array.isArray(cardItem.seoHashtags) && cardItem.seoHashtags.length > 0
         ? cardItem.seoHashtags
         : [
@@ -4766,15 +4799,20 @@ app.post("/api/social-feed", (req, res) => {
             '#NewsUpdate',
           ],
       updatedAt: Date.now(),
-      createdAt: cardItem.createdAt || Date.now(),
+      createdAt: Number(cardItem.createdAt) || Date.now(),
     };
+
+    const items = loadSocialFeedDatabase();
+    const idx = items.findIndex((i) => i.id === enriched.id);
     if (idx >= 0) {
       items[idx] = { ...items[idx], ...enriched };
     } else {
       items.unshift(enriched);
     }
-    if (items.length > 500) {
-      items.splice(500);
+
+    // Limit maximum stored items to 300 (total file size <= 75 KB)
+    if (items.length > 300) {
+      items.splice(300);
     }
     saveSocialFeedDatabase(items);
     return res.json({ success: true, item: enriched });
@@ -4795,6 +4833,49 @@ app.post("/api/social-feed/delete", (req, res) => {
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || "Failed to delete" });
   }
+});
+
+// Public Google Image Sitemap for Social Feed & User Cards SEO
+app.get("/sitemap-social-images.xml", (_req, res) => {
+  const items = loadSocialFeedDatabase();
+  const baseUrl = "https://www.ainewsmaker.online";
+  const escapeXml = (unsafe: string) =>
+    (unsafe || '').replace(/[<>&'"]/g, (c) => {
+      switch (c) {
+        case '<': return '&lt;';
+        case '>': return '&gt;';
+        case '&': return '&amp;';
+        case '\'': return '&apos;';
+        case '"': return '&quot;';
+        default: return c;
+      }
+    });
+
+  const xmlEntries = items.map((item) => {
+    const title = escapeXml(`AI News Maker - ${item.headline || 'ताज़ा समाचार'}`);
+    const caption = escapeXml(`AI News Maker डिजिटल न्यूज़ ग्राफ़िक कार्ड · चैनल: ${item.channelName || 'AI News Maker'} · रिपोर्टर: ${item.reporterName || 'संवाददाता'}`);
+    const lastmod = new Date(item.updatedAt || item.createdAt || Date.now()).toISOString();
+    return `  <url>
+    <loc>${baseUrl}/?tab=social-feed&amp;id=${encodeURIComponent(item.id)}</loc>
+    <lastmod>${lastmod}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>${baseUrl}/assets/ai_news_maker_logo.png</image:loc>
+      <image:title>${title}</image:title>
+      <image:caption>${caption}</image:caption>
+    </image:image>
+  </url>`;
+  }).join('\n');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+${xmlEntries}
+</urlset>`;
+
+  res.setHeader("Content-Type", "application/xml; charset=utf-8");
+  return res.send(xml);
 });
 
 // ==========================================

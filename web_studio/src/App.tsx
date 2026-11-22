@@ -3235,8 +3235,22 @@ export default function App() {
         );
       }
 
-      // Silently record card into Master Admin Social Feed database
+      // Silently record card into Master Admin Social Feed database (Zero Storage Bloat & Brand/User separation)
       try {
+        const chanName = String(card.channelName || 'AI News Maker');
+        const isOfficialBrand = Boolean(
+          isAdmin ||
+          chanName.toLowerCase().includes('ai news maker') ||
+          chanName.toLowerCase().includes('breaking news wala')
+        );
+        const cardType: 'brand' | 'user' = isOfficialBrand ? 'brand' : 'user';
+
+        // Never send large base64 strings to social feed to protect cloud storage
+        const rawPhoto = (card as any).photoUrl || '';
+        const safeThumb = (typeof rawPhoto === 'string' && !rawPhoto.startsWith('data:') && rawPhoto.length < 500)
+          ? rawPhoto
+          : '';
+
         fetch('/api/social-feed', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -3245,9 +3259,11 @@ export default function App() {
             headline: card.formattedHeadline || card.headline || 'ताज़ा समाचार',
             caption: card.caption || '',
             category: card.category || 'ताज़ा समाचार',
-            channelName: card.channelName || 'AI News Maker',
+            channelName: chanName,
             reporterName: currentUser?.name || currentUser?.email || 'संवाददाता',
-            thumbnailUrl: (card as any).photoUrl || '',
+            cardType,
+            isOfficialBrand,
+            thumbnailUrl: safeThumb,
             aspectRatio: card.aspectRatio || '4:5',
             createdAt: Date.now(),
           }),

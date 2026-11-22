@@ -144,6 +144,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
   const [socialFeedCards, setSocialFeedCards] = useState<any[]>([]);
   const [isSocialFeedLoading, setIsSocialFeedLoading] = useState(false);
   const [socialFeedSearch, setSocialFeedSearch] = useState('');
+  const [socialFeedFilter, setSocialFeedFilter] = useState<'all' | 'brand' | 'user'>('all');
   const [copiedFeedId, setCopiedFeedId] = useState<string | null>(null);
 
   const fetchSocialFeed = async () => {
@@ -1505,6 +1506,43 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                   </button>
                 </div>
 
+                {/* Filter Tabs: All Cards | Brand Cards | User SEO Cards */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setSocialFeedFilter('all')}
+                    className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex-shrink-0 ${
+                      socialFeedFilter === 'all'
+                        ? 'bg-purple-600 text-white shadow'
+                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    <span>सभी कार्ड्स ({socialFeedCards.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSocialFeedFilter('brand')}
+                    className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer flex-shrink-0 ${
+                      socialFeedFilter === 'brand'
+                        ? 'bg-amber-400 text-slate-950 font-black shadow'
+                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    <span>⭐ AI News Maker ब्रांड ({socialFeedCards.filter((c) => c.cardType === 'brand' || c.isOfficialBrand).length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSocialFeedFilter('user')}
+                    className={`px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1 cursor-pointer flex-shrink-0 ${
+                      socialFeedFilter === 'user'
+                        ? 'bg-cyan-500 text-slate-950 font-black shadow'
+                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    <span>🌐 यूज़र कार्ड्स - SEO ({socialFeedCards.filter((c) => c.cardType !== 'brand' && !c.isOfficialBrand).length})</span>
+                  </button>
+                </div>
+
                 {/* Cards Grid */}
                 {isSocialFeedLoading && socialFeedCards.length === 0 ? (
                   <div className="py-12 text-center text-slate-400 space-y-2">
@@ -1523,6 +1561,12 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {socialFeedCards
                       .filter((c) => {
+                        // Filter by type (All vs Brand vs User)
+                        const isBrand = Boolean(c.cardType === 'brand' || c.isOfficialBrand);
+                        if (socialFeedFilter === 'brand' && !isBrand) return false;
+                        if (socialFeedFilter === 'user' && isBrand) return false;
+
+                        // Search query
                         if (!socialFeedSearch) return true;
                         const q = socialFeedSearch.toLowerCase();
                         return (
@@ -1533,6 +1577,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                         );
                       })
                       .map((card) => {
+                        const isBrandCard = Boolean(card.cardType === 'brand' || card.isOfficialBrand);
                         const hashtags = (card.seoHashtags || [
                           '#AINewsMaker',
                           '#BreakingNews',
@@ -1544,15 +1589,31 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                         return (
                           <div
                             key={card.id}
-                            className="bg-slate-900/90 border border-slate-800 hover:border-purple-500/50 rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-lg transition-all"
+                            className={`rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-lg transition-all ${
+                              isBrandCard
+                                ? 'bg-gradient-to-b from-slate-900 via-slate-900 to-amber-950/20 border-2 border-amber-500/50 hover:border-amber-400'
+                                : 'bg-slate-900/90 border border-slate-800 hover:border-cyan-500/40'
+                            }`}
                           >
                             <div className="space-y-2.5">
-                              {/* Header Meta */}
-                              <div className="flex items-center justify-between text-[11px]">
-                                <span className="px-2 py-0.5 rounded-md bg-purple-950/80 text-purple-300 border border-purple-500/30 font-bold truncate max-w-[150px]">
-                                  {card.channelName || 'AI News Maker'}
-                                </span>
-                                <div className="flex items-center gap-1.5 text-slate-400">
+                              {/* Header Meta: Distinct for Brand vs User */}
+                              <div className="flex items-center justify-between text-[11px] gap-2">
+                                {isBrandCard ? (
+                                  <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 font-black flex items-center gap-1 shadow-sm">
+                                    <span>⭐ AI News Maker Official</span>
+                                  </span>
+                                ) : (
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className="px-2 py-0.5 rounded-md bg-cyan-950/80 text-cyan-300 border border-cyan-500/30 font-bold truncate max-w-[120px]">
+                                      {card.channelName || 'यूज़र चैनल'}
+                                    </span>
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 shrink-0">
+                                      🌐 User SEO
+                                    </span>
+                                  </div>
+                                )}
+
+                                <div className="flex items-center gap-1.5 text-slate-400 shrink-0">
                                   <Clock className="w-3 h-3" />
                                   <span>
                                     {card.createdAt
@@ -1580,6 +1641,19 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                                 {card.headline || 'अनाम समाचार'}
                               </h4>
 
+                              {/* User SEO Specific Badge */}
+                              {!isBrandCard && (
+                                <div className="p-2 rounded-xl bg-cyan-950/30 border border-cyan-500/20 text-[11px] text-cyan-200/90 space-y-1">
+                                  <div className="flex items-center justify-between text-[10px]">
+                                    <span className="font-bold text-cyan-300">🔍 Google Image SEO</span>
+                                    <span className="text-emerald-400 font-bold">✓ Ready for Indexing</span>
+                                  </div>
+                                  <div className="text-[10px] text-slate-400 truncate">
+                                    Brand Anchor: <strong className="text-amber-300">AI News Maker</strong> ({card.channelName || 'Reporter'})
+                                  </div>
+                                </div>
+                              )}
+
                               {/* SEO Hashtag Pills */}
                               <div className="flex flex-wrap gap-1">
                                 {(card.seoHashtags || [
@@ -1589,7 +1663,11 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                                 ]).slice(0, 4).map((tag: string, tidx: number) => (
                                   <span
                                     key={tidx}
-                                    className="text-[10px] text-amber-300/90 bg-amber-950/50 border border-amber-500/30 px-1.5 py-0.5 rounded"
+                                    className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                                      isBrandCard
+                                        ? 'text-amber-300/90 bg-amber-950/50 border-amber-500/30'
+                                        : 'text-slate-400 bg-slate-800/80 border-slate-700/60'
+                                    }`}
                                   >
                                     {tag}
                                   </span>
@@ -1597,43 +1675,32 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                               </div>
                             </div>
 
-                            {/* Actions Footer */}
-                            <div className="pt-2 border-t border-slate-800/80 flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  navigator.clipboard.writeText(postShareText);
-                                  setCopiedFeedId(card.id);
-                                  setTimeout(() => setCopiedFeedId(null), 2000);
-                                }}
-                                className={`flex-1 py-1.5 px-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                                  copiedFeedId === card.id
-                                    ? 'bg-emerald-600 text-white shadow'
-                                    : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
-                                }`}
-                              >
-                                {copiedFeedId === card.id ? (
-                                  <>
-                                    <Check className="w-3.5 h-3.5 text-white" />
-                                    <span>कॉपी हो गया!</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy className="w-3.5 h-3.5 text-purple-400" />
-                                    <span>SEO पोस्ट कॉपी</span>
-                                  </>
-                                )}
-                              </button>
-
-                              <a
-                                href={`https://api.whatsapp.com/send?text=${encodeURIComponent(postShareText)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="p-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 transition flex items-center justify-center"
-                                title="WhatsApp पर शेयर करें"
-                              >
-                                <Share2 className="w-3.5 h-3.5" />
-                              </a>
+                            {/* Actions Footer: Distinct for Brand (WhatsApp Share only) vs User (SEO status only) */}
+                            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                              {isBrandCard ? (
+                                /* AI NEWS MAKER BRAND CARD: ONLY WHATSAPP SHARE BUTTON */
+                                <a
+                                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent(postShareText)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                                  title="WhatsApp पर शेयर करें"
+                                >
+                                  <Share2 className="w-3.5 h-3.5" />
+                                  <span>📱 WhatsApp पर शेयर करें</span>
+                                </a>
+                              ) : (
+                                /* REGULAR USER CARD: NO WHATSAPP SHARE, NO CAPTION COPY - PURELY SEO */
+                                <div className="w-full flex items-center justify-between text-[11px] text-slate-400 py-1 px-1">
+                                  <span className="flex items-center gap-1 text-slate-400">
+                                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse inline-block" />
+                                    <span>Google Search Anchor</span>
+                                  </span>
+                                  <span className="text-[10px] font-bold text-amber-300/90 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/20">
+                                    AI News Maker SEO
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </div>
                         );
