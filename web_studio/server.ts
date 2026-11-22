@@ -6829,6 +6829,32 @@ app.delete(["/api/channels/:id", "/api/admin/channels/:id", "/api/restricted-cha
 const USERS_MASTER_FILE = path.join(process.cwd(), "users_master_database.json");
 const USERS_DB_FILE = path.join(process.cwd(), "users_accounts_db.json");
 const NOTIFICATIONS_DB_FILE = path.join(process.cwd(), "notifications_database.json");
+const TRIAL_LEDGER_FILE = path.join(process.cwd(), "used_trial_identities_ledger.json");
+
+function loadTrialLedger(): Record<string, { trialStartedAt: number; trialEndsAt: number; email: string; phone?: string }> {
+  try {
+    if (fs.existsSync(TRIAL_LEDGER_FILE)) {
+      return JSON.parse(fs.readFileSync(TRIAL_LEDGER_FILE, "utf-8")) || {};
+    }
+  } catch (e) {
+    console.error("Error reading used_trial_identities_ledger.json:", e);
+  }
+  return {};
+}
+
+function recordTrialLedger(email: string, phone: string | undefined, trialStartedAt: number, trialEndsAt: number) {
+  try {
+    const ledger = loadTrialLedger();
+    const cleanEm = (email || '').toLowerCase().trim();
+    const cleanPh = (phone || '').replace(/\D/g, '').slice(-10);
+    const entry = { trialStartedAt, trialEndsAt, email: cleanEm, phone: cleanPh };
+    if (cleanEm) ledger[cleanEm] = entry;
+    if (cleanPh && cleanPh.length === 10) ledger[`phone_${cleanPh}`] = entry;
+    fs.writeFileSync(TRIAL_LEDGER_FILE, JSON.stringify(ledger, null, 2), "utf-8");
+  } catch (e) {
+    console.error("Error writing used_trial_identities_ledger.json:", e);
+  }
+}
 
 interface AuthoritativeUser {
   userId: string;
@@ -7555,9 +7581,22 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       activatedVia: existing.activatedVia || (isSuper ? 'Super Admin Preset' : 'Google Registration'),
     };
     users[idx] = updatedRecord;
+    recordTrialLedger(cleanEmail, newNormPhone, preservedTrialStart, preservedTrialEnds);
   } else {
-    const newTrialStart = now;
-    const newTrialEnds = now + SEVEN_DAYS_MS;
+    const ledger = loadTrialLedger();
+    const cleanPhone = (userPayload.mobileNumber || userPayload.mobile || userPayload.whatsappNumber || '').toString().replace(/\D/g, '').slice(-10);
+    const existingLedger = (cleanEmail && ledger[cleanEmail]) || (cleanPhone.length === 10 ? ledger[`phone_${cleanPhone}`] : null);
+
+    let newTrialStart = now;
+    let newTrialEnds = now + SEVEN_DAYS_MS;
+
+    if (existingLedger && existingLedger.trialStartedAt) {
+      // Identity already registered before: strictly preserve original timeline (prevents repeat trial on account recreation)
+      newTrialStart = existingLedger.trialStartedAt;
+      newTrialEnds = existingLedger.trialEndsAt || (newTrialStart + SEVEN_DAYS_MS);
+    } else {
+      recordTrialLedger(cleanEmail, cleanPhone, newTrialStart, newTrialEnds);
+    }
 
     const safeUsername = rawReqUser || (cleanEmail === 'admin.ainewsmaker@gmail.com'
       ? 'AI News Maker'
@@ -7566,6 +7605,8 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
           : cleanGenerateUsername(undefined, userPayload.fullName || userPayload.name)));
 
     const deterministicUserId = userPayload.userId || userPayload.uid || (cleanEmail ? `usr_${Buffer.from(cleanEmail).toString('hex').slice(0, 16)}` : `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+
+    const isNewlyExpired = isSuper || (userPayload.tier && userPayload.tier !== 'basic') ? false : (now >= newTrialEnds);
 
     updatedRecord = {
       userId: deterministicUserId,
@@ -7608,7 +7649,7 @@ function registerOrUpdateUserAuthoritative(userPayload: any): AuthoritativeUser 
       createdAt: now,
       trialStartedAt: newTrialStart,
       trialEndsAt: newTrialEnds,
-      isTrialExpired: false,
+      isTrialExpired: isNewlyExpired,
       lastLoginAt: now,
       activatedAt: isSuper ? now : newTrialStart,
       expiresAt: isSuper ? 2107057518060 : newTrialEnds,

@@ -3,7 +3,7 @@ import { getApiUrl, ensureAuthToken, getAuthToken, getAuthHeaders, getAdminAuthH
 
 export type UserPlanTier = 'basic' | 'advanced' | 'professional' | 'ultra';
 
-export type PlanKeyName = 'BASIC' | 'ADVANCE' | 'PRO' | 'VIP DESK';
+export type PlanKeyName = 'BASIC' | 'ADVANCE' | 'PRO' | 'VIP DESK' | 'TRIAL';
 export const MASTER_ADMIN_EMAIL = 'breakingnewswala.com@gmail.com';
 export const REGULAR_ADMIN_EMAIL = 'admin.ainewsmaker@gmail.com';
 export const SUPER_ADMIN_EMAILS = [MASTER_ADMIN_EMAIL];
@@ -1113,8 +1113,9 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
   const hasPaidPlan = false;
   const isTrialActive = !isExpired;
 
-  const effectiveTier: UserPlanTier = isTrialActive ? 'advanced' : 'basic';
-  const effectivePlanName: PlanKeyName = isTrialActive ? 'ADVANCED' : 'BASIC';
+  // Trial users enjoy Pro-tier capabilities during the 7-day trial period, while label is strictly TRIAL
+  const effectiveTier: UserPlanTier = isTrialActive ? 'professional' : 'basic';
+  const effectivePlanName: PlanKeyName = isTrialActive ? 'TRIAL' : 'BASIC';
 
   const primaryMobile = matchedUser?.mobile || localStorage.getItem(STORAGE_KEY_PRIMARY_MOBILE) || '';
   const isMobileLocked = Boolean(primaryMobile.trim());

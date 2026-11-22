@@ -2238,7 +2238,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   <div className="px-3 py-1 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-slate-300 flex items-center gap-2">
                     <span>वर्तमान प्लान:</span>
                     <span className="text-amber-400 font-black">
-                      {subscription.isTrialActive ? 'ADVANCED (7-Day Trial Active)' : (subscription.isProTrial ? 'PRO (7-Day Trial Active)' : activePlanDetail.nameHi)}
+                      {subscription.isTrialActive || subscription.isProTrial ? 'ट्रायल पीरियड (7-Day Trial)' : activePlanDetail.nameHi}
                     </span>
                   </div>
                 </div>
@@ -2247,17 +2247,17 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
               {/* Master Branding / Plan Status Alert Banner (User Only) */}
               {!isAdmin && (
                 subscription.isTrialActive || subscription.isProTrial ? (
-                  <div className="p-4 bg-blue-950/60 border border-blue-500/70 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+                  <div className="p-4 bg-amber-500/10 border-2 border-amber-500/50 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-300 shrink-0">
-                        <Sparkles className="w-5 h-5 text-blue-400" />
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shrink-0">
+                        <Sparkles className="w-5 h-5 text-amber-400" />
                       </div>
                       <div>
-                        <div className="text-xs font-black text-blue-300 uppercase">
-                          ADVANCED (7-Day Trial Active) — {subscription.daysRemaining} दिन शेष
+                        <div className="text-xs font-black text-amber-300 uppercase">
+                          ट्रायल पीरियड (7-Day Free Trial) — {subscription.daysRemaining} दिन शेष
                         </div>
-                        <div className="text-xs text-slate-300 mt-0.5">
-                          बधाई! आपको 7 दिनों के लिए एडवांस (ADVANCED) प्लान का पूर्ण ट्रायल एक्सेस दिया गया है। 7 दिन बाद सेवा जारी रखने के लिए नीचे दिए गए पैकेज परचेस करें।
+                        <div className="text-xs text-slate-300 mt-0.5 leading-relaxed">
+                          आप वर्तमान में <strong>7-दिवसीय फ्री ट्रायल पीरियड</strong> पर हैं। आपको इन 7 दिनों के लिए <strong>प्रो यूज़र्स (PRO Plan - ₹999/माह मूल्य)</strong> की सभी एडवांस्ड व प्रीमियम सुविधाएँ (1080p Full HD, बिना किसी वाटरमार्क, सभी 7 कैटेगरीज के फ्रेम्स) निःशुल्क दी जा रही हैं। 7 दिन बाद सेवा को जारी रखने के लिए नीचे दिए गए पैकेज परचेस करें।
                         </div>
                       </div>
                     </div>
@@ -3801,16 +3801,18 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     )}
                     {/* Active Plan Tier Badge */}
                     <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase flex items-center gap-1 border shadow-xs ${
-                      subscription.tier === 'professional' || subscription.isProTrial
+                      subscription.isTrialActive || subscription.isProTrial
+                        ? 'bg-amber-950/80 border-amber-500/60 text-amber-300'
+                        : subscription.tier === 'professional'
                         ? 'bg-purple-950/80 border-purple-500/60 text-purple-300'
                         : subscription.tier === 'basic'
                         ? 'bg-amber-950/80 border-amber-500/60 text-amber-300'
-                        : subscription.tier === 'advanced' || subscription.isTrialActive
+                        : subscription.tier === 'advanced'
                         ? 'bg-blue-950/80 border-blue-500/60 text-blue-300'
                         : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-300'
                     }`}>
                       <Crown className="w-3 h-3" />
-                      <span>{subscription.isTrialActive ? 'ADVANCED (7-Day Trial)' : (subscription.isProTrial ? 'PRO (7-Day Trial Active)' : activePlanDetail.nameHi)}</span>
+                      <span>{subscription.isTrialActive || subscription.isProTrial ? 'ट्रायल पीरियड (7-Day Trial)' : (subscription.isTrialExpired ? 'ट्रायल समाप्त' : activePlanDetail.nameHi)}</span>
                     </span>
                   </div>
 
@@ -3869,13 +3871,13 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     <div className="flex items-center gap-1.5 font-black text-xs sm:text-sm text-white">
                       <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
                       <span>
-                        {subscription.isTrialActive
-                          ? 'ADVANCED (7-Day Trial Active)'
-                          : subscription.isProTrial
-                          ? 'PRO (7-Day Trial Active)'
+                        {subscription.isTrialActive || subscription.isProTrial
+                          ? 'ट्रायल पीरियड (7-Day Free Trial)'
+                          : subscription.isTrialExpired
+                          ? '7-डे फ्री ट्रायल (समाप्त)'
                           : subscription.hasActivePaidPlan || subscription.tier !== 'basic'
                           ? `${subscription.planName} प्लान`
-                          : '7-Day Free Trial'}
+                          : 'ट्रायल पीरियड (7-Day Free Trial)'}
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -4038,7 +4040,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 </div>
                 <div className="flex items-center gap-2.5 shrink-0">
                   <span className="px-2.5 py-1 bg-slate-950 text-amber-300 text-xs font-mono font-bold rounded-lg border border-slate-800">
-                    {activePlanDetail.nameHi}
+                    {subscription.isTrialActive || subscription.isProTrial ? 'ट्रायल पीरियड (7-Day Trial)' : (subscription.isTrialExpired ? 'ट्रायल समाप्त' : activePlanDetail.nameHi)}
                   </span>
                   <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${normalUserTab === 'membership' ? 'rotate-180 text-amber-400' : ''}`} />
                 </div>

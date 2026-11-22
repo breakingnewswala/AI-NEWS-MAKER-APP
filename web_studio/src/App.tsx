@@ -111,6 +111,7 @@ import { SupportContactPage } from './components/SupportContactPage';
 import { RefundCancellationPolicyPage } from './components/RefundCancellationPolicyPage';
 import { AppFooterWeb } from './components/AppFooterWeb';
 import { GraphicStudioGuideModal } from './components/GraphicStudioGuideModal';
+import { PackagePurchaseModal } from './components/PackagePurchaseModal';
 import {
   triggerBreakingNewsAlert,
   addNotification,
@@ -2232,6 +2233,15 @@ export default function App() {
     }
   });
 
+  const [showPackagePurchaseModal, setShowPackagePurchaseModal] = useState<boolean>(false);
+
+  // Global listener to open package purchase modal from anywhere in the app
+  useEffect(() => {
+    const handleOpenModal = () => setShowPackagePurchaseModal(true);
+    window.addEventListener('open_package_purchase_modal', handleOpenModal);
+    return () => window.removeEventListener('open_package_purchase_modal', handleOpenModal);
+  }, []);
+
   // Periodic Trial Reminder Notification for active trial users
   useEffect(() => {
     if (!isAdminUser && userSubscription?.isTrialActive && !userSubscription?.isBlocked) {
@@ -2239,7 +2249,7 @@ export default function App() {
       if (!trialToastShown) {
         sessionStorage.setItem('trial_notice_toast_shown', 'true');
         const timer = setTimeout(() => {
-          showToast(`ℹ️ आप 7-दिवसीय फ्री ट्रायल (एडवांस प्लान) की सेवाएं उपयोग कर रहे हैं (${userSubscription.daysRemaining || 7} दिन शेष)`);
+          showToast(`ℹ️ आप 7-दिवसीय फ्री ट्रायल (PRO फीचर्स ₹999/माह मूल्य) उपयोग कर रहे हैं (${userSubscription.daysRemaining || 7} दिन शेष)`);
         }, 1500);
         return () => clearTimeout(timer);
       }
@@ -4712,21 +4722,17 @@ export default function App() {
               <span className="text-base shrink-0">✨</span>
               <div className="truncate">
                 <span className="font-black text-cyan-300">
-                  7-दिवसीय फ्री ट्रायल (एडवांस प्लान):{' '}
+                  ट्रायल पीरियड (7-Day Free Trial):{' '}
                 </span>
                 <span className="text-slate-200 text-[11px] sm:text-xs">
-                  अभी आप ट्रायल पीरियड ({userSubscription?.daysRemaining || 7} दिन शेष) की सेवाएं उपयोग कर रहे हैं। 7 दिन बाद पैकेज खरीदना होगा।
+                  अभी आप ट्रायल पीरियड ({userSubscription?.daysRemaining || 7} दिन शेष) की सेवाएं उपयोग कर रहे हैं। PRO फीचर्स (₹999/माह मूल्य) एक्टिव हैं। 7 दिन बाद पैकेज खरीदना होगा।
                 </span>
               </div>
             </div>
             <button
               type="button"
               onClick={() => {
-                navigateToTab('profile');
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('open_plans_packages'));
-                  window.location.hash = '#membership';
-                }
+                setShowPackagePurchaseModal(true);
               }}
               className="px-3 py-1.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-lg text-xs shrink-0 cursor-pointer shadow-md transition flex items-center gap-1"
             >
@@ -4737,8 +4743,8 @@ export default function App() {
         </div>
       )}
 
-      {/* Day 6 / Expiring Soon Trial Pop-up Modal */}
-      {!isAdminUser && userSubscription?.isTrialActive && !userSubscription?.isBlocked && (userSubscription?.daysRemaining ?? 7) <= 2 && !isTrialDay6ModalDismissed && (
+      {/* Day 5, 6, 7 / Expiring Soon Trial Pop-up Modal (In-place package popup without profile redirect) */}
+      {!isAdminUser && userSubscription?.isTrialActive && !userSubscription?.isBlocked && (userSubscription?.daysRemaining ?? 7) <= 3 && !isTrialDay6ModalDismissed && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
           <div className="w-full max-w-md bg-slate-900 border border-amber-500/50 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4 relative">
             <button
@@ -4768,7 +4774,7 @@ export default function App() {
             </div>
 
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-              आप वर्तमान में 7-दिवसीय फ्री ट्रायल (एडवांस प्लान) की सेवाएं उपयोग कर रहे हैं। 7 दिन बाद सेवा को बिना किसी रुकावट जारी रखने के लिए कृपया अपना पसंदीदा पैकेज सब्सक्राइब करें। नीचे दिए गए बटन से सभी उपलब्ध पैकेजेस देखें।
+              आप वर्तमान में 7-दिवसीय फ्री ट्रायल पीरियड पर हैं ({userSubscription?.daysRemaining || 3} दिन शेष)। 7 दिन बाद सेवा को बिना किसी रुकावट जारी रखने के लिए कृपया अपना पसंदीदा पैकेज सब्सक्राइब करें। नीचे दिए गए बटन से पैकेज स्क्रीन देखें।
             </p>
 
             <div className="pt-2 flex flex-col sm:flex-row gap-2">
@@ -4777,11 +4783,7 @@ export default function App() {
                 onClick={() => {
                   setIsTrialDay6ModalDismissed(true);
                   try { sessionStorage.setItem('trial_day6_modal_dismissed', 'true'); } catch {}
-                  navigateToTab('profile');
-                  if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new CustomEvent('open_plans_packages'));
-                    window.location.hash = '#membership';
-                  }
+                  setShowPackagePurchaseModal(true);
                 }}
                 className="flex-1 py-2.5 px-4 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition active:scale-95 cursor-pointer"
               >
@@ -4845,11 +4847,7 @@ export default function App() {
                 onClick={() => {
                   setIsExpiredModalDismissed(true);
                   try { sessionStorage.setItem('expired_plan_modal_dismissed', 'true'); } catch {}
-                  navigateToTab('profile');
-                  if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new CustomEvent('open_plans_packages'));
-                    window.location.hash = '#membership';
-                  }
+                  setShowPackagePurchaseModal(true);
                 }}
                 className="flex-1 py-2.5 px-4 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition active:scale-95 cursor-pointer"
               >
@@ -6153,6 +6151,20 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Direct In-Place Package Purchase Modal (Part of Day 5+ and Ribbon CTAs) */}
+      <PackagePurchaseModal
+        isOpen={showPackagePurchaseModal}
+        onClose={() => setShowPackagePurchaseModal(false)}
+        subscription={userSubscription}
+        currentUser={currentUser}
+        onPlanActivated={() => {
+          try {
+            const updated = getUserSubscription();
+            setUserSubscription(updated);
+          } catch {}
+        }}
+      />
     </div>
   );
 }

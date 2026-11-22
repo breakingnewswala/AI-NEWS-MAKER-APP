@@ -101,3 +101,44 @@ p,
   animation-play-state: paused;
 }
 
+/* Ambient UI Motion & Glow Effects */
+@keyframes ambient-glow {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.05);
+  }
+}
+
+.animate-ambient-glow {
+  animation: ambient-glow 6s ease-in-out infinite;
+}
+
+@keyframes button-shine {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+.animate-button-shine {
+  position: relative;
+  overflow: hidden;
+}
+.animate-button-shine::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+  transform: translateX(-100%);
+  animation: button-shine 3.5s infinite;
+}
+

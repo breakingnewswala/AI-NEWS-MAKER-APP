@@ -280,7 +280,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   // Two-Step Setup Wizard for Registration: 1 = Profile & Channel Details, 2 = Channel Branding & Social Media
   const [setupWizardStep, setSetupWizardStep] = useState<1 | 2>(1);
 
-  // Terms Acceptance State
+  // Terms Acceptance State (Mandatory)
   const [acceptedTerms, setAcceptedTerms] = useState<boolean>(() => {
     try {
       const email = (currentUser?.email || '').toLowerCase().trim();
@@ -291,8 +291,13 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
   });
   const [legalModalTab, setLegalModalTab] = useState<'terms' | 'privacy' | null>(null);
 
-  // WhatsApp Marketing & Promotional Consent (Optional, default unchecked/false)
+  // WhatsApp Updates & Notifications Consent (Compulsory Checkbox 2)
   const [whatsappMarketingConsent, setWhatsappMarketingConsent] = useState<boolean>(false);
+
+  // Channel Name Linguistic Script Warning and Confirmation Modal States
+  const [showChannelNameConfirmModal, setShowChannelNameConfirmModal] = useState<boolean>(false);
+  const [scriptWarningHi, setScriptWarningHi] = useState<string>('');
+  const [scriptWarningEn, setScriptWarningEn] = useState<string>('');
 
   // Login Form States (for Admin Login)
   const [loginErrorMsg, setLoginErrorMsg] = useState<string>('');
@@ -1389,9 +1394,30 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     img.src = detailChannelLogoUrl;
   };
 
-  // Final Step 2 Submit: Save Channel Details & Enter App
-  const handleCompleteSetupSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Channel Name Linguistic Input Handlers (Hindi = Devanagari only, English = Latin A-Z only)
+  const handleChannelNameHiChange = (val: string) => {
+    if (/[a-zA-Z]/.test(val)) {
+      setScriptWarningHi('⚠️ हिन्दी फ़ील्ड में केवल देवनागरी (हिन्दी) शब्द ही स्वीकार होंगे।');
+    } else {
+      setScriptWarningHi('');
+    }
+    const filtered = val.replace(/[a-zA-Z]/g, '');
+    setDetailChannelNameHi(filtered);
+  };
+
+  const handleChannelNameEnChange = (val: string) => {
+    if (/[\u0900-\u097F]/.test(val)) {
+      setScriptWarningEn('⚠️ English field only accepts English (A-Z) letters. देवनागरी मान्य नहीं है।');
+    } else {
+      setScriptWarningEn('');
+    }
+    const filtered = val.replace(/[\u0900-\u097F]/g, '');
+    setDetailChannelNameEn(filtered);
+  };
+
+  // Step 2 Save Validation: Validates all details and opens the Confirmation Modal
+  const handleCompleteSetupSubmit = async (e?: React.FormEvent) => {
+    if (e && e.preventDefault) e.preventDefault();
     if (isSubmitting) return;
     setStep2ErrorMsg('');
 
@@ -1419,7 +1445,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       }
     }
 
-    // Required fields based on account type
+    // Step 1 Validations
     if (!detailFullName || !detailFullName.trim()) {
       setSetupWizardStep(1);
       setStep2ErrorMsg('⚠️ कृपया अपना पूरा नाम दर्ज करें।');
@@ -1450,18 +1476,60 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       return;
     }
 
+    // WhatsApp verification check
+    const cleanDigits = primaryMobileNumber.replace(/\D/g, '').slice(-10);
+    if (!subscription.isMobileLocked) {
+      if (!cleanDigits || cleanDigits.length !== 10) {
+        setSetupWizardStep(1);
+        setStep2ErrorMsg('⚠️ कृपया आगे बढ़ने के लिए अपना वैध 10-अंकों का WhatsApp नंबर दर्ज करें।');
+        return;
+      }
+      if (!isWhatsappVerified || cleanDigits !== verifiedWhatsappNumber) {
+        setSetupWizardStep(1);
+        setStep2ErrorMsg('⚠️ आगे बढ़ने के लिए WhatsApp OTP द्वारा अपना मोबाइल नंबर सत्यापित करना अनिवार्य है।');
+        return;
+      }
+    }
+
+    // Mandatory Checkbox 1: 7-Day Free Trial & Terms Acceptance
+    if (!acceptedTerms) {
+      setSetupWizardStep(1);
+      setStep2ErrorMsg('⚠️ आगे बढ़ने के लिए 7-दिवसीय फ्री ट्रायल व नियम-शर्तें (Terms) स्वीकार करना अनिवार्य है।');
+      return;
+    }
+
+    // Mandatory Checkbox 2: WhatsApp Notifications Consent
+    if (!whatsappMarketingConsent) {
+      setSetupWizardStep(1);
+      setStep2ErrorMsg('⚠️ आगे बढ़ने के लिए WhatsApp पर समाचार अपडेट्स व सूचनाएं प्राप्त करने की सहमति देना अनिवार्य है।');
+      return;
+    }
+
+    // Step 2 Validations (Channel Name in Hindi & English, Logo)
     if (!isReporterAcc) {
       // Check Channel Name Hi (Mandatory for Channel)
       if (!detailChannelNameHi || !detailChannelNameHi.trim() || detailChannelNameHi.trim() === 'सेटअप अधूरा (Incomplete)' || detailChannelNameHi.trim() === 'एआई न्यूज़ मेकर') {
-        setSetupWizardStep(1);
+        setSetupWizardStep(2);
         setStep2ErrorMsg('⚠️ कृपया अपने न्यूज़ चैनल का वास्तविक नाम (हिन्दी में) दर्ज करें।');
+        return;
+      }
+
+      if (!/[\u0900-\u097F]/.test(detailChannelNameHi)) {
+        setSetupWizardStep(2);
+        setStep2ErrorMsg('⚠️ हिन्दी फ़ील्ड में केवल देवनागरी (हिन्दी) शब्द ही स्वीकार होंगे।');
         return;
       }
 
       // Check Channel Name En (Mandatory for Channel)
       if (!detailChannelNameEn || !detailChannelNameEn.trim() || detailChannelNameEn.trim() === 'AI News Maker') {
-        setSetupWizardStep(1);
+        setSetupWizardStep(2);
         setStep2ErrorMsg('⚠️ कृपया अपने न्यूज़ चैनल का नाम (English में) दर्ज करें।');
+        return;
+      }
+
+      if (!/[a-zA-Z]/.test(detailChannelNameEn)) {
+        setSetupWizardStep(2);
+        setStep2ErrorMsg('⚠️ English फ़ील्ड में केवल English (A-Z) शब्द ही स्वीकार होंगे।');
         return;
       }
 
@@ -1477,29 +1545,24 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
     const fallbackUsername = (username || '').trim() || (detailFullName || '').toLowerCase().replace(/[^a-z0-9]/g, '') || (currentUser?.email ? currentUser.email.split('@')[0] : 'reporter');
     const cleanSavedUsername = fallbackUsername.replace(/^@+/, '').trim();
     if (!cleanSavedUsername) {
+      setSetupWizardStep(2);
       setStep2ErrorMsg('⚠️ यूज़रनेम दर्ज करना अनिवार्य है (उदा. yourchannel)।');
       return;
     }
 
-    // Check Terms & Conditions Acceptance (Mandatory)
-    if (!acceptedTerms) {
-      setStep2ErrorMsg('⚠️ आगे बढ़ने के लिए नियम व शर्तें (Terms & Conditions) और गोपनीयता नीति स्वीकार करना अनिवार्य है।');
-      return;
-    }
+    // All validations passed -> Open the Confirmation Modal!
+    setShowChannelNameConfirmModal(true);
+  };
 
-    // Enforce Mandatory WhatsApp Number & OTP Verification
-    const cleanDigits = primaryMobileNumber.replace(/\D/g, '').slice(-10);
-    if (!subscription.isMobileLocked) {
-      if (!cleanDigits || cleanDigits.length !== 10) {
-        setStep2ErrorMsg('⚠️ कृपया आगे बढ़ने के लिए अपना वैध 10-अंकों का WhatsApp नंबर दर्ज करें।');
-        return;
-      }
-      if (!isWhatsappVerified || cleanDigits !== verifiedWhatsappNumber) {
-        setStep2ErrorMsg('⚠️ आगे बढ़ने के लिए WhatsApp OTP द्वारा अपना मोबाइल नंबर सत्यापित करना अनिवार्य है।');
-        return;
-      }
-    }
+  // Called when user confirms channel name accuracy in the modal
+  const handleConfirmChannelNameAndSave = async () => {
+    setShowChannelNameConfirmModal(false);
+    await proceedFinalSetupSubmit();
+  };
 
+  // Executes actual profile creation & trial initialization
+  const proceedFinalSetupSubmit = async () => {
+    if (isSubmitting) return;
     setIsSubmitting(true);
     try {
       if (primaryMobileNumber.trim()) {
@@ -2100,98 +2163,188 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
         {/* STEP 2: CHANNEL & REPORTER DETAILS SETUP SCREEN                */}
         {/* ============================================================== */}
         {currentStep === 2 && (
-          <div className="w-full max-w-2xl text-left animate-in fade-in slide-in-from-bottom-4 duration-300">
-            {/* Header Plate */}
-            <div className="mb-4 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-amber-500/40 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-red-600 flex items-center justify-center text-slate-950 text-2xl shadow-lg shrink-0">
-                  🎨
-                </div>
-                <div>
-                  <h2 className="text-lg sm:text-xl font-black text-white flex items-center gap-2">
-                    <span>चैनल व रिपोर्टर विवरण सेटअप</span>
-                    <span className="px-2 py-0.5 bg-amber-400 text-slate-950 text-[10px] font-black rounded-full uppercase">
-                      Google Verified
+          <div className="w-full max-w-5xl text-left animate-in fade-in slide-in-from-bottom-3 duration-300">
+            {/* Desktop 2-Column Responsive Layout for No-Scroll Formula */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+              {/* Left Column: AI News Maker Brand Panel & 7-Day PRO Trial Overview (Desktop Only) */}
+              <div className="hidden lg:flex lg:col-span-4 flex-col justify-between bg-gradient-to-b from-slate-900 via-slate-900/90 to-slate-950 border border-amber-500/30 rounded-3xl p-5 shadow-2xl relative overflow-hidden animate-ambient-glow">
+                <div className="space-y-4 relative z-10">
+                  {/* Glowing Logo & Brand Title */}
+                  <div className="flex items-center gap-3">
+                    <div className="relative w-12 h-12 rounded-2xl bg-white border-2 border-amber-400 p-0.5 overflow-hidden shrink-0 shadow-lg shadow-amber-500/20">
+                      <img
+                        src="/assets/ai_news_maker_logo.png"
+                        alt="Logo"
+                        className="w-full h-full object-cover rounded-xl"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-black text-white tracking-wide">
+                        AI NEWS MAKER
+                      </h2>
+                      <span className="text-[10px] text-amber-400 font-bold block">
+                        स्मार्ट डिजिटल न्यूज़ स्टूडियो
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Google Verified Account Chip */}
+                  <div className="p-3 bg-slate-950/90 rounded-2xl border border-emerald-500/40 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400">सत्यापित खाता:</span>
+                      <span className="text-[9px] text-emerald-400 font-bold bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-700 flex items-center gap-1">
+                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+                        Google Verified
+                      </span>
+                    </div>
+                    <span className="text-xs font-mono font-bold text-white truncate block">
+                      {(currentUser?.email || tempRegisteredUser?.email || '').toLowerCase() || 'authenticated@gmail.com'}
                     </span>
-                  </h2>
-                  <p className="text-xs text-slate-300 mt-0.5">
-                    अपनी चैनल ब्रांडिंग और संपर्क विवरण दर्ज करें — यह सीधे आपके न्यूज़ कार्ड्स और स्टूडियो में लोड होगी।
-                  </p>
+                  </div>
+
+                  {/* 7-Day Free Trial (PRO User Features) Card */}
+                  <div className="p-3.5 bg-gradient-to-br from-amber-500/15 to-yellow-600/15 border border-amber-500/50 rounded-2xl space-y-2 shadow-inner">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                        <Crown className="w-4 h-4 text-amber-400" />
+                        <span>7-Day Free Trial</span>
+                      </span>
+                      <span className="px-2 py-0.5 bg-amber-400 text-slate-950 text-[9px] font-black rounded-md">
+                        PRO फीचर्स सक्रिय
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 leading-snug">
+                      7 दिन तक <strong>PRO फीचर्स (₹999/माह मूल्य)</strong> का निःशुल्क लाभ:
+                    </p>
+                    <ul className="text-[11px] text-slate-300 space-y-1.5 pt-1">
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>50+ प्रीमियम फ्रेम्स (7 श्रेणियां)</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>1080p Full HD एक्सपोर्ट क्वालिटी</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>स्मार्ट AI हेडलाइन व ऑटो-फिल</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  {/* Step 2 Specific Linguistic Notice Note */}
+                  {setupWizardStep === 2 && (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/50 rounded-2xl space-y-1">
+                      <span className="text-[11px] font-black text-amber-300 flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span>स्थायी चैनल नाम:</span>
+                      </span>
+                      <p className="text-[10px] text-slate-300 leading-snug">
+                        चैनल का नाम सावधानीपूर्वक लिखें। बाद में सुधार हेतु 24-48 घंटे का समय लग सकता है।
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Important Channel Protection Guidance */}
+                  <div className="p-3 bg-red-950/40 border border-red-500/40 rounded-2xl space-y-1">
+                    <span className="text-[11px] font-black text-red-300 flex items-center gap-1">
+                      <ShieldAlert className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                      <span>ब्रांड सुरक्षा नियम:</span>
+                    </span>
+                    <p className="text-[10px] text-slate-300 leading-snug">
+                      केवल अपने अधिकृत चैनल का उपयोग करें। राष्ट्रीय समाचार चैनलों के नाम/लोगो कॉपीराइट के तहत प्रतिबंधित हैं।
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-800 text-center relative z-10">
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    100% सुरक्षित • AI News Maker Onboarding
+                  </span>
                 </div>
               </div>
-            </div>
 
-            {/* Warning Banner: Restricted / Third Party Brand Protection */}
-            <div className="mb-4 p-3.5 bg-amber-500/10 border-2 border-amber-500/60 rounded-2xl flex items-start gap-3 shadow-lg">
-              <div className="p-2 bg-amber-500/20 text-amber-400 rounded-xl shrink-0">
-                <ShieldAlert className="w-5 h-5" />
-              </div>
-              <div className="text-xs space-y-1">
-                <span className="font-black text-amber-300 block text-xs sm:text-sm">
-                  ⚠️ कृपया किसी अन्य चैनल का लोगो या नाम का उपयोग न करें
-                </span>
-                <p className="text-slate-300 leading-relaxed text-[11px]">
-                  प्रतिष्ठित व राष्ट्रीय समाचार चैनलों (जैसे आज तक, एबीपी, एनडीटीवी, ज़ी न्यूज़ आदि) के नाम, वेबसाइट व लोगो प्रतिबंधित हैं। उल्लंघन करने पर खाता स्वतः ब्लॉक हो जाएगा। केवल अपने स्वयं के अधिकृत चैनल की जानकारी ही दर्ज करें।
-                </p>
-              </div>
-            </div>
+              {/* Right Column: Setup Wizard Form */}
+              <div className="lg:col-span-8 flex flex-col justify-between space-y-3">
+                {/* Header Plate (Mobile & Compact View) */}
+                <div className="lg:hidden bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-amber-500/40 rounded-2xl p-3 shadow-xl flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-red-600 flex items-center justify-center text-slate-950 text-base shadow shrink-0">
+                      🎨
+                    </div>
+                    <div>
+                      <h2 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
+                        <span>चैनल व रिपोर्टर विवरण सेटअप</span>
+                        <span className="px-1.5 py-0.5 bg-amber-400 text-slate-950 text-[9px] font-black rounded-full uppercase">
+                          Verified
+                        </span>
+                      </h2>
+                      <p className="text-[10px] text-slate-300 truncate">
+                        अपनी चैनल ब्रांडिंग और संपर्क विवरण दर्ज करें
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
-            {/* 2-Step Progress Indicator */}
-            <div className="mb-4 bg-slate-900/90 border border-amber-500/30 rounded-2xl p-3 sm:p-4 shadow-lg flex items-center justify-between">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStep2ErrorMsg('');
-                    setSetupWizardStep(1);
-                  }}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition cursor-pointer ${
-                    setupWizardStep === 1
-                      ? 'bg-amber-400/15 border border-amber-400 text-amber-300 ring-1 ring-amber-400/40'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
+                {/* 2-Step Progress Indicator */}
+                <div className="bg-slate-900/90 border border-amber-500/30 rounded-2xl p-2.5 sm:p-3 shadow-lg flex items-center justify-between">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStep2ErrorMsg('');
+                        setSetupWizardStep(1);
+                      }}
+                      className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl transition cursor-pointer ${
+                        setupWizardStep === 1
+                          ? 'bg-amber-400/15 border border-amber-400 text-amber-300 ring-1 ring-amber-400/40'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-black ${
+                        setupWizardStep === 1
+                          ? 'bg-amber-400 text-slate-950'
+                          : 'bg-emerald-500 text-white'
+                      }`}>
+                        {setupWizardStep > 1 ? '✓' : '1'}
+                      </div>
+                      <span className="text-xs font-bold font-['Noto_Sans_Devanagari']">
+                        1. प्रोफाइल व संपर्क विवरण
+                      </span>
+                    </button>
+
+                    <div className="w-4 sm:w-8 h-0.5 bg-slate-700" />
+
+                    <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl transition ${
+                      setupWizardStep === 2
+                        ? 'bg-amber-400/15 border border-amber-400 text-amber-300 ring-1 ring-amber-400/40'
+                        : 'text-slate-500'
+                    }`}>
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-black ${
+                        setupWizardStep === 2
+                          ? 'bg-amber-400 text-slate-950'
+                          : 'bg-slate-800 text-slate-400 border border-slate-700'
+                      }`}>
+                        2
+                      </div>
+                      <span className="text-xs font-bold font-['Noto_Sans_Devanagari']">
+                        2. चैनल नाम व ब्रांडिंग
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-black font-mono text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded-lg border border-amber-400/30 shrink-0">
+                    {setupWizardStep === 1 ? 'STEP 1/2' : 'STEP 2/2'}
+                  </span>
+                </div>
+
+                {/* Form Container */}
+                <form
+                  onSubmit={handleCompleteSetupSubmit}
+                  className="bg-slate-900/95 border border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-3"
                 >
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
-                    setupWizardStep === 1
-                      ? 'bg-amber-400 text-slate-950'
-                      : 'bg-emerald-500 text-white'
-                  }`}>
-                    {setupWizardStep > 1 ? '✓' : '1'}
-                  </div>
-                  <span className="text-xs font-bold font-['Noto_Sans_Devanagari']">
-                    1. प्रोफाइल व चैनल विवरण
-                  </span>
-                </button>
-
-                <div className="w-6 sm:w-10 h-0.5 bg-slate-700" />
-
-                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition ${
-                  setupWizardStep === 2
-                    ? 'bg-amber-400/15 border border-amber-400 text-amber-300 ring-1 ring-amber-400/40'
-                    : 'text-slate-500'
-                }`}>
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black ${
-                    setupWizardStep === 2
-                      ? 'bg-amber-400 text-slate-950'
-                      : 'bg-slate-800 text-slate-400 border border-slate-700'
-                  }`}>
-                    2
-                  </div>
-                  <span className="text-xs font-bold font-['Noto_Sans_Devanagari']">
-                    2. ब्रांडिंग व सोशल मीडिया
-                  </span>
-                </div>
-              </div>
-              <span className="text-[10px] sm:text-xs font-black font-mono text-amber-400 bg-amber-400/10 px-2 sm:px-2.5 py-1 rounded-lg border border-amber-400/30 shrink-0">
-                {setupWizardStep === 1 ? 'STEP 1 OF 2' : 'STEP 2 OF 2'}
-              </span>
-            </div>
-
-            {/* Form Container */}
-            <form
-              onSubmit={handleCompleteSetupSubmit}
-              className="bg-slate-900/95 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4"
-            >
               {setupWizardStep === 1 ? (
                 <div className="space-y-4 animate-in fade-in duration-200">
                   {/* ACCOUNT TYPE SELECTION: CHANNEL vs REPORTER */}
@@ -2542,78 +2695,63 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 </div>
               </div>
 
-              {/* SECTION B: CHANNEL BRANDING / REPORTER AFFILIATION */}
-              <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                    <Tv className="w-4 h-4" />
-                    <span>
-                      {accountType === 'channel'
-                        ? 'B. चैनल नाम (हिन्दी व अंग्रेज़ी) *'
-                        : 'B. न्यूज़ संस्था / चैनल संबद्धता (वैकल्पिक)'}
-                    </span>
-                  </h3>
-                  {accountType === 'reporter' && (
-                    <span className="text-[10px] text-slate-400 font-bold bg-slate-800 px-2 py-0.5 rounded-full">
-                      वैकल्पिक
-                    </span>
-                  )}
+              {/* SECTION B: MANDATORY CHECKBOXES (Compulsory 7-Day Free Trial & WhatsApp Consent) */}
+              <div className="p-3.5 bg-slate-950/90 rounded-xl border border-amber-500/40 space-y-2.5">
+                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                  <span className="text-xs font-black text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>अनिवार्य नियम, शर्तें व सहमति (2 Checks Required) *</span>
+                  </span>
+                  <span className="text-[10px] text-amber-400 font-bold bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/40">
+                    अनिवार्य
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">
-                      {accountType === 'channel' ? '4. चैनल नाम (हिन्दी में) *' : '4. न्यूज़ संस्था / चैनल (हिन्दी में - वैकल्पिक)'}
-                    </label>
-                    <input
-                      type="text"
-                      required={accountType === 'channel'}
-                      value={detailChannelNameHi}
-                      onChange={(e) => setDetailChannelNameHi(e.target.value)}
-                      placeholder={accountType === 'channel' ? 'यहाँ अपने चैनल का नाम हिन्दी में लिखें (उदा. सच तक न्यूज़)' : 'यदि किसी न्यूज़ चैनल से जुड़े हैं (वैकल्पिक)'}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 placeholder:font-normal"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1">
-                      {accountType === 'channel' ? '5. चैनल नाम (English में) *' : '5. न्यूज़ संस्था / चैनल (English में - वैकल्पिक)'}
-                    </label>
-                    <input
-                      type="text"
-                      required={accountType === 'channel'}
-                      value={detailChannelNameEn}
-                      onChange={(e) => setDetailChannelNameEn(e.target.value)}
-                      placeholder={accountType === 'channel' ? 'यहाँ अपने चैनल का नाम English में लिखें (उदा. Sach Tak News)' : 'चैनल / संस्था का नाम English में (वैकल्पिक)'}
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 placeholder:font-normal"
-                    />
-                  </div>
-                </div>
-
-                {/* Quick Presets */}
-                {accountType === 'channel' && (
-                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                    <span className="text-[11px] text-slate-400 font-medium">त्वरित प्रीसेट्स:</span>
-                    {[
-                      { hi: 'एआई न्यूज़ मेकर', en: 'AI News Maker' },
-                      { hi: 'ब्रेकिंग न्यूज़', en: 'Breaking News' },
-                      { hi: 'लाइव 24', en: 'Live 24' },
-                      { hi: 'सच तक न्यूज़', en: 'Sach Tak News' },
-                    ].map((preset) => (
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    required
+                    checked={acceptedTerms}
+                    onChange={(e) => setAcceptedTerms(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 accent-amber-400 rounded cursor-pointer shrink-0"
+                  />
+                  <div className="text-xs text-slate-300 leading-snug">
+                    <span className="font-bold text-white">
+                      1. मुझे 7-दिवसीय फ्री ट्रायल (PRO फीचर्स ₹999/माह मूल्य) स्वीकार हैं एवं मैंने{' '}
                       <button
-                        key={preset.en}
                         type="button"
-                        onClick={() => {
-                          setDetailChannelNameHi(preset.hi);
-                          setDetailChannelNameEn(preset.en);
-                        }}
-                        className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-[11px] text-slate-300 hover:text-white transition cursor-pointer"
+                        onClick={() => setLegalModalTab('terms')}
+                        className="text-amber-400 underline hover:text-amber-300 font-bold cursor-pointer"
                       >
-                        {preset.hi}
-                      </button>
-                    ))}
+                        नियम व शर्तें (Terms & Conditions)
+                      </button>{' '}
+                      और{' '}
+                      <button
+                        type="button"
+                        onClick={() => setLegalModalTab('privacy')}
+                        className="text-amber-400 underline hover:text-amber-300 font-bold cursor-pointer"
+                      >
+                        गोपनीयता नीति (Privacy Policy)
+                      </button>{' '}
+                      को ध्यानपूर्वक पढ़ लिया है और मैं इनसे सहमत हूँ। *
+                    </span>
                   </div>
-                )}
+                </label>
+
+                <label className="flex items-start gap-2.5 cursor-pointer select-none pt-2 border-t border-slate-850">
+                  <input
+                    type="checkbox"
+                    required
+                    checked={whatsappMarketingConsent}
+                    onChange={(e) => setWhatsappMarketingConsent(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 accent-emerald-500 rounded cursor-pointer shrink-0"
+                  />
+                  <div className="text-xs text-slate-300 leading-snug">
+                    <span className="font-bold text-white">
+                      2. हाँ, मैं AI NEWS MAKER से WhatsApp पर महत्वपूर्ण समाचार अलर्ट्स, तकनीकी अपडेट्स व सूचनाएं प्राप्त करने की सहमति देता/देती हूँ। *
+                    </span>
+                  </div>
+                </label>
               </div>
 
                   {/* Step 1 Error Message (if any) */}
@@ -2650,19 +2788,21 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                           setStep2ErrorMsg('⚠️ कृपया अपना पद / पत्रकारिता परिचय दर्ज करें।');
                           return;
                         }
-                        if (accountType === 'channel') {
-                          if (!detailChannelNameHi.trim() || detailChannelNameHi.trim() === 'सेटअप अधूरा (Incomplete)' || detailChannelNameHi.trim() === 'एआई न्यूज़ मेकर') {
-                            setStep2ErrorMsg('⚠️ कृपया अपने न्यूज़ चैनल का वास्तविक नाम (हिन्दी में) दर्ज करें।');
-                            return;
-                          }
-                          if (!detailChannelNameEn.trim() || detailChannelNameEn.trim() === 'AI News Maker') {
-                            setStep2ErrorMsg('⚠️ कृपया अपने न्यूज़ चैनल का नाम (English में) दर्ज करें।');
-                            return;
-                          }
-                        }
                         const cleanDigits = primaryMobileNumber.replace(/\D/g, '').slice(-10);
                         if (!cleanDigits || cleanDigits.length !== 10) {
                           setStep2ErrorMsg('⚠️ कृपया आगे बढ़ने के लिए अपना वैध 10-अंकों का WhatsApp नंबर दर्ज करें।');
+                          return;
+                        }
+                        if (!subscription.isMobileLocked && (!isWhatsappVerified || cleanDigits !== verifiedWhatsappNumber)) {
+                          setStep2ErrorMsg('⚠️ आगे बढ़ने के लिए WhatsApp OTP द्वारा अपना मोबाइल नंबर सत्यापित करना अनिवार्य है।');
+                          return;
+                        }
+                        if (!acceptedTerms) {
+                          setStep2ErrorMsg('⚠️ आगे बढ़ने के लिए 7-दिवसीय फ्री ट्रायल व नियम-शर्तें स्वीकार करना अनिवार्य है।');
+                          return;
+                        }
+                        if (!whatsappMarketingConsent) {
+                          setStep2ErrorMsg('⚠️ आगे बढ़ने के लिए WhatsApp पर समाचार अपडेट्स व सूचनाएं प्राप्त करने की सहमति देना अनिवार्य है।');
                           return;
                         }
                         setSetupWizardStep(2);
@@ -2670,21 +2810,115 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                       }}
                       className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-sm sm:text-base rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all transform active:scale-98 cursor-pointer"
                     >
-                      <span>आगे बढ़ें (चरण 2: ब्रांडिंग व सोशल मीडिया) →</span>
+                      <span>आगे बढ़ें (चरण 2: चैनल नाम व ब्रांडिंग) →</span>
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-4 animate-in fade-in duration-200">
-                  {/* SECTION C: CHANNEL LOGO (PNG/JPEG & OPTIONAL ANIMATED GIF) */}
+                  {/* SECTION A: CHANNEL NAME (HINDI & ENGLISH) - MOVED TO STEP 2 WITH STRICT LINGUISTIC VALIDATION */}
+                  <div className="p-3.5 bg-slate-950/80 rounded-xl border border-amber-500/40 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Tv className="w-4 h-4 text-amber-400" />
+                        <span>
+                          {accountType === 'channel'
+                            ? 'A. चैनल नाम (हिन्दी व English में) *'
+                            : 'A. न्यूज़ संस्था / चैनल संबद्धता (वैकल्पिक)'}
+                        </span>
+                      </h3>
+                      <span className="text-[10px] text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/40 font-bold">
+                        भाषाई शुद्धता अनिवार्य
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-300 mb-1">
+                          {accountType === 'channel' ? '1. चैनल नाम (हिन्दी में) *' : '1. न्यूज़ संस्था / चैनल (हिन्दी में - वैकल्पिक)'}
+                        </label>
+                        <input
+                          type="text"
+                          required={accountType === 'channel'}
+                          value={detailChannelNameHi}
+                          onChange={(e) => handleChannelNameHiChange(e.target.value)}
+                          placeholder={accountType === 'channel' ? 'यहाँ अपने चैनल का नाम हिन्दी में लिखें (उदा. सच तक न्यूज़)' : 'यदि किसी न्यूज़ चैनल से जुड़े हैं (वैकल्पिक)'}
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 font-['Noto_Sans_Devanagari'] font-bold"
+                        />
+                        {scriptWarningHi && (
+                          <p className="text-[11px] text-red-400 font-bold mt-1 flex items-center gap-1 animate-in fade-in">
+                            <AlertCircle className="w-3 h-3 shrink-0" />
+                            <span>{scriptWarningHi}</span>
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-300 mb-1">
+                          {accountType === 'channel' ? '2. Channel Name (English में) *' : '2. न्यूज़ संस्था / चैनल (English में - वैकल्पिक)'}
+                        </label>
+                        <input
+                          type="text"
+                          required={accountType === 'channel'}
+                          value={detailChannelNameEn}
+                          onChange={(e) => handleChannelNameEnChange(e.target.value)}
+                          placeholder={accountType === 'channel' ? 'यहाँ अपने चैनल का नाम English में लिखें (उदा. Sach Tak News)' : 'चैनल / संस्था का नाम English में (वैकल्पिक)'}
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden placeholder:text-slate-500/80 font-mono font-bold"
+                        />
+                        {scriptWarningEn && (
+                          <p className="text-[11px] text-red-400 font-bold mt-1 flex items-center gap-1 animate-in fade-in">
+                            <AlertCircle className="w-3 h-3 shrink-0" />
+                            <span>{scriptWarningEn}</span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Special User Instruction Note Box */}
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/40 rounded-xl flex items-start gap-2.5">
+                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <p className="text-xs text-amber-200/90 leading-relaxed">
+                        <strong>महत्वपूर्ण निर्देश:</strong> कृपया चैनल का नाम सही लिखें, मात्रा और स्पेलिंग सही लिखें। यह बाद में आसानी से चेंज नहीं होगी। हिन्दी फ़ील्ड में केवल देवनागरी (हिन्दी) शब्द ही स्वीकार होंगे तथा English फ़ील्ड में केवल English (A-Z) शब्द ही स्वीकार होंगे।
+                      </p>
+                    </div>
+
+                    {/* Quick Presets */}
+                    {accountType === 'channel' && (
+                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                        <span className="text-[11px] text-slate-400 font-medium">त्वरित प्रीसेट्स:</span>
+                        {[
+                          { hi: 'एआई न्यूज़ मेकर', en: 'AI News Maker' },
+                          { hi: 'ब्रेकिंग न्यूज़', en: 'Breaking News' },
+                          { hi: 'लाइव 24', en: 'Live 24' },
+                          { hi: 'सच तक न्यूज़', en: 'Sach Tak News' },
+                        ].map((preset) => (
+                          <button
+                            key={preset.en}
+                            type="button"
+                            onClick={() => {
+                              setDetailChannelNameHi(preset.hi);
+                              setDetailChannelNameEn(preset.en);
+                              setScriptWarningHi('');
+                              setScriptWarningEn('');
+                            }}
+                            className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-[11px] text-slate-300 hover:text-white transition cursor-pointer"
+                          >
+                            {preset.hi}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* SECTION B: CHANNEL LOGO (PNG/JPEG & OPTIONAL ANIMATED GIF) */}
               <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-black text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
                     <ImageIcon className="w-4 h-4" />
                     <span>
                       {accountType === 'channel'
-                        ? 'C. चैनल लोगो (PNG / JPEG अनिवार्य) *'
-                        : 'C. प्रोफ़ाइल फोटो / लोगो (वैकल्पिक)'}
+                        ? 'B. चैनल लोगो (PNG / JPEG अनिवार्य) *'
+                        : 'B. प्रोफ़ाइल फोटो / लोगो (वैकल्पिक)'}
                     </span>
                   </h3>
                   <span className="text-[10px] text-slate-400 font-bold">
@@ -3002,26 +3236,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 </div>
               </div>
 
-              {/* 7-Day Free Trial Activation Callout */}
-              <div className="p-4 bg-gradient-to-r from-amber-500/20 via-red-500/20 to-amber-500/20 rounded-2xl border border-amber-400/50 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 flex items-center justify-center font-black text-lg shadow-md shrink-0">
-                    🎁
-                  </div>
-                  <div>
-                    <h4 className="text-xs sm:text-sm font-black text-white">
-                      7-Day Free Trial Basic सक्रिय होगा
-                    </h4>
-                    <p className="text-[11px] text-slate-300">
-                      बिना किसी शुल्क के 7 दिन तक सभी बेसिक न्यूज़ फ्रेम्स, AI टूल्स और ग्राफिक्स का लाभ उठाएं।
-                    </p>
-                  </div>
-                </div>
-                <span className="px-3 py-1 bg-amber-400 text-slate-950 font-black text-xs rounded-lg uppercase shrink-0">
-                  FREE
-                </span>
-              </div>
-
               {/* Step 2 Error Message (Uniqueness & Validation) */}
               {step2ErrorMsg && (
                 <div className="p-3 bg-red-950/80 border border-red-500/80 rounded-xl text-xs text-red-200 text-left flex items-start gap-2 shadow-lg animate-in fade-in">
@@ -3029,60 +3243,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   <span>{step2ErrorMsg}</span>
                 </div>
               )}
-
-              {/* Mandatory Terms & Privacy Acceptance Checkbox */}
-              <div className="p-3 bg-slate-950/90 rounded-xl border border-slate-800 space-y-2">
-                <label className="flex items-start gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    required
-                    checked={acceptedTerms}
-                    onChange={(e) => setAcceptedTerms(e.target.checked)}
-                    className="w-4 h-4 mt-0.5 accent-amber-400 rounded"
-                  />
-                  <div className="text-xs text-slate-300 leading-relaxed">
-                    <span className="font-bold text-white">
-                      मैंने{' '}
-                      <button
-                        type="button"
-                        onClick={() => setLegalModalTab('terms')}
-                        className="text-amber-400 underline hover:text-amber-300 font-bold cursor-pointer"
-                      >
-                        नियम व शर्तें (Terms & Conditions)
-                      </button>{' '}
-                      और{' '}
-                      <button
-                        type="button"
-                        onClick={() => setLegalModalTab('privacy')}
-                        className="text-amber-400 underline hover:text-amber-300 font-bold cursor-pointer"
-                      >
-                        गोपनीयता नीति (Privacy Policy)
-                      </button>{' '}
-                      को ध्यानपूर्वक पढ़ लिया है और मैं इनसे सहमत हूँ। *
-                    </span>
-                  </div>
-                </label>
-              </div>
-
-              {/* Optional WhatsApp Marketing & Promotional Consent Checkbox (Default Unchecked) */}
-              <div className="p-3 bg-slate-950/90 rounded-xl border border-emerald-900/40 space-y-1.5">
-                <label className="flex items-start gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={whatsappMarketingConsent}
-                    onChange={(e) => setWhatsappMarketingConsent(e.target.checked)}
-                    className="w-4 h-4 mt-0.5 accent-emerald-500 rounded cursor-pointer shrink-0"
-                  />
-                  <div className="text-xs text-slate-300 leading-relaxed">
-                    <span className="font-bold text-white block">
-                      हाँ, मैं AI NEWS MAKER से WhatsApp पर समाचार अपडेट, मार्केटिंग और प्रमोशनल सामग्री प्राप्त करना चाहता/चाहती हूँ।
-                    </span>
-                    <span className="text-[11px] text-slate-400 block mt-0.5">
-                      यह वैकल्पिक है। आप इसे किसी भी समय अपनी प्रोफ़ाइल सेटिंग से बदल सकते हैं। इससे आपका खाता या सेवा प्रभावित नहीं होगी।
-                    </span>
-                  </div>
-                </label>
-              </div>
 
               {/* Step 2 Action Submit Buttons */}
               <div className="pt-2 sticky bottom-0 bg-slate-900/95 py-2 flex items-center gap-3">
@@ -3093,14 +3253,15 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                     setSetupWizardStep(1);
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className="py-3.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm rounded-xl border border-slate-700 transition cursor-pointer shrink-0"
+                  className="py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs sm:text-sm rounded-xl border border-slate-700 transition cursor-pointer shrink-0"
                 >
                   ← पिछला चरण
                 </button>
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={handleCompleteSetupSubmit}
                   disabled={isSubmitting}
-                  className="flex-1 py-3.5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-base rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all transform active:scale-98 cursor-pointer disabled:opacity-60"
+                  className="flex-1 py-3 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-base rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all transform active:scale-98 cursor-pointer disabled:opacity-60"
                 >
                   <Sparkles className={`w-4 h-4 text-slate-950 ${isSubmitting ? 'animate-spin' : ''}`} />
                   <span>{isSubmitting ? 'सहेजा जा रहा है...' : '✓ सेव करें एवं होम फ़ीड शुरू करें →'}</span>
@@ -3109,8 +3270,85 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
             </div>
           )}
         </form>
-      </div>
-    )}
+
+        {/* Channel Name Confirmation Modal (पुष्टि पॉपअप) */}
+        {showChannelNameConfirmModal && (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+            <div className="bg-slate-900 border-2 border-amber-500/70 rounded-3xl w-full max-w-lg p-5 sm:p-6 shadow-2xl space-y-4 text-left relative">
+              {/* Modal Top Header */}
+              <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                  <ShieldAlert className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-white">
+                    चैनल नाम शुद्धता व वर्तनी सत्यापन
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    कृपया अपने चैनल के नाम की स्पेलिंग व भाषा की एक बार पुनः जांच कर लें
+                  </p>
+                </div>
+              </div>
+
+              {/* Display Names */}
+              <div className="space-y-2">
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 font-bold block uppercase">
+                    1. चैनल नाम (हिन्दी में / Devanagari):
+                  </span>
+                  <span className="text-base sm:text-lg font-black text-amber-300 font-['Noto_Sans_Devanagari']">
+                    {detailChannelNameHi || '—'}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
+                  <span className="text-[10px] text-slate-400 font-bold block uppercase">
+                    2. Channel Name (English में / Latin A-Z):
+                  </span>
+                  <span className="text-base sm:text-lg font-black text-cyan-300 font-mono">
+                    {detailChannelNameEn || '—'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Exact User Wording Warning Notice */}
+              <div className="p-3.5 bg-amber-500/10 border-2 border-amber-500/50 rounded-2xl flex items-start gap-2.5 shadow-sm">
+                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-200 leading-relaxed">
+                  <strong>पुष्टि करें:</strong> हाँ, मैंने अपने चैनल का नाम पूर्णतः सही एवं शुद्ध हिन्दी/English में लिखा है, सही शब्दों व वर्तनी के साथ लिखा है, कोई भाषाई त्रुटि नहीं है। मुझे ज्ञात है कि यदि कोई त्रुटि होती है तो इसके सुधार के लिए एडमिन से अनुमति लेनी होगी जिसमें <strong>24 से 48 घंटे का समय</strong> लग सकता है।
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowChannelNameConfirmModal(false)}
+                  className="flex-1 py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs sm:text-sm rounded-xl border border-slate-700 transition cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <span>✕</span>
+                  <span>संशोधन करें (Edit)</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={handleConfirmChannelNameAndSave}
+                  className="flex-1 py-3 px-4 bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-xl transition cursor-pointer flex items-center justify-center gap-2 active:scale-98 disabled:opacity-60"
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                  ) : (
+                    <span>✓ हाँ, पूर्णतः सही है (आगे बढ़ें)</span>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Manual Logo Cropper Modal */}
