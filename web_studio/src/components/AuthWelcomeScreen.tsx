@@ -2808,7 +2808,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                         setSetupWizardStep(2);
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }}
-                      className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-sm sm:text-base rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all transform active:scale-98 cursor-pointer"
+                      className="w-full py-3.5 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-sm sm:text-base rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all transform active:scale-98 cursor-pointer animate-button-shine"
                     >
                       <span>आगे बढ़ें (चरण 2: चैनल नाम व ब्रांडिंग) →</span>
                     </button>
@@ -3261,7 +3261,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   type="button"
                   onClick={handleCompleteSetupSubmit}
                   disabled={isSubmitting}
-                  className="flex-1 py-3 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-base rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all transform active:scale-98 cursor-pointer disabled:opacity-60"
+                  className="flex-1 py-3 bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black text-xs sm:text-base rounded-xl shadow-xl flex items-center justify-center gap-2 transition-all transform active:scale-98 cursor-pointer disabled:opacity-60 animate-button-shine"
                 >
                   <Sparkles className={`w-4 h-4 text-slate-950 ${isSubmitting ? 'animate-spin' : ''}`} />
                   <span>{isSubmitting ? 'सहेजा जा रहा है...' : '✓ सेव करें एवं होम फ़ीड शुरू करें →'}</span>
@@ -3333,7 +3333,7 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   type="button"
                   disabled={isSubmitting}
                   onClick={handleConfirmChannelNameAndSave}
-                  className="flex-1 py-3 px-4 bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-xl transition cursor-pointer flex items-center justify-center gap-2 active:scale-98 disabled:opacity-60"
+                  className="flex-1 py-3 px-4 bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-xl transition cursor-pointer flex items-center justify-center gap-2 active:scale-98 disabled:opacity-60 animate-button-shine"
                 >
                   {isSubmitting ? (
                     <Loader2 className="w-4 h-4 animate-spin text-slate-950" />

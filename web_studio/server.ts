@@ -1074,7 +1074,7 @@ export async function requireMasterAdminMiddleware(req: express.Request, res: ex
 }
 
 // WhatsApp Cloud API webhook + customer support integration with authenticated middlewares (Task A)
-registerWhatsAppIntegration(app, centralDb, {
+const waIntegration = registerWhatsAppIntegration(app, centralDb, {
   requireAdminMiddleware,
   requireAuthMiddleware,
   requireMasterAdminMiddleware,
@@ -6904,6 +6904,9 @@ interface AuthoritativeUser {
   hoursRemaining?: number;
   minutesRemaining?: number;
   hasActivePaidPlan?: boolean;
+  trialDay5Notified?: boolean;
+  trialDay6WaReminded?: boolean;
+  trialDay7WaReminded?: boolean;
   trialWarningNotified?: boolean;
   trialExpiredNotified?: boolean;
   activatedAt?: number;
@@ -8054,7 +8057,62 @@ function runTrialExpirationAndNotificationCheck() {
     if (isProtectedAdminAccount(u.email) || u.tier !== 'basic') continue;
     const trialEnds = u.trialEndsAt || ((u.trialStartedAt || u.createdAt) + SEVEN_DAYS_MS);
 
-    // 1. One day before expiration warning
+    // 1. Day 5: 3 Days remaining warning notification
+    const threeDaysBeforeMs = trialEnds - 3 * 24 * 60 * 60 * 1000;
+    if (now >= threeDaysBeforeMs && now < trialEnds && !u.trialDay5Notified) {
+      const userDay5Id = `notif_day5_user_${u.userId}_${trialEnds}`;
+      if (!existingIds.has(userDay5Id)) {
+        newNotifs.push({
+          id: userDay5Id,
+          title: "⏳ 7-दिवसीय फ़्री ट्रायल: 3 दिन शेष (Day 5)",
+          message: `नमस्ते ${u.name || 'उपयोगकर्ता'}, आपके 7-दिवसीय फ़्री ट्रायल (PRO फीचर्स ₹999/माह मूल्य) के केवल 3 दिन शेष हैं। अपने चैनल का निर्बाध संचालन जारी रखने के लिए पैकेज अपग्रेड करें।`,
+          time: "अभी",
+          timestamp: now,
+          unread: true,
+          type: "plan",
+          targetUserEmail: u.email,
+          linkTab: "profile"
+        });
+        existingIds.add(userDay5Id);
+      }
+      u.trialDay5Notified = true;
+      updatedUsers = true;
+    }
+
+    // 2. Day 6: 2 Days remaining warning & WhatsApp reminder
+    const twoDaysBeforeMs = trialEnds - 2 * 24 * 60 * 60 * 1000;
+    if (now >= twoDaysBeforeMs && now < trialEnds && !u.trialDay6WaReminded) {
+      const userDay6Id = `notif_day6_user_${u.userId}_${trialEnds}`;
+      if (!existingIds.has(userDay6Id)) {
+        newNotifs.push({
+          id: userDay6Id,
+          title: "⚠️ 7-दिवसीय फ़्री ट्रायल: केवल 2 दिन शेष (Day 6)",
+          message: `नमस्ते ${u.name || 'उपयोगकर्ता'}, आपके 7-दिवसीय फ़्री ट्रायल के केवल 2 दिन शेष हैं। स्टूडियो व एआई टूल्स सक्रिय रखने के लिए पैकेज चुनें।`,
+          time: "अभी",
+          timestamp: now,
+          unread: true,
+          type: "plan",
+          targetUserEmail: u.email,
+          linkTab: "profile"
+        });
+        existingIds.add(userDay6Id);
+      }
+
+      // WhatsApp Reminder on Day 6
+      const rawPhone = u.whatsappNumber || u.mobile || u.mobileNumber;
+      if (rawPhone && typeof waIntegration?.sendWhatsAppText === 'function') {
+        const waId = normalizeToWaId(rawPhone);
+        if (waId) {
+          const waMsg = `*AI News Maker - ट्रायल रिमाइंडर (Day 6)* ⏳\n\nनमस्ते *${u.name || 'उपयोगकर्ता'}*,\nआपके 7-दिवसीय फ़्री ट्रायल (PRO प्लान - ₹999/माह वैल्यू) के अब केवल *2 दिन शेष* हैं।\n\nअपने चैनल का न्यूज़ स्टूडियो, AI ग्राफ़िक और वीडियो क्रिएशन जारी रखने के लिए समय रहते अपना पैकेज अपग्रेड करें।\n\n👉 *पैकेज देखने व अपग्रेड करने के लिए:* https://www.ainewsmaker.online/profile\n\n_AI News Maker सपोर्ट टीम_`;
+          waIntegration.sendWhatsAppText(waId, waMsg).catch((err: any) => console.warn('[WhatsApp:TrialReminderDay6] send failed:', err));
+        }
+      }
+
+      u.trialDay6WaReminded = true;
+      updatedUsers = true;
+    }
+
+    // 3. Day 7: 24 hours remaining warning & final WhatsApp reminder
     const oneDayBeforeMs = trialEnds - 24 * 60 * 60 * 1000;
     if (now >= oneDayBeforeMs && now < trialEnds && !u.trialWarningNotified) {
       const userWarnId = `notif_warn_user_${u.userId}_${trialEnds}`;
@@ -8071,7 +8129,7 @@ function runTrialExpirationAndNotificationCheck() {
       if (!existingIds.has(userWarnId)) {
         newNotifs.push({
           id: userWarnId,
-          title: "⚠️ 24 घंटे में फ्री ट्रायल समाप्त हो रहा है",
+          title: "⚠️ 24 घंटे में फ्री ट्रायल समाप्त हो रहा है (Day 7)",
           message: `नमस्ते ${u.name || 'उपयोगकर्ता'}, आपका 7-दिवसीय फ्री ट्रायल कल (${expiryDateStr}) को समाप्त हो जाएगा। निर्बाध सेवाओं के लिए अपना प्लान अपग्रेड करें।`,
           time: "अभी",
           timestamp: now,
@@ -8096,6 +8154,19 @@ function runTrialExpirationAndNotificationCheck() {
           linkTab: "profile"
         });
         existingIds.add(adminWarnId);
+      }
+
+      // WhatsApp Reminder on Day 7
+      if (!u.trialDay7WaReminded) {
+        const rawPhone = u.whatsappNumber || u.mobile || u.mobileNumber;
+        if (rawPhone && typeof waIntegration?.sendWhatsAppText === 'function') {
+          const waId = normalizeToWaId(rawPhone);
+          if (waId) {
+            const waMsg = `*अंतिम रिमाइंडर: AI News Maker 7-Day Free Trial (Day 7)* 🚨\n\nनमस्ते *${u.name || 'उपयोगकर्ता'}*,\nआज आपके 7-दिवसीय फ़्री ट्रायल का *अंतिम दिन* है। आज रात 12 बजे के बाद ग्राफ़िक डाउनलोड एवं AI टूल्स लॉक हो जाएंगे।\n\nअपनी सेवाओं को बिना किसी रुकावट के जारी रखने हेतु अभी अपना पैकेज सक्रिय करें:\n\n👉 *तुरंत अपग्रेड करें:* https://www.ainewsmaker.online/profile\n\n_AI News Maker सपोर्ट टीम_`;
+            waIntegration.sendWhatsAppText(waId, waMsg).catch((err: any) => console.warn('[WhatsApp:TrialReminderDay7] send failed:', err));
+          }
+        }
+        u.trialDay7WaReminded = true;
       }
 
       u.trialWarningNotified = true;

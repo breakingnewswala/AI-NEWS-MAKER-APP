@@ -13915,7 +13915,7 @@ async function requireMasterAdminMiddleware(req, res, next) {
   }
   next();
 }
-registerWhatsAppIntegration(app, centralDb, {
+var waIntegration = registerWhatsAppIntegration(app, centralDb, {
   requireAdminMiddleware,
   requireAuthMiddleware,
   requireMasterAdminMiddleware,
@@ -19455,6 +19455,63 @@ function runTrialExpirationAndNotificationCheck() {
   for (const u of users) {
     if (isProtectedAdminAccount(u.email) || u.tier !== "basic") continue;
     const trialEnds = u.trialEndsAt || (u.trialStartedAt || u.createdAt) + SEVEN_DAYS_MS;
+    const threeDaysBeforeMs = trialEnds - 3 * 24 * 60 * 60 * 1e3;
+    if (now >= threeDaysBeforeMs && now < trialEnds && !u.trialDay5Notified) {
+      const userDay5Id = `notif_day5_user_${u.userId}_${trialEnds}`;
+      if (!existingIds.has(userDay5Id)) {
+        newNotifs.push({
+          id: userDay5Id,
+          title: "\u23F3 7-\u0926\u093F\u0935\u0938\u0940\u092F \u092B\u093C\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932: 3 \u0926\u093F\u0928 \u0936\u0947\u0937 (Day 5)",
+          message: `\u0928\u092E\u0938\u094D\u0924\u0947 ${u.name || "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E"}, \u0906\u092A\u0915\u0947 7-\u0926\u093F\u0935\u0938\u0940\u092F \u092B\u093C\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932 (PRO \u092B\u0940\u091A\u0930\u094D\u0938 \u20B9999/\u092E\u093E\u0939 \u092E\u0942\u0932\u094D\u092F) \u0915\u0947 \u0915\u0947\u0935\u0932 3 \u0926\u093F\u0928 \u0936\u0947\u0937 \u0939\u0948\u0902\u0964 \u0905\u092A\u0928\u0947 \u091A\u0948\u0928\u0932 \u0915\u093E \u0928\u093F\u0930\u094D\u092C\u093E\u0927 \u0938\u0902\u091A\u093E\u0932\u0928 \u091C\u093E\u0930\u0940 \u0930\u0916\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u092A\u0948\u0915\u0947\u091C \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964`,
+          time: "\u0905\u092D\u0940",
+          timestamp: now,
+          unread: true,
+          type: "plan",
+          targetUserEmail: u.email,
+          linkTab: "profile"
+        });
+        existingIds.add(userDay5Id);
+      }
+      u.trialDay5Notified = true;
+      updatedUsers = true;
+    }
+    const twoDaysBeforeMs = trialEnds - 2 * 24 * 60 * 60 * 1e3;
+    if (now >= twoDaysBeforeMs && now < trialEnds && !u.trialDay6WaReminded) {
+      const userDay6Id = `notif_day6_user_${u.userId}_${trialEnds}`;
+      if (!existingIds.has(userDay6Id)) {
+        newNotifs.push({
+          id: userDay6Id,
+          title: "\u26A0\uFE0F 7-\u0926\u093F\u0935\u0938\u0940\u092F \u092B\u093C\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932: \u0915\u0947\u0935\u0932 2 \u0926\u093F\u0928 \u0936\u0947\u0937 (Day 6)",
+          message: `\u0928\u092E\u0938\u094D\u0924\u0947 ${u.name || "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E"}, \u0906\u092A\u0915\u0947 7-\u0926\u093F\u0935\u0938\u0940\u092F \u092B\u093C\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932 \u0915\u0947 \u0915\u0947\u0935\u0932 2 \u0926\u093F\u0928 \u0936\u0947\u0937 \u0939\u0948\u0902\u0964 \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B \u0935 \u090F\u0906\u0908 \u091F\u0942\u0932\u094D\u0938 \u0938\u0915\u094D\u0930\u093F\u092F \u0930\u0916\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u092A\u0948\u0915\u0947\u091C \u091A\u0941\u0928\u0947\u0902\u0964`,
+          time: "\u0905\u092D\u0940",
+          timestamp: now,
+          unread: true,
+          type: "plan",
+          targetUserEmail: u.email,
+          linkTab: "profile"
+        });
+        existingIds.add(userDay6Id);
+      }
+      const rawPhone = u.whatsappNumber || u.mobile || u.mobileNumber;
+      if (rawPhone && typeof waIntegration?.sendWhatsAppText === "function") {
+        const waId = normalizeToWaId(rawPhone);
+        if (waId) {
+          const waMsg = `*AI News Maker - \u091F\u094D\u0930\u093E\u092F\u0932 \u0930\u093F\u092E\u093E\u0907\u0902\u0921\u0930 (Day 6)* \u23F3
+
+\u0928\u092E\u0938\u094D\u0924\u0947 *${u.name || "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E"}*,
+\u0906\u092A\u0915\u0947 7-\u0926\u093F\u0935\u0938\u0940\u092F \u092B\u093C\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932 (PRO \u092A\u094D\u0932\u093E\u0928 - \u20B9999/\u092E\u093E\u0939 \u0935\u0948\u0932\u094D\u092F\u0942) \u0915\u0947 \u0905\u092C \u0915\u0947\u0935\u0932 *2 \u0926\u093F\u0928 \u0936\u0947\u0937* \u0939\u0948\u0902\u0964
+
+\u0905\u092A\u0928\u0947 \u091A\u0948\u0928\u0932 \u0915\u093E \u0928\u094D\u092F\u0942\u091C\u093C \u0938\u094D\u091F\u0942\u0921\u093F\u092F\u094B, AI \u0917\u094D\u0930\u093E\u092B\u093C\u093F\u0915 \u0914\u0930 \u0935\u0940\u0921\u093F\u092F\u094B \u0915\u094D\u0930\u093F\u090F\u0936\u0928 \u091C\u093E\u0930\u0940 \u0930\u0916\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0938\u092E\u092F \u0930\u0939\u0924\u0947 \u0905\u092A\u0928\u093E \u092A\u0948\u0915\u0947\u091C \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964
+
+\u{1F449} *\u092A\u0948\u0915\u0947\u091C \u0926\u0947\u0916\u0928\u0947 \u0935 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F:* https://www.ainewsmaker.online/profile
+
+_AI News Maker \u0938\u092A\u094B\u0930\u094D\u091F \u091F\u0940\u092E_`;
+          waIntegration.sendWhatsAppText(waId, waMsg).catch((err) => console.warn("[WhatsApp:TrialReminderDay6] send failed:", err));
+        }
+      }
+      u.trialDay6WaReminded = true;
+      updatedUsers = true;
+    }
     const oneDayBeforeMs = trialEnds - 24 * 60 * 60 * 1e3;
     if (now >= oneDayBeforeMs && now < trialEnds && !u.trialWarningNotified) {
       const userWarnId = `notif_warn_user_${u.userId}_${trialEnds}`;
@@ -19470,7 +19527,7 @@ function runTrialExpirationAndNotificationCheck() {
       if (!existingIds.has(userWarnId)) {
         newNotifs.push({
           id: userWarnId,
-          title: "\u26A0\uFE0F 24 \u0918\u0902\u091F\u0947 \u092E\u0947\u0902 \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0930\u0939\u093E \u0939\u0948",
+          title: "\u26A0\uFE0F 24 \u0918\u0902\u091F\u0947 \u092E\u0947\u0902 \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u0930\u0939\u093E \u0939\u0948 (Day 7)",
           message: `\u0928\u092E\u0938\u094D\u0924\u0947 ${u.name || "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E"}, \u0906\u092A\u0915\u093E 7-\u0926\u093F\u0935\u0938\u0940\u092F \u092B\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932 \u0915\u0932 (${expiryDateStr}) \u0915\u094B \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B \u091C\u093E\u090F\u0917\u093E\u0964 \u0928\u093F\u0930\u094D\u092C\u093E\u0927 \u0938\u0947\u0935\u093E\u0913\u0902 \u0915\u0947 \u0932\u093F\u090F \u0905\u092A\u0928\u093E \u092A\u094D\u0932\u093E\u0928 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902\u0964`,
           time: "\u0905\u092D\u0940",
           timestamp: now,
@@ -19494,6 +19551,26 @@ function runTrialExpirationAndNotificationCheck() {
           linkTab: "profile"
         });
         existingIds.add(adminWarnId);
+      }
+      if (!u.trialDay7WaReminded) {
+        const rawPhone = u.whatsappNumber || u.mobile || u.mobileNumber;
+        if (rawPhone && typeof waIntegration?.sendWhatsAppText === "function") {
+          const waId = normalizeToWaId(rawPhone);
+          if (waId) {
+            const waMsg = `*\u0905\u0902\u0924\u093F\u092E \u0930\u093F\u092E\u093E\u0907\u0902\u0921\u0930: AI News Maker 7-Day Free Trial (Day 7)* \u{1F6A8}
+
+\u0928\u092E\u0938\u094D\u0924\u0947 *${u.name || "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E"}*,
+\u0906\u091C \u0906\u092A\u0915\u0947 7-\u0926\u093F\u0935\u0938\u0940\u092F \u092B\u093C\u094D\u0930\u0940 \u091F\u094D\u0930\u093E\u092F\u0932 \u0915\u093E *\u0905\u0902\u0924\u093F\u092E \u0926\u093F\u0928* \u0939\u0948\u0964 \u0906\u091C \u0930\u093E\u0924 12 \u092C\u091C\u0947 \u0915\u0947 \u092C\u093E\u0926 \u0917\u094D\u0930\u093E\u092B\u093C\u093F\u0915 \u0921\u093E\u0909\u0928\u0932\u094B\u0921 \u090F\u0935\u0902 AI \u091F\u0942\u0932\u094D\u0938 \u0932\u0949\u0915 \u0939\u094B \u091C\u093E\u090F\u0902\u0917\u0947\u0964
+
+\u0905\u092A\u0928\u0940 \u0938\u0947\u0935\u093E\u0913\u0902 \u0915\u094B \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u0930\u0941\u0915\u093E\u0935\u091F \u0915\u0947 \u091C\u093E\u0930\u0940 \u0930\u0916\u0928\u0947 \u0939\u0947\u0924\u0941 \u0905\u092D\u0940 \u0905\u092A\u0928\u093E \u092A\u0948\u0915\u0947\u091C \u0938\u0915\u094D\u0930\u093F\u092F \u0915\u0930\u0947\u0902:
+
+\u{1F449} *\u0924\u0941\u0930\u0902\u0924 \u0905\u092A\u0917\u094D\u0930\u0947\u0921 \u0915\u0930\u0947\u0902:* https://www.ainewsmaker.online/profile
+
+_AI News Maker \u0938\u092A\u094B\u0930\u094D\u091F \u091F\u0940\u092E_`;
+            waIntegration.sendWhatsAppText(waId, waMsg).catch((err) => console.warn("[WhatsApp:TrialReminderDay7] send failed:", err));
+          }
+        }
+        u.trialDay7WaReminded = true;
       }
       u.trialWarningNotified = true;
       updatedUsers = true;
