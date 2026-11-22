@@ -30169,20 +30169,7 @@ app.post("/api/user/consume-graphic-creation-quota", async (req, res) => {
     const cleanReqId = (requestId || "").trim();
     const cleanPostId = (postId || newsId || id || "").toString().trim();
 
-    // 1. One News Card = One Count Per User Per Day (Deduplication)
-    if (cleanPostId && userEntry.processedPostIds.includes(cleanPostId)) {
-      return res.json({
-        success: true,
-        unlimited: false,
-        limit: dailyLimit,
-        usedToday: userEntry.count,
-        remainingToday: Math.max(0, dailyLimit - userEntry.count),
-        deduplicated: true,
-        message: "यह समाचार कार्ड आज पहले ही उपयोग किया जा चुका है। कोटा पुनः नहीं काटा गया।",
-      });
-    }
-
-    // 2. Request deduplication
+    // 1. Request deduplication (prevent rapid accidental double-clicks on same request ID)
     if (cleanReqId && userEntry.processedRequestIds.includes(cleanReqId)) {
       return res.json({
         success: true,

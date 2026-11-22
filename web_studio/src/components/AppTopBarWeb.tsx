@@ -313,7 +313,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                     : 'text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
                 }`}
               >
-                🎬 वीडियो एंड रील्स
+                🎬 वीडियो व रील्स
               </button>
               <button
                 onClick={() => onNavigateToTab('studio')}
@@ -393,7 +393,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                   title="फ़ीड रीफ्रेश करें"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-amber-500' : ''}`} />
-                  <span>रिफ्रेश</span>
+                  <span>रीफ्रेश</span>
                 </button>
               )}
 

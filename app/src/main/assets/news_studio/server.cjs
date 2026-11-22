@@ -37449,17 +37449,6 @@ app.post("/api/user/consume-graphic-creation-quota", async (req, res) => {
     if (!userEntry.processedPostIds) userEntry.processedPostIds = [];
     const cleanReqId = (requestId || "").trim();
     const cleanPostId = (postId2 || newsId2 || id || "").toString().trim();
-    if (cleanPostId && userEntry.processedPostIds.includes(cleanPostId)) {
-      return res.json({
-        success: true,
-        unlimited: false,
-        limit: dailyLimit,
-        usedToday: userEntry.count,
-        remainingToday: Math.max(0, dailyLimit - userEntry.count),
-        deduplicated: true,
-        message: "\u092F\u0939 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u093E\u0930\u094D\u0921 \u0906\u091C \u092A\u0939\u0932\u0947 \u0939\u0940 \u0909\u092A\u092F\u094B\u0917 \u0915\u093F\u092F\u093E \u091C\u093E \u091A\u0941\u0915\u093E \u0939\u0948\u0964 \u0915\u094B\u091F\u093E \u092A\u0941\u0928\u0903 \u0928\u0939\u0940\u0902 \u0915\u093E\u091F\u093E \u0917\u092F\u093E\u0964"
-      });
-    }
     if (cleanReqId && userEntry.processedRequestIds.includes(cleanReqId)) {
       return res.json({
         success: true,

@@ -1143,6 +1143,9 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       if (res.ok) {
         const data = await res.json();
         setDownloadStatus(data);
+        if (data && typeof data.remainingToday === 'number') {
+          setDailyQuotaStatus(data);
+        }
       }
     } catch {}
   };
@@ -1163,6 +1166,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         }),
       }).catch(() => {});
     } catch {}
+
     if (!currentUser?.email) {
       onOpenStudioWithNews(post);
       return;
@@ -1171,6 +1175,34 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     if (isEffectiveAdmin(currentUser)) {
       onOpenStudioWithNews(post);
       return;
+    }
+
+    // Check if daily quota is already exhausted before opening studio
+    const currentRemaining = dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : 10;
+    if (!dailyQuotaStatus?.unlimited && currentRemaining <= 0) {
+      showAppWarning('आज की ग्राफिक निर्माण दैनिक सीमा समाप्त हो चुकी है। कृपया कल पुनः प्रयास करें या प्लान अपग्रेड करें।', 'दैनिक सीमा');
+      return;
+    }
+
+    // Optimistically decrement count immediately on click (e.g. 10 -> 9, 9 -> 8)
+    if (!dailyQuotaStatus?.unlimited) {
+      const newRemaining = Math.max(0, currentRemaining - 1);
+      const newUsed = (dailyQuotaStatus?.usedToday ?? (10 - currentRemaining)) + 1;
+      const optimisticStatus = {
+        ...(dailyQuotaStatus || {}),
+        remainingToday: newRemaining,
+        remainingDownloads: newRemaining,
+        usedToday: newUsed,
+        downloadsToday: newUsed,
+        isExhausted: newRemaining <= 0,
+      };
+      setDailyQuotaStatus(optimisticStatus as any);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('ai_news_download_status_updated', { detail: optimisticStatus }));
+        try {
+          localStorage.setItem(`daily_quota_${currentUser.email.toLowerCase().trim()}`, JSON.stringify(optimisticStatus));
+        } catch {}
+      }
     }
 
     try {
@@ -1195,17 +1227,25 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       if (data && typeof data.remainingToday === 'number') {
         const updatedStatus = {
           remainingToday: data.remainingToday,
+          remainingDownloads: data.remainingToday,
           usedToday: data.usedToday,
+          downloadsToday: data.usedToday,
           limit: data.limit,
           dailyQuota: data.limit,
           maxAllowed: data.limit,
           isExhausted: data.remainingToday <= 0,
+          unlimited: Boolean(data.unlimited),
         };
         setDailyQuotaStatus((prev: any) => ({
           ...(prev || {}),
           ...updatedStatus,
         }));
-        window.dispatchEvent(new CustomEvent('ai_news_download_status_updated', { detail: updatedStatus }));
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('ai_news_download_status_updated', { detail: updatedStatus }));
+          try {
+            localStorage.setItem(`daily_quota_${currentUser.email.toLowerCase().trim()}`, JSON.stringify(updatedStatus));
+          } catch {}
+        }
       }
     } catch (e) {
       console.warn('Quota consumption network error, proceeding safely:', e);

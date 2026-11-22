@@ -62,7 +62,7 @@ export const AppBottomBarWeb: React.FC<AppBottomBarWebProps> = ({
         >
           <Film className={`w-5 h-5 ${isVideos ? 'stroke-[2.5]' : 'stroke-2'}`} />
           <span className="text-[8.5px] sm:text-[10px] font-bold mt-1 tracking-tight truncate max-w-[76px] sm:max-w-none">
-            वीडियो एंड रील्स
+            वीडियो व रील्स
           </span>
         </button>
 

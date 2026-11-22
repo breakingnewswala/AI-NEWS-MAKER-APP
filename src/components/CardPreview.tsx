@@ -881,10 +881,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                       <Camera className="w-6 h-6 text-slate-300 stroke-[1.75]" />
                     </div>
                     <span className="text-xs sm:text-sm font-bold text-white font-['Noto_Sans_Devanagari'] drop-shadow-md">
-                      फोटो टच करने के लिए स्टेप 4 पर जाएं
+                      फ़ोटो लगाने के लिए स्टेप 4 पर जाएं
                     </span>
                     <span className="text-[10px] sm:text-[11px] text-slate-300 font-['Noto_Sans_Devanagari'] mt-0.5 drop-shadow-sm">
-                      (यहां आपकी चुनी हुई फोटो प्रदर्शित होगी)
+                      (यहाँ आपकी चयनित फ़ोटो प्रदर्शित होगी)
                     </span>
                   </div>
                 );
@@ -1453,10 +1453,10 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               <Camera className="w-7 h-7 text-slate-300 stroke-[1.75]" />
             </div>
             <span className="text-sm sm:text-base font-bold text-white font-['Noto_Sans_Devanagari'] drop-shadow-md">
-              फोटो टच करने के लिए स्टेप 4 पर जाएं
+              फ़ोटो लगाने के लिए स्टेप 4 पर जाएं
             </span>
             <span className="text-[11px] text-slate-300 font-['Noto_Sans_Devanagari'] mt-1 drop-shadow-sm">
-              (यहां आपकी चुनी हुई फोटो प्रदर्शित होगी)
+              (यहाँ आपकी चयनित फ़ोटो प्रदर्शित होगी)
             </span>
           </div>
         )}
