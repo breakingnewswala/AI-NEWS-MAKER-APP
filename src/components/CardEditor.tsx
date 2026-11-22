@@ -1992,11 +1992,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         if (match?.textSlots?.[0]?.textColor) {
                           updates.headlineTextColor = match.textSlots[0].textColor;
                         }
-                        // Section 4: Synchronize Master Admin's authoritative highlight color
-                        const adminHighlight = match?.primaryHighlightColor || (match as any)?.quoteHighlightColor || match?.textSlots?.[0]?.highlightColor;
-                        if (adminHighlight) {
-                          updates.highlightColor = adminHighlight;
-                        }
+                        // Authoritative Color Theme: Apply template's highlight color, or default yellow (#FFE600) for graphic_001
+                        const frameHighlight = match?.primaryHighlightColor || (match as any)?.quoteHighlightColor || match?.textSlots?.[0]?.highlightColor || '#FFE600';
+                        updates.highlightColor = frameHighlight;
+
                         // Section 9: Auto-load frame's sample photo if user hasn't uploaded one
                         const frameSamplePhoto = match?.samplePhotoUrl || match?.photoSlots?.[0]?.defaultAssetUrl;
                         if (frameSamplePhoto && (!card.images?.main || card.images.main.includes('placeholder_news_photo') || card.images.main.trim() === '')) {
@@ -2021,25 +2020,25 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           const locBadgeId = match?.locationBadgeAssetId || match?.headerConfig?.locationBadgeAssetId || 'loc_style_split_duotone';
                           updates.selectedLocationBadgeId = locBadgeId;
                           const locAsset = match?.headerConfig?.manualLocationAsset || (match?.headerConfig as any)?.locationBadgeAssetUrl || (match?.headerConfig as any)?.locationBadgeUrl || getAssetLibraryItemById(locBadgeId)?.url;
-                          if (locAsset) updates.customLocationBadgeUrl = locAsset;
-                          if (match?.headerConfig?.locationTextColor) {
-                            updates.locationTextColor = match.headerConfig.locationTextColor;
-                          }
-                          if (match?.headerConfig?.locationBgColor) {
-                            updates.locationBgColor = match.headerConfig.locationBgColor;
-                          }
+                          updates.customLocationBadgeUrl = locAsset || undefined;
+                          updates.locationTextColor = match?.headerConfig?.locationTextColor || '#FFFFFF';
+                          updates.locationBgColor = match?.headerConfig?.locationBgColor || '#DC2626';
                           if (match?.headerConfig?.showLocation !== undefined) {
                             updates.showLocation = match.headerConfig.showLocation !== false;
                           }
                           updates.isTestMode = false;
                         } else {
-                          updates.selectedCalloutId = undefined;
-                          updates.customCalloutAssetUrl = undefined;
-                          if (!card.selectedLocationBadgeId && !card.customLocationBadgeUrl) {
-                            updates.selectedLocationBadgeId = 'loc_style_classic_ribbon_pin';
-                            const ribbonItem = getAssetLibraryItemById('loc_style_classic_ribbon_pin');
-                            if (ribbonItem?.url) updates.customLocationBadgeUrl = ribbonItem.url;
-                          }
+                          // Regular Clean News Frame (graphic_001) default theme
+                          updates.highlightColor = '#FFE600';
+                          updates.selectedCalloutId = 'callout_story_details_hindi';
+                          const ribbonItem = getAssetLibraryItemById('callout_story_details_hindi');
+                          updates.customCalloutAssetUrl = ribbonItem?.url;
+                          updates.calloutTag = 'पूरी खबर विवरण नीचे डिस्क्रिप्शन में';
+                          updates.showCallout = true;
+                          updates.selectedLocationBadgeId = undefined; // authentic default pill
+                          updates.customLocationBadgeUrl = undefined;
+                          updates.locationTextColor = '#0a0a0a';
+                          updates.locationBgColor = '#FFFFFF';
                           updates.showLocation = true;
                           updates.isTestMode = false;
                         }
@@ -2153,51 +2152,44 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   );
                 })}
 
-            {/* Custom Frame Card — visible on Custom Frame category */}
+            {/* Custom Frame Action Button — visible on Custom Frame category (Redirects eligible Pro/VIP users to Template Manager) */}
             {selectedFrameCategory === 'Custom Frame' && (
                 <div
-                  onClick={() => onChange({ frameDesign: 'custom-png', showMasterBranding: false })}
-                  className={`p-3 rounded-xl border text-left flex flex-col justify-between gap-2 transition-all cursor-pointer relative overflow-hidden select-none ${
-                    card.frameDesign === 'custom-png'
-                      ? 'border-yellow-400 bg-yellow-500/15 text-white shadow-lg ring-2 ring-yellow-400/40'
-                      : 'border-purple-500/40 bg-neutral-950/70 hover:border-purple-400 text-neutral-300 hover:bg-neutral-900/60'
-                  }`}
+                  onClick={() => {
+                    const isEligible = effectiveAdmin || effectiveTier === 'pro' || effectiveTier === 'ultra' || effectiveTier === 'vip' || effectiveTier === 'vip desk';
+                    if (isEligible) {
+                      if (typeof (window as any).setAppTab === 'function') {
+                        (window as any).setAppTab('profile');
+                      }
+                      window.dispatchEvent(new CustomEvent('ai_news_open_template_manager'));
+                    } else {
+                      alert('कस्टम फ्रेम अपलोड केवल प्रो और वीआईपी डेस्क प्लान के लिए उपलब्ध है। कृपया अपना प्लान अपग्रेड करें।');
+                    }
+                  }}
+                  className="p-3.5 rounded-xl border border-purple-500/50 bg-neutral-950/80 hover:border-purple-400 hover:bg-neutral-900/80 text-left flex flex-col justify-between gap-2.5 transition-all cursor-pointer relative overflow-hidden select-none shadow-md group"
                 >
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-xs font-black tracking-wide truncate text-white flex items-center gap-1.5">
                       <span>✨</span>
-                      <span>CUSTOM FRAMES (कस्टम फ्रेम PNG)</span>
+                      <span>कस्टम फ्रेम अपलोडर (PRO/VIP)</span>
                     </span>
                     <span className="text-[9px] font-black px-1.5 py-0.5 rounded border shrink-0 bg-purple-500/20 text-purple-300 border-purple-500/40">
                       PRO / VIP DESK
                     </span>
                   </div>
 
-                  <p className="text-[11px] text-neutral-400 line-clamp-2 leading-relaxed">
-                    {card.customFrameOverlayPng ? 'कस्टम 4:5 ओवरले फ्रेम सक्रिय है।' : 'अपनी बनाई हुई 4:5 कस्टम PNG फ्रेम (1080x1350) अपलोड करें।'}
+                  <p className="text-[11px] text-neutral-300 line-clamp-2 leading-relaxed">
+                    अपनी 4:5 सिंगल फ्रेम PNG अथवा हेडर व फुटर स्वतंत्र रूप से अपलोड करने के लिए टेम्पलेट व कस्टम फ्रेम मैनेजर खोलें।
                   </p>
 
-                  {card.customFrameOverlayPng && (
-                    <div className="w-full h-14 bg-neutral-900 rounded border border-neutral-800 flex items-center justify-center overflow-hidden">
-                      <img src={card.customFrameOverlayPng} alt="Custom Frame" className="max-h-full object-contain" />
-                    </div>
-                  )}
-
                   <div className="pt-2 border-t border-neutral-800/80 flex items-center justify-between text-[10px]">
-                    <label className="text-yellow-400 font-bold hover:underline cursor-pointer flex items-center gap-1">
-                      <Upload className="w-3 h-3" />
-                      <span>{card.customFrameOverlayPng ? 'फ्रेम बदलें' : 'PNG अपलोड करें'}</span>
-                      <input
-                        type="file"
-                        accept="image/png"
-                        className="hidden"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) handleFrameOverlayUpload(file);
-                        }}
-                      />
-                    </label>
-                    <span className="text-[9px] text-neutral-500 font-mono">1080x1350</span>
+                    <span className="text-amber-400 font-bold flex items-center gap-1.5 group-hover:text-amber-300">
+                      <Upload className="w-3.5 h-3.5 text-amber-400" />
+                      <span>टेम्पलेट व कस्टम फ्रेम मैनेजर में जाएं</span>
+                    </span>
+                    <span className="text-[9px] text-purple-300 font-mono bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-800/40">
+                      अपलोड पोर्टल
+                    </span>
                   </div>
                 </div>
               )}
@@ -2291,10 +2283,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         if (match?.textSlots?.[0]?.textColor) {
                           updates.headlineTextColor = match.textSlots[0].textColor;
                         }
-                        const adminHighlight = match?.primaryHighlightColor || (match as any)?.quoteHighlightColor || match?.textSlots?.[0]?.highlightColor;
-                        if (adminHighlight) {
-                          updates.highlightColor = adminHighlight;
-                        }
+                        // Authoritative Color Theme: Apply template's highlight color, or default yellow (#FFE600) for graphic_001
+                        const frameHighlight = match?.primaryHighlightColor || (match as any)?.quoteHighlightColor || match?.textSlots?.[0]?.highlightColor || '#FFE600';
+                        updates.highlightColor = frameHighlight;
+
                         const frameSamplePhoto = match?.samplePhotoUrl || match?.photoSlots?.[0]?.defaultAssetUrl;
                         if (frameSamplePhoto && (!card.images?.main || card.images.main.includes('placeholder_news_photo') || card.images.main.trim() === '')) {
                           updates.images = {
@@ -2318,25 +2310,25 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           const locBadgeId = match?.locationBadgeAssetId || match?.headerConfig?.locationBadgeAssetId || 'loc_style_split_duotone';
                           updates.selectedLocationBadgeId = locBadgeId;
                           const locAsset = match?.headerConfig?.manualLocationAsset || (match?.headerConfig as any)?.locationBadgeAssetUrl || (match?.headerConfig as any)?.locationBadgeUrl || getAssetLibraryItemById(locBadgeId)?.url;
-                          if (locAsset) updates.customLocationBadgeUrl = locAsset;
-                          if (match?.headerConfig?.locationTextColor) {
-                            updates.locationTextColor = match.headerConfig.locationTextColor;
-                          }
-                          if (match?.headerConfig?.locationBgColor) {
-                            updates.locationBgColor = match.headerConfig.locationBgColor;
-                          }
+                          updates.customLocationBadgeUrl = locAsset || undefined;
+                          updates.locationTextColor = match?.headerConfig?.locationTextColor || '#FFFFFF';
+                          updates.locationBgColor = match?.headerConfig?.locationBgColor || '#DC2626';
                           if (match?.headerConfig?.showLocation !== undefined) {
                             updates.showLocation = match.headerConfig.showLocation !== false;
                           }
                           updates.isTestMode = false;
                         } else {
-                          updates.selectedCalloutId = undefined;
-                          updates.customCalloutAssetUrl = undefined;
-                          if (!card.selectedLocationBadgeId && !card.customLocationBadgeUrl) {
-                            updates.selectedLocationBadgeId = 'loc_style_classic_ribbon_pin';
-                            const ribbonItem = getAssetLibraryItemById('loc_style_classic_ribbon_pin');
-                            if (ribbonItem?.url) updates.customLocationBadgeUrl = ribbonItem.url;
-                          }
+                          // Regular Clean News Frame (graphic_001) default theme
+                          updates.highlightColor = '#FFE600';
+                          updates.selectedCalloutId = 'callout_story_details_hindi';
+                          const ribbonItem = getAssetLibraryItemById('callout_story_details_hindi');
+                          updates.customCalloutAssetUrl = ribbonItem?.url;
+                          updates.calloutTag = 'पूरी खबर विवरण नीचे डिस्क्रिप्शन में';
+                          updates.showCallout = true;
+                          updates.selectedLocationBadgeId = undefined; // authentic default pill
+                          updates.customLocationBadgeUrl = undefined;
+                          updates.locationTextColor = '#0a0a0a';
+                          updates.locationBgColor = '#FFFFFF';
                           updates.showLocation = true;
                           updates.isTestMode = false;
                         }
@@ -5826,44 +5818,41 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   })}
               </div>
 
-              {/* Callout Size Slider (Plan-based: Basic locked, Advanced 90-110%, Pro 80-130%, VIP/Admin 70-140%) */}
+              {/* Callout Size Slider (Default locked at 140% with minor space to increase to 170%) */}
               {(() => {
                 const isBasicTier = !effectiveAdmin && (!effectiveTier || effectiveTier === 'basic');
-                const isAdvancedTier = !effectiveAdmin && effectiveTier === 'advanced';
-                const isProTier = !effectiveAdmin && (effectiveTier === 'professional' || effectiveTier === 'pro');
-                const isVipOrAdmin = effectiveAdmin || effectiveTier === 'ultra' || effectiveTier === 'vip' || effectiveTier === 'vip desk';
-
-                const minScale = isBasicTier ? 1.0 : isAdvancedTier ? 0.90 : isProTier ? 0.80 : 0.70;
-                const maxScale = isBasicTier ? 1.0 : isAdvancedTier ? 1.10 : isProTier ? 1.30 : 1.40;
+                const minScale = 1.40;
+                const maxScale = isBasicTier ? 1.40 : 1.70;
+                const currentScale = Math.max(minScale, Math.min(maxScale, card.calloutScale ?? 1.40));
 
                 return (
                   <div className="p-2.5 bg-neutral-900 rounded-xl border border-neutral-800 space-y-1.5">
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="font-bold text-neutral-300">कॉलआउट साइज (Callout Size):</span>
                       <span className="font-mono text-amber-400 font-bold">
-                        {Math.round((card.calloutScale ?? 1.0) * 100)}% {Math.round((card.calloutScale ?? 1.0) * 100) === 100 ? '(डिफ़ॉल्ट)' : ''}
+                        {Math.round(currentScale * 100)}% {Math.round(currentScale * 100) === 140 ? '(डिफ़ॉल्ट)' : ''}
                       </span>
                     </div>
                     {isBasicTier ? (
                       <div className="py-1 px-2 bg-neutral-950/80 rounded border border-neutral-800 text-[10px] text-amber-300 font-semibold flex items-center justify-between">
-                        <span>🔒 100% डिफ़ॉल्ट साइज (बेसिक प्लान)</span>
-                        <span className="text-neutral-400 font-normal">साइज बदलने हेतु एडवांस/प्रो अपग्रेड करें</span>
+                        <span>🔒 140% डिफ़ॉल्ट साइज (बेसिक प्लान में लॉक)</span>
+                        <span className="text-neutral-400 font-normal">साइज बढ़ाने हेतु एडवांस/प्रो अपग्रेड करें</span>
                       </div>
                     ) : (
                       <>
                         <input
                           type="range"
-                          min={minScale.toFixed(2)}
-                          max={maxScale.toFixed(2)}
+                          min="1.40"
+                          max="1.70"
                           step="0.05"
-                          value={card.calloutScale ?? 1.0}
+                          value={currentScale}
                           onChange={(e) => onChange({ calloutScale: parseFloat(e.target.value) })}
                           className="w-full accent-amber-400 cursor-pointer"
                         />
                         <div className="flex justify-between text-[9px] text-neutral-500 font-medium">
-                          <span>{Math.round(minScale * 100)}% (छोटा)</span>
-                          <span>100% (सामान्य)</span>
-                          <span>{Math.round(maxScale * 100)}% (बड़ा)</span>
+                          <span>140% (डिफ़ॉल्ट / सामान्य)</span>
+                          <span>155%</span>
+                          <span>170% (बड़ा)</span>
                         </div>
                       </>
                     )}
@@ -5979,15 +5968,11 @@ export const CardEditor: React.FC<CardEditorProps> = ({
               </div>
             </div>
 
-        {/* 4. Central Custom Footer Library Selection (Above Footer Settings - Bug I: PRO/VIP Desk & Mutual Exclusivity) */}
+        {/* 4. Central Custom Footer Library Selection (Visible to all; Selectable only for Pro & VIP Desk) */}
         {(() => {
-          const isProOrVip = effectiveAdmin || effectiveTier === 'professional' || effectiveTier === 'ultra' || effectiveTier === 'pro' || effectiveTier === 'vip';
+          const isProOrVip = effectiveAdmin || effectiveTier === 'professional' || effectiveTier === 'ultra' || effectiveTier === 'pro' || effectiveTier === 'vip' || effectiveTier === 'vip desk';
           const activeDf = getDynamicFrameById(card.frameDesign || '');
           const bannedFooterColor = activeDf?.footerConfig?.bannedFooterColor || (activeDf as any)?.bannedFooterColor;
-
-          if (!isProOrVip) {
-            return null; // Module 3: Basic & Advanced users only receive normal Footer Branding; Custom Footer Library is hidden
-          }
 
           // Frame-specific footer permissions: check if active frame allows custom footers
           const isCustomFooterAllowedForFrame = activeDf ? (activeDf.customFooterEnabled !== false && !activeDf.footerBrandingOnly) : true;
@@ -6019,7 +6004,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                 )}
               </div>
               <p className="text-[11px] text-neutral-400 leading-relaxed">
-                सेंट्रल एसेट लाइब्रेरी से आधुनिक फ़ुटर डिज़ाइन चुनें। प्रो और वीआईपी डेस्क प्लान के लिए विशेष स्टाइल्स उपलब्ध हैं।
+                सेंट्रल एसेट लाइब्रेरी से आधुनिक फ़ुटर डिज़ाइन चुनें। केवल प्रो और वीआईपी डेस्क प्लान के लिए चयन योग्य है। बेसिक और एडवांस उपयोगकर्ता नीचे दिए गए फ़ुटर ब्रांडिंग विकल्प का उपयोग कर सकते हैं।
               </p>
 
               {/* Category Filter Pills */}
@@ -6069,11 +6054,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                   })
               .map((lf) => {
                 const isSelected = card.selectedCustomFooterId === lf.id;
-                const plans = lf.allowedPlans || lf.footerConfig?.allowedPlans;
-                const planHierarchy: Record<string, number> = { BASIC: 1, ADVANCED: 2, PRO: 3, PROFESSIONAL: 3, 'VIP DESK': 4, VIP: 4, ULTRA: 4 };
-                const userTierRank = effectiveAdmin ? 99 : (effectiveTier === 'ultra' ? 4 : (effectiveTier === 'professional' ? 3 : (effectiveTier === 'advanced' ? 2 : 1)));
-                // Custom footers strictly restricted to PRO and VIP DESK plans (or Admin)
-                const isAllowed = effectiveAdmin || (userTierRank >= 3);
+                // Custom footers strictly usable by PRO and VIP DESK plans (or Admin). Basic and Advanced can view only.
+                const isAllowed = isProOrVip;
 
                 return (
                   <button
@@ -6081,7 +6063,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                     type="button"
                     onClick={() => {
                       if (!isAllowed) {
-                        alert('यह प्रीमियम कस्टम फ़ुटर केवल प्रो या वीआईपी डेस्क प्लान के लिए उपलब्ध है।');
+                        alert('कस्टम फ़ुटर केवल प्रो और वीआईपी डेस्क उपयोगकर्ताओं के लिए उपलब्ध है। बेसिक और एडवांस उपयोगकर्ता नीचे दिए गए फ़ुटर ब्रांडिंग विकल्प का उपयोग कर सकते हैं।');
                         return;
                       }
                       onChange({
@@ -6092,12 +6074,12 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                         footerTextColor: lf.footerConfig?.footerTextColor || card.footerTextColor,
                       });
                     }}
-                    className={`p-2.5 rounded-xl text-left border transition-all cursor-pointer relative ${
+                    className={`p-2.5 rounded-xl text-left border transition-all relative ${
                       isSelected
-                        ? 'bg-amber-950/60 border-amber-400 ring-2 ring-amber-400/50 shadow-md'
+                        ? 'bg-amber-950/60 border-amber-400 ring-2 ring-amber-400/50 shadow-md cursor-pointer'
                         : isAllowed
-                          ? 'bg-neutral-900 border-neutral-800 hover:border-neutral-700'
-                          : 'bg-neutral-950/60 border-neutral-800 opacity-60'
+                          ? 'bg-neutral-900 border-neutral-800 hover:border-neutral-700 cursor-pointer'
+                          : 'bg-neutral-950/70 border-neutral-800/80 opacity-60 cursor-not-allowed'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-1 mb-1.5">
@@ -6105,7 +6087,7 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                       {!isAllowed ? (
                         <span className="flex items-center gap-0.5 text-[9px] font-bold text-amber-400 bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-600/40 shrink-0">
                           <Lock className="w-2.5 h-2.5" />
-                          <span>PRO</span>
+                          <span>PRO / VIP</span>
                         </span>
                       ) : isSelected ? (
                         <span className="text-[10px] font-black text-amber-400 shrink-0">✓ चयनित</span>

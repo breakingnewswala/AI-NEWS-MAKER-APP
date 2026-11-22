@@ -95,14 +95,14 @@ export function formatCleanLocationText(rawLocation?: string | null): string {
     }
   }
 
-  // When state is accompanied by a city or district, abbreviate full state names
-  // e.g., 'ग्वालियर, मध्य प्रदेश' -> 'ग्वालियर, मप्र'; 'वाराणसी, उत्तर प्रदेश' -> 'वाराणसी, उप्र'
+  // When state is accompanied by a city or district, format cleanly
+  // e.g., 'ग्वालियर, मध्य प्रदेश' -> 'ग्वालियर, म.प्र.'; 'वाराणसी, उत्तर प्रदेश' -> 'वाराणसी, उ.प्र.'
   if (uniqueParts.length > 1) {
     return uniqueParts.map((p) => {
-      if (p === 'मध्य प्रदेश') return 'मप्र';
-      if (p === 'उत्तर प्रदेश') return 'उप्र';
-      if (p === 'हिमाचल प्रदेश') return 'हिप्र';
-      if (p === 'आंध्र प्रदेश') return 'आप्र';
+      if (p === 'मध्य प्रदेश' || p === 'मध्यप्रदेश' || p === 'मप्र') return 'म.प्र.';
+      if (p === 'उत्तर प्रदेश' || p === 'उत्तरप्रदेश' || p === 'उप्र') return 'उ.प्र.';
+      if (p === 'हिमाचल प्रदेश' || p === 'हिमाचलप्रदेश' || p === 'हिप्र') return 'हि.प्र.';
+      if (p === 'आंध्र प्रदेश' || p === 'आंध्रप्रदेश' || p === 'आप्र') return 'आ.प्र.';
       return p;
     }).join(', ');
   }
@@ -157,7 +157,7 @@ export function calculateDynamicLocationMetrics(options: DynamicLocationOptions)
   const fontWeight = typo?.weight || 800;
 
   // Accurately measure or approximate text width using canvas if available
-  let measuredTextW = Math.round(cleanLocText.length * fontSize * 0.72);
+  let measuredTextW = Math.round(cleanLocText.length * fontSize * 0.85);
   if (typeof document !== 'undefined') {
     try {
       const c = document.createElement('canvas');
@@ -165,7 +165,7 @@ export function calculateDynamicLocationMetrics(options: DynamicLocationOptions)
       if (ctx) {
         ctx.font = `${fontWeight} ${fontSize}px "${fontFamily}", "Noto Sans Devanagari", sans-serif`;
         const m = ctx.measureText(cleanLocText).width;
-        if (m > 0) measuredTextW = Math.round(m);
+        if (m > 0) measuredTextW = Math.round(m * 1.15); // Include safety margin for letter-spacing/tracking and font variants
       }
     } catch {}
   }
@@ -176,10 +176,10 @@ export function calculateDynamicLocationMetrics(options: DynamicLocationOptions)
   let finalCenterW = 0;
 
   const isRightAnchored = (locRect.x > 45);
-  // Max available width: on right side, allows leftward growth up to 65% of card width
+  // Max available width: on right side, allows leftward growth up to 70% of card width
   const maxAvailableW = isRightAnchored
-    ? Math.round(width * 0.65)
-    : Math.min(Math.round(width * 0.65), width - bx - 20);
+    ? Math.round(width * 0.70)
+    : Math.min(Math.round(width * 0.70), width - bx - 20);
 
   if (options.hasBadgeAsset) {
     const leftSlicePct = options.sliceConfig?.leftWidthPct ?? 0.28;
@@ -191,12 +191,13 @@ export function calculateDynamicLocationMetrics(options: DynamicLocationOptions)
     leftDestW = Math.round((pinW / nh) * bh);
     rightDestW = Math.round((capW / nh) * bh);
 
-    // Generous internal text padding (+48px) so long location names never touch pin divider or edges
-    const neededCenterW = Math.max(10, measuredTextW + 48);
-    dynamicBw = Math.min(maxAvailableW, Math.max(120, Math.round(leftDestW + neededCenterW + rightDestW)));
+    // Generous internal text padding (+52px) so long location names never touch pin divider or edges
+    const neededCenterW = Math.max(10, measuredTextW + 52);
+    dynamicBw = Math.min(maxAvailableW, Math.max(130, Math.round(leftDestW + neededCenterW + rightDestW)));
     finalCenterW = Math.max(10, dynamicBw - leftDestW - rightDestW);
   } else {
-    dynamicBw = Math.min(maxAvailableW, Math.max(110, Math.round(measuredTextW + 56)));
+    // For default pill: pin circle (approx 36px) + gap + text + horizontal padding
+    dynamicBw = Math.min(maxAvailableW, Math.max(130, Math.round(measuredTextW + 85)));
     finalCenterW = dynamicBw;
   }
 

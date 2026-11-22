@@ -49,6 +49,7 @@ const ICON_PATHS: Record<string, string> = {
 };
 
 export const FooterGraphic: React.FC<FooterGraphicProps> = ({
+  channelName,
   socialHandle,
   whatsappNumber,
   customFooterPng,

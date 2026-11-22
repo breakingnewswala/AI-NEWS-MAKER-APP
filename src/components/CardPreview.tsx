@@ -1939,7 +1939,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                         top: `${calloutY}%`,
                         width: `${df.fullStoryCalloutConfig?.rect?.width ?? 80}%`,
                         height: `${calloutRawH}%`,
-                        transform: `rotate(${df.fullStoryCalloutConfig?.rotation || 0}deg) scale(${card.calloutScale ?? 1.0})`,
+                        transform: `rotate(${df.fullStoryCalloutConfig?.rotation || 0}deg) scale(${card.calloutScale ?? 1.4})`,
                         transformOrigin: 'center center',
                       }}
                     >
@@ -2216,8 +2216,8 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   height: `${dynamicLoc.heightPct}%`,
                   minHeight: `${Math.max(18, Math.round(36 * previewScale))}px`,
                   width: `${dynamicLoc.widthPct}%`,
-                  minWidth: `${Math.max(60, Math.round(dynamicLoc.dynamicBw * previewScale))}px`,
-                  maxWidth: '70%',
+                  minWidth: `${Math.max(70, Math.round(dynamicLoc.dynamicBw * previewScale))}px`,
+                  maxWidth: '75%',
                   padding: `${scaledPadY}px ${scaledPadX}px`,
                   gap: `${Math.max(2, Math.round(6 * previewScale))}px`,
                   backgroundColor: card.locationBgColor || '#FFFFFF',
@@ -2239,7 +2239,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
                   />
                 </div>
                 <span
-                  className="font-bold text-neutral-950 tracking-wide truncate leading-none text-center"
+                  className="font-bold text-neutral-950 tracking-wide whitespace-nowrap leading-none text-center"
                   style={{
                     fontSize: `${scaledFontSize}px`,
                     fontFamily: card.locationFont ? `"${card.locationFont}", "Noto Sans Devanagari", sans-serif` : undefined,

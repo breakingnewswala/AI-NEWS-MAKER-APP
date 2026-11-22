@@ -3098,22 +3098,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         </button>
                       )}
 
-                      {/* Master Admin / Admin Only: सोशल मीडिया स्टोरी बनाएं */}
-                      {canModerate && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedStoryPost(post);
-                            setIsStoryModalOpen(true);
-                          }}
-                          className="py-1.5 px-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-transform active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
-                          title="9:16 सोशल मीडिया स्टोरी बनाएं (Admin Only)"
-                        >
-                          <Film className="w-3.5 h-3.5 text-purple-200 shrink-0" />
-                          <span>सोशल स्टोरी</span>
-                        </button>
-                      )}
+
 
                       {/* Admin / Master Admin Only: वेबसाइट पर जाएँ button */}
                       {canModerate && (
@@ -3784,22 +3769,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         </button>
                       )}
 
-                      {/* Master Admin / Admin Only: सोशल मीडिया स्टोरी बनाएं */}
-                      {canModerate && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedStoryPost(post);
-                            setIsStoryModalOpen(true);
-                          }}
-                          className="py-1.5 px-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-1.5 transition-transform active:scale-95 cursor-pointer whitespace-nowrap shrink-0"
-                          title="9:16 सोशल मीडिया स्टोरी बनाएं (Admin Only)"
-                        >
-                          <Film className="w-3.5 h-3.5 text-purple-200 shrink-0" />
-                          <span>सोशल स्टोरी</span>
-                        </button>
-                      )}
+
 
                       {/* Admin / Master Admin Only: वेबसाइट पर जाएँ button */}
                       {canModerate && (

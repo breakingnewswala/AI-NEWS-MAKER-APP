@@ -1003,8 +1003,8 @@ export function assignCustomHeaderFooterToUser(
 export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo {
   if (typeof window === 'undefined') {
     return {
-      tier: 'basic',
-      planName: 'BASIC',
+      tier: 'advanced',
+      planName: 'ADVANCED',
       trialStartedAt: Date.now(),
       trialEndsAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
       isTrialActive: true,
@@ -1113,8 +1113,8 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
   const hasPaidPlan = false;
   const isTrialActive = !isExpired;
 
-  const effectiveTier: UserPlanTier = isTrialActive ? 'professional' : 'basic';
-  const effectivePlanName: PlanKeyName = isTrialActive ? 'PRO' : 'BASIC';
+  const effectiveTier: UserPlanTier = isTrialActive ? 'advanced' : 'basic';
+  const effectivePlanName: PlanKeyName = isTrialActive ? 'ADVANCED' : 'BASIC';
 
   const primaryMobile = matchedUser?.mobile || localStorage.getItem(STORAGE_KEY_PRIMARY_MOBILE) || '';
   const isMobileLocked = Boolean(primaryMobile.trim());
@@ -1125,7 +1125,7 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
     trialStartedAt: startTime,
     trialEndsAt: expiresAt,
     isTrialActive,
-    isProTrial: isTrialActive,
+    isProTrial: false,
     isTrialExpired: isExpired,
     isPlanExpired: isExpired,
     daysRemaining,

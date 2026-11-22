@@ -2263,7 +2263,7 @@ async function drawAuthoritativeDynamicFrameCanvas(
       const cw = (cRect.width / 100) * width;
       const ch = (cRect.height / 100) * height;
       const cRot = df.fullStoryCalloutConfig.rotation || 0;
-      const userScale = Math.max(0.6, Math.min(2.0, card.calloutScale ?? 1.0));
+      const userScale = Math.max(0.6, Math.min(2.0, card.calloutScale ?? 1.4));
 
       ctx.save();
       ctx.translate(cx + cw / 2, cy + ch / 2);

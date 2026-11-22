@@ -42,6 +42,7 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
+  Shield,
 } from 'lucide-react';
 import { ReporterUser } from './LoginModal';
 import { VideoFeedItem, INITIAL_VIDEOS } from '../data/newsFeedData';
@@ -1597,9 +1598,17 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const [showWatermark, setShowWatermark] = useState<boolean>(false);
   const [watermarkOpacity, setWatermarkOpacity] = useState<number>(0.25);
   const [watermarkOffsetY, setWatermarkOffsetY] = useState<number>(0);
-  const watermarkText = useMemo(() => {
-    return (profile?.channelNameHi || currentUser?.channelName || '').toUpperCase();
+  const channelNameHi = useMemo(() => {
+    return (profile?.channelNameHi || currentUser?.channelName || 'ब्रेकिंग न्यूज़').trim();
   }, [profile?.channelNameHi, currentUser?.channelName]);
+
+  const channelNameEn = useMemo(() => {
+    return (profile?.channelNameEn || (currentUser as any)?.channelNameEn || (typeof localStorage !== 'undefined' ? localStorage.getItem('app_channel_name_en') : '') || 'BREAKING NEWS WALA').trim().toUpperCase();
+  }, [profile?.channelNameEn, currentUser]);
+
+  const watermarkText = useMemo(() => {
+    return watermarkCustomText || channelNameHi || channelNameEn || 'AI NEWS MAKER';
+  }, [watermarkCustomText, channelNameHi, channelNameEn]);
 
   // Audio Selection (Section 6 Step 2: 1. Original Audio, 2. Background Music, 3. No Music)
   const [audioOption, setAudioOption] = useState<'original' | 'bgm' | 'none'>('original');
@@ -3296,7 +3305,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
       // Automatically record Video in Local-Only Project History (Module 2)
       try {
-        const headlineText = activeHeadlineText || initialVideo?.title || 'वीडियो न्यूज़ बुलेटिन';
+        const headlineText = headline || initialVideo?.title || 'वीडियो न्यूज़ बुलेटिन';
         await addProjectToHistory(currentUser?.uid || currentUser?.email, {
           id: 'proj_vid_' + Date.now(),
           title: headlineText,
@@ -4599,7 +4608,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      <span>त्वरित वीडियो निर्माण (चरण {quickStep}/5)</span>
+                      <span>त्वरित वीडियो निर्माण (चरण {quickStep}/6)</span>
                     </span>
                     <div className="flex items-center gap-2">
                       <span
@@ -4622,11 +4631,12 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 {/* Horizontal Compact Step Navigation Pills with Icons & Hindi Text */}
                 <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[10.5px] sm:text-xs font-bold w-full">
                   {[
-                    { step: 1, label: '१. वीडियो', icon: Film, ok: Boolean((videoUrl && videoUrl.trim()) || clips.length > 0) },
-                    { step: 2, label: '२. हेडलाइंस', icon: Type, ok: Boolean(headline && headline.trim().length > 0) },
-                    { step: 3, label: '३. लोकेशन', icon: MapPin, ok: Boolean(location && location.trim().length > 0) },
-                    { step: 4, label: '४. लोगो & ब्रांडिंग', icon: Sparkles, ok: Boolean((socialHandle && socialHandle.trim().length > 0) || (channelTag && channelTag.trim().length > 0) || (mobileNumber && mobileNumber.trim().length > 0)) },
-                    { step: 5, label: '५. डाउनलोड', icon: Download, ok: quickVideoValidation.isValid },
+                    { step: 1, label: 'वीडियो', icon: Film, ok: Boolean((videoUrl && videoUrl.trim()) || clips.length > 0) },
+                    { step: 2, label: 'हेडलाइन', icon: Type, ok: Boolean(headline && headline.trim().length > 0) },
+                    { step: 3, label: 'लोकेशन', icon: MapPin, ok: Boolean(location && location.trim().length > 0) },
+                    { step: 4, label: 'लोगो व ब्रांडिंग', icon: Sparkles, ok: Boolean((socialHandle && socialHandle.trim().length > 0) || (channelTag && channelTag.trim().length > 0) || (mobileNumber && mobileNumber.trim().length > 0)) },
+                    { step: 5, label: 'वॉटरमार्क', icon: Shield, ok: Boolean(!showWatermark || watermarkType === 'none' || watermarkCustomText || watermarkText || watermarkImage) },
+                    { step: 6, label: 'डाउनलोड व कैप्शन', icon: Download, ok: quickVideoValidation.isValid },
                   ].map((s) => {
                     const isActive = quickStep === s.step;
                     const IconComp = s.icon;
@@ -5387,7 +5397,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-amber-400" />
-                      4. लोगो, वॉटरमार्क व ब्रांडिंग (Logo & Branding)
+                      4. लोगो व ब्रांडिंग (Logo & Branding)
                     </span>
                   </div>
 
@@ -5472,207 +5482,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     </div>
                   </div>
 
-                  {/* Watermark Controls with Text vs Image Watermark (Part 8.H) */}
-                  <div className="space-y-3 pt-3 border-t border-slate-800">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-300">वॉटरमार्क प्रकार (Watermark Type):</span>
-                      <button
-                        type="button"
-                        onClick={() => setShowWatermark(!showWatermark)}
-                        className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer transition ${
-                          showWatermark
-                            ? 'bg-amber-400 text-slate-950 font-black'
-                            : 'bg-slate-800 text-slate-400'
-                        }`}
-                      >
-                        {showWatermark ? 'वॉटरमार्क चालू है' : 'वॉटरमार्क बंद है'}
-                      </button>
-                    </div>
-
-                    {showWatermark && (
-                      <div className="space-y-3 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-                        {/* Two clear radio choices: Text vs Image Watermark */}
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setWatermarkType('text')}
-                            className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                              watermarkType === 'text'
-                                ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow'
-                                : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
-                            }`}
-                          >
-                            <span>📝 टेक्स्ट वॉटरमार्क</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setWatermarkType('image');
-                              if (!watermarkImage) {
-                                const defaultLogo = userPngLogo || activeLogoUrl || channelLogoUrl || '/assets/ai_news_maker_logo.png';
-                                if (defaultLogo) setWatermarkImage(defaultLogo);
-                              }
-                            }}
-                            className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-                              watermarkType === 'image'
-                                ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow'
-                                : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
-                            }`}
-                          >
-                            <span>🖼️ इमेज वॉटरमार्क</span>
-                          </button>
-                        </div>
-
-                        {watermarkType === 'text' ? (
-                          /* Text Watermark Field */
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-slate-300">वॉटरमार्क टेक्स्ट लिखें:</label>
-                            <input
-                              type="text"
-                              value={watermarkCustomText}
-                              onChange={(e) => setWatermarkCustomText(e.target.value)}
-                              placeholder={watermarkText || profile?.channelNameHi || 'यहाँ वॉटरमार्क टेक्स्ट लिखें...'}
-                              className="w-full p-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:border-amber-400 focus:outline-none"
-                            />
-                          </div>
-                        ) : (
-                          /* Image Watermark Upload */
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-slate-300">वॉटरमार्क इमेज चुनें:</label>
-                            <div className="flex items-center gap-3">
-                              {watermarkImage ? (
-                                <div className="flex items-center gap-2">
-                                  <img
-                                    src={watermarkImage}
-                                    alt="Watermark preview"
-                                    className="h-10 w-16 object-contain bg-black/40 rounded p-1 border border-slate-700"
-                                  />
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="text-[10px] text-emerald-400 font-bold">
-                                      {watermarkImage === (userPngLogo || activeLogoUrl || channelLogoUrl) ? '✓ आधिकारिक चैनल लोगो' : 'कस्टम वॉटरमार्क'}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const defaultLogo = userPngLogo || activeLogoUrl || channelLogoUrl || '/assets/ai_news_maker_logo.png';
-                                        setWatermarkImage(defaultLogo);
-                                      }}
-                                      className="text-[9px] text-amber-300 hover:underline text-left cursor-pointer"
-                                    >
-                                      डिफ़ॉल्ट लोगो रीसेट
-                                    </button>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => setWatermarkImage(null)}
-                                    className="px-2 py-1 bg-red-950 text-red-300 border border-red-800 rounded text-[10px] font-bold ml-1 cursor-pointer"
-                                  >
-                                    हटाएं
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-slate-400 italic">कोई इमेज सेट नहीं है</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const defaultLogo = userPngLogo || activeLogoUrl || channelLogoUrl || '/assets/ai_news_maker_logo.png';
-                                      if (defaultLogo) setWatermarkImage(defaultLogo);
-                                    }}
-                                    className="px-2 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[10px] font-bold cursor-pointer"
-                                  >
-                                    चैनल लोगो लगाएं
-                                  </button>
-                                </div>
-                              )}
-                              <label className="ml-auto px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold rounded-xl border border-slate-700 cursor-pointer flex items-center gap-1.5">
-                                <Upload className="w-3.5 h-3.5 text-amber-400" />
-                                <span>इमेज अपलोड करें</span>
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  className="hidden"
-                                  onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) {
-                                      const reader = new FileReader();
-                                      reader.onload = () => {
-                                        setWatermarkImage(reader.result as string);
-                                        showToast('🖼️ वॉटरमार्क इमेज सेट हो गई!');
-                                      };
-                                      reader.readAsDataURL(file);
-                                    }
-                                  }}
-                                />
-                              </label>
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                          {/* Opacity Slider */}
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-xs font-bold text-slate-300">
-                              <span>पारदर्शिता (Opacity):</span>
-                              <span className="text-amber-400 font-mono">{Math.round(watermarkOpacity * 100)}%</span>
-                            </div>
-                            <input
-                              type="range"
-                              min="0.1"
-                              max="0.9"
-                              step="0.05"
-                              value={watermarkOpacity}
-                              onChange={(e) => setWatermarkOpacity(parseFloat(e.target.value))}
-                              className="w-full accent-amber-400 cursor-pointer"
-                            />
-                          </div>
-
-                          {/* Vertical Movement Slider */}
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-xs font-bold text-slate-300">
-                              <span>ऊर्ध्वाधर स्थिति (Vertical Position):</span>
-                              <span className="text-amber-400 font-mono">{watermarkOffsetY}px</span>
-                            </div>
-                            <input
-                              type="range"
-                              min="-150"
-                              max="150"
-                              step="5"
-                              value={watermarkOffsetY}
-                              onChange={(e) => setWatermarkOffsetY(parseInt(e.target.value, 10))}
-                              className="w-full accent-amber-400 cursor-pointer"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* ============================================================ */}
-              {/* FOOTER BRANDING (Configurable in Step 4)                     */}
-              {/* ============================================================ */}
-              {!isFromVideoReels && quickStep === 4 && (
-                <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
-                      <Tag className="w-4 h-4 text-amber-400" />
-                      फ़ूटर व ब्रांडिंग संपर्क जानकारी (Footer Branding & Contact)
-                    </span>
-                  </div>
-
-                  {/* Frame Footer Awareness */}
-                  <div className="p-2.5 bg-slate-950/70 border border-slate-800 rounded-xl text-xs text-slate-300 flex items-center justify-between">
-                    <span className="text-slate-400">फ़्रेम फ़ूटर प्रकार:</span>
-                    <span className="font-bold text-amber-300">
-                      {selectedFrameId.includes('custom') ? 'मानक स्थिर फ़ूटर (Fixed Standard)' : 'एडजस्टेबल फ़ूटर'}
-                    </span>
-                  </div>
-
-                  {/* Social Handles with Graphic Photo Studio Icons */}
-                  <div className="space-y-3">
-                    <span className="text-xs font-bold text-slate-300">सोशल मीडिया व संपर्क जानकारी:</span>
+                  {/* Footer Branding & Social Media Info */}
+                  <div className="pt-3 border-t border-slate-800 space-y-3">
+                    <span className="text-xs font-bold text-slate-300 block">फ़ूटर व संपर्क जानकारी:</span>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-1">
@@ -5774,14 +5586,241 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* STEP 5: DOWNLOAD & CAPTION                                   */}
+              {/* STEP 5: WATERMARK SETTINGS                                   */}
               {/* ============================================================ */}
               {quickStep === 5 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-amber-400" />
+                      5. वॉटरमार्क सेटिंग्स (Watermark)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowWatermark(!showWatermark)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer transition ${
+                        showWatermark
+                          ? 'bg-amber-400 text-slate-950 font-black'
+                          : 'bg-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {showWatermark ? 'वॉटरमार्क चालू है' : 'वॉटरमार्क बंद है'}
+                    </button>
+                  </div>
+
+                  {showWatermark ? (
+                    <div className="space-y-4 bg-slate-950/60 p-3.5 sm:p-4 rounded-xl border border-slate-800">
+                      {/* Two clear radio choices: Text vs Image Watermark */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setWatermarkType('text')}
+                          className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                            watermarkType === 'text'
+                              ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow'
+                              : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          <span>📝 टेक्स्ट वॉटरमार्क</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWatermarkType('image');
+                            if (!watermarkImage) {
+                              const defaultLogo = userPngLogo || activeLogoUrl || channelLogoUrl || '/assets/ai_news_maker_logo.png';
+                              if (defaultLogo) setWatermarkImage(defaultLogo);
+                            }
+                          }}
+                          className={`py-2 px-3 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                            watermarkType === 'image'
+                              ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow'
+                              : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          <span>🖼️ इमेज वॉटरमार्क</span>
+                        </button>
+                      </div>
+
+                      {watermarkType === 'text' ? (
+                        /* Text Watermark Field: Touch English or Hindi channel name (no arbitrary text editing) */
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-slate-300 block">
+                            वॉटरमार्क के लिए चैनल का नाम चुनें (Touch to Select):
+                          </label>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {/* Hindi Option */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setWatermarkCustomText(channelNameHi);
+                                showToast('✓ हिन्दी चैनल नाम वॉटरमार्क पर लागू किया गया');
+                              }}
+                              className={`p-3 rounded-xl border text-left transition flex items-center justify-between cursor-pointer ${
+                                (watermarkCustomText === channelNameHi || (!watermarkCustomText && watermarkText === channelNameHi))
+                                  ? 'bg-amber-400/20 border-amber-400 text-amber-200 font-black shadow-md ring-1 ring-amber-400'
+                                  : 'bg-slate-900 border-slate-700 hover:border-slate-600 text-slate-300'
+                              }`}
+                            >
+                              <div className="min-w-0">
+                                <span className="text-[10px] text-amber-400 block font-bold uppercase">1. हिन्दी नाम</span>
+                                <span className="text-sm font-black truncate block mt-0.5">{channelNameHi}</span>
+                              </div>
+                              {(watermarkCustomText === channelNameHi || (!watermarkCustomText && watermarkText === channelNameHi)) && (
+                                <Check className="w-4 h-4 text-amber-400 shrink-0 ml-2" />
+                              )}
+                            </button>
+
+                            {/* English Option */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setWatermarkCustomText(channelNameEn);
+                                showToast('✓ English Channel Name Watermark Applied');
+                              }}
+                              className={`p-3 rounded-xl border text-left transition flex items-center justify-between cursor-pointer ${
+                                watermarkCustomText === channelNameEn
+                                  ? 'bg-amber-400/20 border-amber-400 text-amber-200 font-black shadow-md ring-1 ring-amber-400'
+                                  : 'bg-slate-900 border-slate-700 hover:border-slate-600 text-slate-300'
+                              }`}
+                            >
+                              <div className="min-w-0">
+                                <span className="text-[10px] text-amber-400 block font-bold uppercase">2. English Name</span>
+                                <span className="text-sm font-black font-mono tracking-wider truncate block mt-0.5">{channelNameEn}</span>
+                              </div>
+                              {watermarkCustomText === channelNameEn && (
+                                <Check className="w-4 h-4 text-amber-400 shrink-0 ml-2" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Image Watermark Upload */
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-300">वॉटरमार्क इमेज चुनें:</label>
+                          <div className="flex items-center gap-3">
+                            {watermarkImage ? (
+                              <div className="flex items-center gap-2">
+                                <img
+                                  src={watermarkImage}
+                                  alt="Watermark preview"
+                                  className="h-10 w-16 object-contain bg-black/40 rounded p-1 border border-slate-700"
+                                />
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="text-[10px] text-emerald-400 font-bold">
+                                    {watermarkImage === (userPngLogo || activeLogoUrl || channelLogoUrl) ? '✓ आधिकारिक चैनल लोगो' : 'कस्टम वॉटरमार्क'}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const defaultLogo = userPngLogo || activeLogoUrl || channelLogoUrl || '/assets/ai_news_maker_logo.png';
+                                      setWatermarkImage(defaultLogo);
+                                    }}
+                                    className="text-[9px] text-amber-300 hover:underline text-left cursor-pointer"
+                                  >
+                                    डिफ़ॉल्ट लोगो रीसेट
+                                  </button>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setWatermarkImage(null)}
+                                  className="px-2 py-1 bg-red-950 text-red-300 border border-red-800 rounded text-[10px] font-bold ml-1 cursor-pointer"
+                                >
+                                  हटाएं
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-slate-400 italic">कोई इमेज सेट नहीं है</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const defaultLogo = userPngLogo || activeLogoUrl || channelLogoUrl || '/assets/ai_news_maker_logo.png';
+                                    if (defaultLogo) setWatermarkImage(defaultLogo);
+                                  }}
+                                  className="px-2 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[10px] font-bold cursor-pointer"
+                                >
+                                  चैनल लोगो लगाएं
+                                </button>
+                              </div>
+                            )}
+                            <label className="ml-auto px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold rounded-xl border border-slate-700 cursor-pointer flex items-center gap-1.5">
+                              <Upload className="w-3.5 h-3.5 text-amber-400" />
+                              <span>इमेज अपलोड करें</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    const reader = new FileReader();
+                                    reader.onload = () => {
+                                      setWatermarkImage(reader.result as string);
+                                      showToast('🖼️ वॉटरमार्क इमेज सेट हो गई!');
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        {/* Opacity Slider */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs font-bold text-slate-300">
+                            <span>पारदर्शिता (Opacity):</span>
+                            <span className="text-amber-400 font-mono">{Math.round(watermarkOpacity * 100)}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0.1"
+                            max="0.9"
+                            step="0.05"
+                            value={watermarkOpacity}
+                            onChange={(e) => setWatermarkOpacity(parseFloat(e.target.value))}
+                            className="w-full accent-amber-400 cursor-pointer"
+                          />
+                        </div>
+
+                        {/* Vertical Movement Slider */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs font-bold text-slate-300">
+                            <span>ऊर्ध्वाधर स्थिति (Vertical Position):</span>
+                            <span className="text-amber-400 font-mono">{watermarkOffsetY}px</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="-150"
+                            max="150"
+                            step="5"
+                            value={watermarkOffsetY}
+                            onChange={(e) => setWatermarkOffsetY(parseInt(e.target.value, 10))}
+                            className="w-full accent-amber-400 cursor-pointer"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 bg-slate-950/40 rounded-xl border border-slate-800 text-center text-xs text-slate-400">
+                      वॉटरमार्क अभी बंद है। वीडियो पर वॉटरमार्क जोड़ने के लिए ऊपर दिए गए बटन से इसे चालू करें।
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ============================================================ */}
+              {/* STEP 6: DOWNLOAD & CAPTION                                   */}
+              {/* ============================================================ */}
+              {quickStep === 6 && (
+                <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Download className="w-4 h-4 text-amber-400" />
-                      5. वीडियो डाउनलोड व कैप्शन (Download & Caption)
+                      6. वीडियो डाउनलोड व कैप्शन (Download & Caption)
                     </span>
                     <span
                       className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
@@ -5814,7 +5853,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                         { key: 'audio', label: '4. ऑडियो / म्यूज़िक विकल्प तय', ok: Boolean(audioOption), step: 1 },
                         { key: 'headline', label: '5. मुख्य हेडलाइन दर्ज (Headline)', ok: Boolean(headline && headline.trim()), step: 2 },
                         { key: 'location', label: '6. खबर की लोकेशन दर्ज (Location)', ok: Boolean(location && location.trim()), step: 3 },
-                        { key: 'footer', label: '7. सोशल/फ़ूटर जानकारी उपलब्ध', ok: Boolean((socialHandle && socialHandle.trim()) || (channelTag && channelTag.trim()) || (mobileNumber && mobileNumber.trim())), step: 4 },
+                        { key: 'footer', label: '7. लोगो व ब्रांडिंग संपर्क जानकारी', ok: Boolean((socialHandle && socialHandle.trim()) || (channelTag && channelTag.trim()) || (mobileNumber && mobileNumber.trim())), step: 4 },
+                        { key: 'watermark', label: '8. वॉटरमार्क सेटिंग्स', ok: Boolean(!showWatermark || watermarkType === 'none' || watermarkCustomText || watermarkText || watermarkImage), step: 5 },
                       ].map((item) => (
                         <div key={item.key} className="flex items-center justify-between py-1 border-b border-slate-800/60 last:border-0">
                           <span className="flex items-center gap-2">
@@ -5855,13 +5895,33 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     </button>
                   </div>
 
-                  {/* Download Video Button (Strictly Disabled until 100% complete) */}
+                  {/* Completed Download Card - Show immediately when completed */}
+                  {completedDownloadUrl && (
+                    <div className="p-3.5 bg-emerald-950/90 border border-emerald-500 rounded-xl space-y-2.5 animate-in fade-in">
+                      <div className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                        <CheckCircle className="w-4 h-4 text-emerald-400" />
+                        <span>वीडियो सफलतापूर्वक 100% रेंडर हो गया है!</span>
+                      </div>
+                      <a
+                        href={completedDownloadUrl}
+                        download={completedDownloadFilename || 'breaking_news_video.mp4'}
+                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-lg flex items-center justify-center gap-2 shadow cursor-pointer transition active:scale-95"
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>✅ सीधे वीडियो फाइल सेव करें (Save Video)</span>
+                      </a>
+                    </div>
+                  )}
+
+                  {/* Download Video Button */}
                   <button
                     type="button"
                     onClick={handleDownloadVideo}
                     disabled={!quickVideoValidation.isValid || isExporting}
                     className={`w-full py-3.5 rounded-xl font-extrabold text-sm shadow-xl flex items-center justify-center gap-2 cursor-pointer transition active:scale-95 ${
-                      quickVideoValidation.isValid && !isExporting
+                      completedDownloadUrl
+                        ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 text-white animate-pulse'
+                        : quickVideoValidation.isValid && !isExporting
                         ? 'bg-gradient-to-r from-red-600 via-amber-600 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white animate-pulse'
                         : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60'
                     }`}
@@ -5870,6 +5930,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     <span>
                       {isExporting
                         ? 'वीडियो रेंडर हो रहा है...'
+                        : completedDownloadUrl
+                        ? '✅ तैयार वीडियो डाउनलोड करें (Save 1080p Video)'
                         : quickVideoValidation.isValid
                         ? '🚀 फुल HD वीडियो डाउनलोड करें (Download 1080p)'
                         : `❌ डाउनलोड लॉक है (${quickVideoValidation.missingItems.length} आवश्यक फ़ील्ड बाकी)`}
@@ -5910,24 +5972,6 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       </div>
                     </div>
                   )}
-
-                  {/* Completed Download Card */}
-                  {completedDownloadUrl && (
-                    <div className="p-3.5 bg-emerald-950/80 border border-emerald-500 rounded-xl space-y-2.5">
-                      <div className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
-                        <CheckCircle className="w-4 h-4 text-emerald-400" />
-                        <span>वीडियो सफलतापूर्वक रेंडर हो गया है!</span>
-                      </div>
-                      <a
-                        href={completedDownloadUrl}
-                        download={completedDownloadFilename || 'breaking_news_video.mp4'}
-                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-lg flex items-center justify-center gap-2 shadow cursor-pointer transition"
-                      >
-                        <Download className="w-4 h-4" />
-                        <span>सीधे वीडियो फाइल सेव करें</span>
-                      </a>
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -5943,10 +5987,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   <span>पिछला चरण</span>
                 </button>
 
-                {quickStep < 5 ? (
+                {quickStep < 6 ? (
                   <button
                     type="button"
-                    onClick={() => setQuickStep((s) => Math.min(5, s + 1))}
+                    onClick={() => setQuickStep((s) => Math.min(6, s + 1))}
                     className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-amber-500 text-white cursor-pointer shadow hover:from-red-500 hover:to-amber-400 transition flex items-center justify-center gap-1.5 active:scale-95"
                   >
                     <span>अगला चरण (स्टेप {quickStep + 1})</span>
@@ -5960,7 +6004,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white cursor-pointer shadow hover:from-emerald-500 hover:to-teal-400 transition flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Download className="w-4 h-4 text-white" />
-                    <span>{isExporting ? 'रेंडरिंग जारी...' : completedDownloadUrl ? 'तैयार वीडियो डाउनलोड' : 'वीडियो डाउनलोड करें'}</span>
+                    <span>{isExporting ? 'रेंडरिंग जारी...' : completedDownloadUrl ? '✅ तैयार वीडियो डाउनलोड' : 'फुल HD वीडियो डाउनलोड करें'}</span>
                   </button>
                 )}
               </div>

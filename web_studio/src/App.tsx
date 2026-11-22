@@ -2224,6 +2224,28 @@ export default function App() {
     }
   });
 
+  const [isTrialDay6ModalDismissed, setIsTrialDay6ModalDismissed] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('trial_day6_modal_dismissed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Periodic Trial Reminder Notification for active trial users
+  useEffect(() => {
+    if (!isAdminUser && userSubscription?.isTrialActive && !userSubscription?.isBlocked) {
+      const trialToastShown = sessionStorage.getItem('trial_notice_toast_shown');
+      if (!trialToastShown) {
+        sessionStorage.setItem('trial_notice_toast_shown', 'true');
+        const timer = setTimeout(() => {
+          showToast(`ℹ️ आप 7-दिवसीय फ्री ट्रायल (एडवांस प्लान) की सेवाएं उपयोग कर रहे हैं (${userSubscription.daysRemaining || 7} दिन शेष)`);
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isAdminUser, userSubscription?.isTrialActive]);
+
   // Auto-dismiss all toast notifications after exactly 2 seconds (2000 ms)
   useEffect(() => {
     if (toastMessage) {
@@ -4643,6 +4665,105 @@ export default function App() {
               <span>⚡</span>
               <span>प्लान सक्रिय करें</span>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 7-Day Free Trial (Advanced Plan) Status Banner */}
+      {!isAdminUser && userSubscription?.isTrialActive && !userSubscription?.isBlocked && (
+        <div className="w-full px-3 sm:px-4 py-2 flex justify-center z-40">
+          <div className="w-full max-w-5xl bg-blue-950/95 text-white border border-blue-500/50 rounded-xl py-2 px-3 sm:px-4 shadow-xl flex items-center justify-between gap-2 text-xs font-bold animate-in fade-in">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-base shrink-0">✨</span>
+              <div className="truncate">
+                <span className="font-black text-cyan-300">
+                  7-दिवसीय फ्री ट्रायल (एडवांस प्लान):{' '}
+                </span>
+                <span className="text-slate-200 text-[11px] sm:text-xs">
+                  अभी आप ट्रायल पीरियड ({userSubscription?.daysRemaining || 7} दिन शेष) की सेवाएं उपयोग कर रहे हैं। 7 दिन बाद पैकेज खरीदना होगा।
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                navigateToTab('profile');
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('open_plans_packages'));
+                  window.location.hash = '#membership';
+                }
+              }}
+              className="px-3 py-1.5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-lg text-xs shrink-0 cursor-pointer shadow-md transition flex items-center gap-1"
+            >
+              <span>⚡</span>
+              <span>पैकेज देखें</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Day 6 / Expiring Soon Trial Pop-up Modal */}
+      {!isAdminUser && userSubscription?.isTrialActive && !userSubscription?.isBlocked && (userSubscription?.daysRemaining ?? 7) <= 2 && !isTrialDay6ModalDismissed && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in">
+          <div className="w-full max-w-md bg-slate-900 border border-amber-500/50 rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4 relative">
+            <button
+              type="button"
+              onClick={() => {
+                setIsTrialDay6ModalDismissed(true);
+                try { sessionStorage.setItem('trial_day6_modal_dismissed', 'true'); } catch {}
+              }}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+              title="बंद करें"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-xl shrink-0">
+                ⏳
+              </div>
+              <div>
+                <h3 className="text-base font-black text-white">
+                  ट्रायल पैकेज समाप्त होने वाला है!
+                </h3>
+                <span className="text-xs text-amber-400 font-bold">
+                  {(userSubscription?.daysRemaining ?? 0) <= 1 ? 'अंतिम दिन शेष है' : `${userSubscription?.daysRemaining} दिन शेष हैं`} — पैकेज परचेस करें
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+              आप वर्तमान में 7-दिवसीय फ्री ट्रायल (एडवांस प्लान) की सेवाएं उपयोग कर रहे हैं। 7 दिन बाद सेवा को बिना किसी रुकावट जारी रखने के लिए कृपया अपना पसंदीदा पैकेज सब्सक्राइब करें। नीचे दिए गए बटन से सभी उपलब्ध पैकेजेस देखें।
+            </p>
+
+            <div className="pt-2 flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsTrialDay6ModalDismissed(true);
+                  try { sessionStorage.setItem('trial_day6_modal_dismissed', 'true'); } catch {}
+                  navigateToTab('profile');
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('open_plans_packages'));
+                    window.location.hash = '#membership';
+                  }
+                }}
+                className="flex-1 py-2.5 px-4 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition active:scale-95 cursor-pointer"
+              >
+                <span>⚡</span>
+                <span>सभी पैकेज देखें व खरीदें</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsTrialDay6ModalDismissed(true);
+                  try { sessionStorage.setItem('trial_day6_modal_dismissed', 'true'); } catch {}
+                }}
+                className="py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs transition cursor-pointer"
+              >
+                बाद में
+              </button>
+            </div>
           </div>
         </div>
       )}
