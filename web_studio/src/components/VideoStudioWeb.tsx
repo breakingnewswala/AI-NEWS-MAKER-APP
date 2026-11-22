@@ -3463,7 +3463,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         </div>
       )}
 
-      {/* Row 2: Aspect Ratio Selector (Section 3: Single horizontal row: 9:16, 1:1, 4:5, 4:3) */}
+      {/* When a normal user is in Studio Mode (Coming Soon), hide lower frame/ratio controls to keep view pristine */}
+      {(!isReadyToUseMode && !isAdminOrMaster) ? null : (
+        <>
+          {/* Row 2: Aspect Ratio Selector (Section 3: Single horizontal row: 9:16, 1:1, 4:5, 4:3) */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-xs">
           <span className="font-bold text-slate-300 flex items-center gap-1.5">
@@ -3574,6 +3577,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           })}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 
@@ -6033,13 +6038,54 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 )}
               </div>
             </div>
+          ) : !isAdminOrMaster ? (
+            /* ============================================================ */
+            /* CLEAN COMING SOON CARD FOR NORMAL USERS                      */
+            /* ============================================================ */
+            <div className="w-full flex items-center justify-center py-10 sm:py-16 px-2">
+              <div className="max-w-md w-full bg-slate-900/95 border-2 border-amber-500/70 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-md text-center space-y-5 animate-in fade-in zoom-in-95">
+                <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center mx-auto text-3xl shadow-lg shadow-amber-500/20 text-amber-400">
+                  🎬
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="px-3 py-1 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-xs font-black rounded-full uppercase tracking-wider inline-block">
+                    Coming Soon · जल्द आ रहा है
+                  </span>
+                  <h3 className="text-xl sm:text-2xl font-black text-white">
+                    एडवांस्ड वीडियो स्टूडियो मोड
+                  </h3>
+                </div>
+
+                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                  <strong className="text-amber-300">Studio Mode</strong> में आप अपनी पूरी खबर, मल्टीपल वीडियो क्लिप्स, टाइमलाइन व एडवांस्ड वीडियो एडिटिंग एक ही जगह आसानी से कर सकेंगे।
+                </p>
+
+                <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl text-[11px] text-slate-400 leading-relaxed">
+                  🛠️ यह एडवांस्ड मॉड्यूल वर्तमान में डेवलपमेंट व टेस्टिंग मोड में है। एडमिन व मास्टर एडमिन इस पर वर्किंग कर रहे हैं। जल्द ही यह सभी साथियों के लिए लाइव कर दिया जाएगा।
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsReadyToUseMode(true);
+                      showToast('⚡ क्विक वीडियो मोड (Quick Video Mode) पर वापस लौटे');
+                    }}
+                    className="w-full py-3.5 px-5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs sm:text-sm shadow-xl flex items-center justify-center gap-2 cursor-pointer transition active:scale-95"
+                  >
+                    <span>⚡</span>
+                    <span>क्विक वीडियो मोड (Quick Video Mode) पर वापस लौटें</span>
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : (
-            /* WORKFLOW 2: STUDIO MODE (!isReadyToUseMode) */
+            /* WORKFLOW 2: STUDIO MODE (100% Active for Admin/Master Admin) */
             /* ============================================================ */
             /* Systematic Step-Wise Workflow or Responsive Grid View Mode  */
-            <div className="relative">
-              {/* Studio Mode Content: 100% Active for Admin/Master Admin; Visible with Blur & Disabled for Users */}
-              <div className={!isAdminOrMaster ? 'opacity-30 pointer-events-none filter blur-[1px] select-none space-y-4' : 'space-y-4'}>
+            <div className="relative space-y-4">
+              <div className="space-y-4">
                   {/* Studio Mode Systematic Step Navigation Bar */}
                   <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 sm:p-4 space-y-3 shadow-lg">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
@@ -7128,45 +7174,6 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               </div>
             )}
           </div>
-
-          {/* Elegant Coming Soon Overlay Popup for Normal Users (Visible Background, Development Mode) */}
-          {!isAdminOrMaster && (
-            <div className="absolute inset-0 z-30 flex items-start justify-center pt-8 sm:pt-14 p-4 pointer-events-auto">
-              <div className="max-w-md w-full bg-slate-900/95 border-2 border-amber-500/70 rounded-3xl p-6 sm:p-7 shadow-2xl backdrop-blur-md text-center space-y-4 animate-in fade-in zoom-in-95 sticky top-24">
-                <div className="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center mx-auto text-3xl shadow-lg shadow-amber-500/20 text-amber-400">
-                  🎬
-                </div>
-
-                <div className="space-y-1.5">
-                  <span className="px-3 py-1 bg-amber-400/20 border border-amber-400/40 text-amber-300 text-xs font-black rounded-full uppercase tracking-wider inline-block">
-                    Coming Soon · जल्द आ रहा है
-                  </span>
-                  <h3 className="text-xl font-black text-white">
-                    एडवांस्ड वीडियो स्टूडियो मोड
-                  </h3>
-                </div>
-
-                <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                  <strong className="text-amber-300">Studio Mode</strong> में आप अपनी पूरी खबर, मल्टीपल वीडियो क्लिप्स, टाइमलाइन व एडवांस्ड वीडियो एडिटिंग एक ही जगह आसानी से कर सकेंगे।
-                </p>
-
-                <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl text-[11px] text-slate-400 leading-relaxed">
-                  🛠️ यह एडवांस्ड मॉड्यूल वर्तमान में डेवलपमेंट व टेस्टिंग मोड में है। एडमिन व मास्टर एडमिन इस पर वर्किंग कर रहे हैं। जल्द ही यह सभी साथियों के लिए लाइव कर दिया जाएगा।
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsReadyToUseMode(true)}
-                    className="w-full py-3 px-5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs sm:text-sm shadow-xl flex items-center justify-center gap-2 cursor-pointer transition active:scale-95"
-                  >
-                    <span>⚡</span>
-                    <span>क्विक वीडियो मोड (Quick Video Mode) पर जाएँ</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
         </section>

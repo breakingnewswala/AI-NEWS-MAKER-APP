@@ -7034,9 +7034,33 @@ function drawDateStamp(
   ctx.font = '700 24px "Baloo 2", "Noto Sans Devanagari", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+
+  const showBox = card.dateShowBox !== false;
+  if (showBox) {
+    const textWidth = ctx.measureText(dateText).width;
+    const boxW = Math.round(textWidth + 24);
+    const boxH = 40;
+    const boxX = -boxW / 2;
+    const boxY = -boxH / 2;
+    const boxColor = card.dateBoxColor || 'rgba(0, 0, 0, 0.85)';
+
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = 6;
+    ctx.fillStyle = boxColor;
+    drawRoundedRect(ctx, boxX, boxY, boxW, boxH, 8);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.lineWidth = 1.5;
+    drawRoundedRect(ctx, boxX, boxY, boxW, boxH, 8);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.98)';
   ctx.shadowColor = 'rgba(0, 0, 0, 0.95)';
-  ctx.shadowBlur = 8;
+  ctx.shadowBlur = showBox ? 2 : 8;
   ctx.fillText(dateText, 0, 0);
 
   ctx.restore();

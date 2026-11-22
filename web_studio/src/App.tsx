@@ -3235,6 +3235,25 @@ export default function App() {
         );
       }
 
+      // Silently record card into Master Admin Social Feed database
+      try {
+        fetch('/api/social-feed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: `sf_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            headline: card.formattedHeadline || card.headline || 'ताज़ा समाचार',
+            caption: card.caption || '',
+            category: card.category || 'ताज़ा समाचार',
+            channelName: card.channelName || 'AI News Maker',
+            reporterName: currentUser?.name || currentUser?.email || 'संवाददाता',
+            thumbnailUrl: (card as any).photoUrl || '',
+            aspectRatio: card.aspectRatio || '4:5',
+            createdAt: Date.now(),
+          }),
+        }).catch(() => {});
+      } catch {}
+
       // Center-aligned celebration modal triggers cleanly without redundant top toast
       setShowCelebrationModal(true);
     } catch (err: any) {
@@ -6077,12 +6096,18 @@ export default function App() {
               </p>
             </div>
 
-            <div className="relative p-4 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-center space-y-2.5">
+            <div className="relative p-4 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-center space-y-3">
               <div className="text-xs text-slate-300 leading-relaxed text-center">
-                📱 <strong>सोशल मीडिया पर शेयर करें:</strong> अपने दर्शकों तक सबसे पहले निष्पक्ष व प्रामाणिक समाचार पहुँचाएँ।
+                📱 <strong className="text-white">सोशल मीडिया पर तुरंत शेयर करें:</strong>
+                <p className="text-[11px] text-slate-400 mt-0.5">अपने दर्शकों तक सबसे पहले निष्पक्ष व प्रामाणिक समाचार पहुँचाएँ।</p>
               </div>
-              <div className="text-xs text-amber-300 font-medium text-center">
-                🚀 <em>"एआई न्यूज़ मेकर: ख़बर देखने से ख़बर बनाने तक सिर्फ दो मिनट — आपकी ख़बर, आपकी पहचान!"</em>
+              <div className="pt-2.5 border-t border-slate-700/60 space-y-1">
+                <div className="text-xs sm:text-sm font-black text-amber-300 tracking-wide">
+                  🚀 एआई न्यूज़ मेकर (AI News Maker)
+                </div>
+                <div className="text-[11px] sm:text-xs text-slate-200 font-semibold leading-relaxed">
+                  खबर देखने से खबर बनाने तक सिर्फ दो मिनट — आपकी खबर, आपकी पहचान!
+                </div>
               </div>
             </div>
 

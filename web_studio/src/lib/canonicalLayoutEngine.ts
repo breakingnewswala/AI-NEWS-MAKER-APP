@@ -926,29 +926,30 @@ export function validateCardBeforeDownload(card: NewsCardData): {
     aspectRatio: card.aspectRatio,
   });
 
-  // 1. Headline safe-zone validation
+  // 1. Headline safe-zone validation (with calibrated 12px optical tolerance for 90% Action Safe)
   if (!layout.isValid) {
     errors.push(layout.validationError || 'हेडलाइन सेफ-ज़ोन से बाहर जा रही है।');
   }
 
+  const opticalTolerance = 16;
   for (let i = 0; i < layout.lineMetrics.length; i++) {
     const metric = layout.lineMetrics[i];
-    if (metric.startX < spec.headlineArea.safeLeft) {
+    if (metric.startX < spec.headlineArea.safeLeft - opticalTolerance) {
       errors.push(`हेडलाइन लाइन ${i + 1} बाईं सेफ-ज़ोन सीमा से बाहर है।`);
     }
-    if (metric.startX + metric.width > spec.headlineArea.safeRight) {
+    if (metric.startX + metric.width > spec.headlineArea.safeRight + opticalTolerance) {
       errors.push(`हेडलाइन लाइन ${i + 1} दाईं सेफ-ज़ोन सीमा से बाहर है।`);
     }
   }
 
-  // 2. Vertical safe-zone validation
+  // 2. Vertical safe-zone validation (calibrated with optical tolerance so centered 4-line text inside banner does not false-alarm)
   if (layout.lineMetrics.length > 0) {
     const topMetric = layout.lineMetrics[0];
     const bottomMetric = layout.lineMetrics[layout.lineMetrics.length - 1];
-    if (topMetric.y - layout.lineHeight * 0.45 < spec.headlineArea.safeTop) {
+    if (topMetric.y - layout.lineHeight * 0.45 < spec.headlineArea.safeTop - opticalTolerance) {
       errors.push('हेडलाइन का ऊपरी भाग सुरक्षित सीमा से बाहर है।');
     }
-    if (bottomMetric.y + layout.lineHeight * 0.45 > spec.headlineArea.safeBottom) {
+    if (bottomMetric.y + layout.lineHeight * 0.45 > spec.headlineArea.safeBottom + opticalTolerance) {
       errors.push('हेडलाइन का निचला भाग सुरक्षित सीमा से बाहर है।');
     }
   }

@@ -1640,21 +1640,28 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         );
       })()}
 
-      {/* 2C. DATE STAMP: Vertical along Right Wall, Rotated 90°, Text without background box - Topmost Visual Layer (Standard frames only; Dynamic frames use their own date layer) */}
+      {/* 2C. DATE STAMP: Vertical along Right Wall, Rotated 90° - Topmost Visual Layer (Standard frames only; Dynamic frames use their own date layer) */}
       {card.showDate !== false && !currentDynamicFrame && !card.customDynamicFrame && !card.frameDesign?.startsWith('df_') && (
         <div
           className="absolute right-3 sm:right-4 top-[22%] -translate-y-1/2 pointer-events-none z-50 flex items-center justify-center select-none"
-          style={{ width: '24px', height: '180px' }}
+          style={{ width: '32px', height: '180px' }}
         >
           <div
-            className="absolute whitespace-nowrap flex items-center justify-center"
+            className={`absolute whitespace-nowrap flex items-center justify-center ${
+              card.dateShowBox !== false
+                ? 'px-2 py-0.5 rounded-md border border-white/25 shadow-md backdrop-blur-[1px]'
+                : ''
+            }`}
             style={{
               transform: `rotate(${card.dateRotation ?? (card as any).dateRotation ?? 90}deg)`,
               transformOrigin: 'center center',
+              backgroundColor: card.dateShowBox !== false
+                ? (card.dateBoxColor || 'rgba(0, 0, 0, 0.85)')
+                : 'transparent',
             }}
           >
             <span
-              className="font-bold tracking-wider text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)] font-['Baloo_2',sans-serif]"
+              className="font-bold tracking-wider text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.95)] font-['Baloo_2',sans-serif]"
               style={{
                 fontSize: `${Math.max(10, Math.min(13, Math.round(20 * previewScale)))}px`,
               }}

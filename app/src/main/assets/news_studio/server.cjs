@@ -16555,6 +16555,28 @@ app.post("/api/news-posts/reset", requireAdminMiddleware, (_req, res) => {
   return res.json({ success: true, posts: fresh });
 });
 var DRAFTS_DB_FILE = import_path2.default.join(process.cwd(), "drafts_database.json");
+var SOCIAL_FEED_DB_FILE = import_path2.default.join(process.cwd(), "social_feed_database.json");
+function loadSocialFeedDatabase() {
+  try {
+    if (import_fs2.default.existsSync(SOCIAL_FEED_DB_FILE)) {
+      const content = import_fs2.default.readFileSync(SOCIAL_FEED_DB_FILE, "utf-8");
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error("Error reading social_feed_database.json:", e);
+  }
+  return [];
+}
+function saveSocialFeedDatabase(items) {
+  try {
+    import_fs2.default.writeFileSync(SOCIAL_FEED_DB_FILE, JSON.stringify(items, null, 2), "utf-8");
+    return true;
+  } catch (e) {
+    console.error("Error writing social_feed_database.json:", e);
+    return false;
+  }
+}
 function loadDraftsDatabase() {
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.drafts.size > 0) {
     return Array.from(centralDb.cache.drafts.values());
@@ -16687,6 +16709,58 @@ app.delete("/api/drafts/:id", requireAuthMiddleware, (req, res) => {
     return res.json({ success: true });
   } catch (err) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+app.get("/api/social-feed", (_req, res) => {
+  const items = loadSocialFeedDatabase();
+  const sorted = [...items].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return res.json({ success: true, count: sorted.length, feed: sorted });
+});
+app.post("/api/social-feed", (req, res) => {
+  try {
+    const cardItem = req.body;
+    if (!cardItem || !cardItem.id) {
+      return res.status(400).json({ error: "\u0915\u093E\u0930\u094D\u0921 \u0911\u092C\u094D\u091C\u0947\u0915\u094D\u091F \u0914\u0930 ID \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
+    }
+    const items = loadSocialFeedDatabase();
+    const idx = items.findIndex((i) => i.id === cardItem.id);
+    const enriched = {
+      ...cardItem,
+      seoHashtags: Array.isArray(cardItem.seoHashtags) && cardItem.seoHashtags.length > 0 ? cardItem.seoHashtags : [
+        "#AINewsMaker",
+        "#BreakingNews",
+        "#\u0924\u093E\u091C\u093C\u093E_\u0938\u092E\u093E\u091A\u093E\u0930",
+        "#HindiNews",
+        "#DigitalPatrakar",
+        "#NewsUpdate"
+      ],
+      updatedAt: Date.now(),
+      createdAt: cardItem.createdAt || Date.now()
+    };
+    if (idx >= 0) {
+      items[idx] = { ...items[idx], ...enriched };
+    } else {
+      items.unshift(enriched);
+    }
+    if (items.length > 500) {
+      items.splice(500);
+    }
+    saveSocialFeedDatabase(items);
+    return res.json({ success: true, item: enriched });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || "Failed to save social feed card" });
+  }
+});
+app.post("/api/social-feed/delete", (req, res) => {
+  try {
+    const { id } = req.body || {};
+    if (!id) return res.status(400).json({ error: "Card ID \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
+    const items = loadSocialFeedDatabase();
+    const filtered = items.filter((i) => i.id !== id);
+    saveSocialFeedDatabase(filtered);
+    return res.json({ success: true, deletedId: id });
+  } catch (e) {
+    return res.status(500).json({ error: e?.message || "Failed to delete" });
   }
 });
 app.post("/api/admin/news-posts/:id/bonus", (req, res) => {

@@ -4550,6 +4550,30 @@ app.post("/api/news-posts/reset", requireAdminMiddleware, (_req, res) => {
 
 // --- CROSS-PLATFORM NEWS DRAFTS DATABASE (drafts_database.json) ---
 const DRAFTS_DB_FILE = path.join(process.cwd(), "drafts_database.json");
+const SOCIAL_FEED_DB_FILE = path.join(process.cwd(), "social_feed_database.json");
+
+function loadSocialFeedDatabase(): any[] {
+  try {
+    if (fs.existsSync(SOCIAL_FEED_DB_FILE)) {
+      const content = fs.readFileSync(SOCIAL_FEED_DB_FILE, "utf-8");
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error("Error reading social_feed_database.json:", e);
+  }
+  return [];
+}
+
+function saveSocialFeedDatabase(items: any[]): boolean {
+  try {
+    fs.writeFileSync(SOCIAL_FEED_DB_FILE, JSON.stringify(items, null, 2), "utf-8");
+    return true;
+  } catch (e) {
+    console.error("Error writing social_feed_database.json:", e);
+    return false;
+  }
+}
 
 function loadDraftsDatabase(): any[] {
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.drafts.size > 0) {
@@ -4706,6 +4730,70 @@ app.delete("/api/drafts/:id", requireAuthMiddleware, (req, res) => {
     return res.json({ success: true });
   } catch (err: any) {
     return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
+// ==========================================
+// MASTER ADMIN & REPORTERS SOCIAL FEED API
+// ==========================================
+
+// GET /api/social-feed - Returns list of social feed cards with SEO metadata
+app.get("/api/social-feed", (_req, res) => {
+  const items = loadSocialFeedDatabase();
+  const sorted = [...items].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return res.json({ success: true, count: sorted.length, feed: sorted });
+});
+
+// POST /api/social-feed - Add or update a card in social feed
+app.post("/api/social-feed", (req, res) => {
+  try {
+    const cardItem = req.body;
+    if (!cardItem || !cardItem.id) {
+      return res.status(400).json({ error: "कार्ड ऑब्जेक्ट और ID आवश्यक है" });
+    }
+    const items = loadSocialFeedDatabase();
+    const idx = items.findIndex((i) => i.id === cardItem.id);
+    const enriched = {
+      ...cardItem,
+      seoHashtags: Array.isArray(cardItem.seoHashtags) && cardItem.seoHashtags.length > 0
+        ? cardItem.seoHashtags
+        : [
+            '#AINewsMaker',
+            '#BreakingNews',
+            '#ताज़ा_समाचार',
+            '#HindiNews',
+            '#DigitalPatrakar',
+            '#NewsUpdate',
+          ],
+      updatedAt: Date.now(),
+      createdAt: cardItem.createdAt || Date.now(),
+    };
+    if (idx >= 0) {
+      items[idx] = { ...items[idx], ...enriched };
+    } else {
+      items.unshift(enriched);
+    }
+    if (items.length > 500) {
+      items.splice(500);
+    }
+    saveSocialFeedDatabase(items);
+    return res.json({ success: true, item: enriched });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Failed to save social feed card" });
+  }
+});
+
+// POST /api/social-feed/delete - Delete a card from social feed
+app.post("/api/social-feed/delete", (req, res) => {
+  try {
+    const { id } = req.body || {};
+    if (!id) return res.status(400).json({ error: "Card ID आवश्यक है" });
+    const items = loadSocialFeedDatabase();
+    const filtered = items.filter((i) => i.id !== id);
+    saveSocialFeedDatabase(filtered);
+    return res.json({ success: true, deletedId: id });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Failed to delete" });
   }
 });
 
