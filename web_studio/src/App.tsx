@@ -4062,7 +4062,11 @@ export default function App() {
   );
 
   if (isRemotionPoc) {
-    return <RemotionTestStudio />;
+    return (
+      <Suspense fallback={<div className="p-12 text-center text-slate-400 font-bold flex items-center justify-center min-h-[400px]">रेमोशन स्टूडियो लोड हो रहा है...</div>}>
+        <RemotionTestStudio />
+      </Suspense>
+    );
   }
 
   // Public legal and compliance pages are accessible without login
