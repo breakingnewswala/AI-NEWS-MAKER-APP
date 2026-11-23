@@ -1491,17 +1491,17 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
       }
     }
 
-    // Mandatory Checkbox 1: 7-Day Free Trial & Terms Acceptance
-    if (!acceptedTerms) {
-      setSetupWizardStep(1);
-      setStep2ErrorMsg('⚠️ आगे बढ़ने के लिए 7-दिवसीय फ्री ट्रायल व नियम-शर्तें (Terms) स्वीकार करना अनिवार्य है।');
-      return;
-    }
-
-    // Mandatory Checkbox 2: WhatsApp Notifications Consent
+    // Mandatory Checkbox: WhatsApp Notifications Consent (Step 1)
     if (!whatsappMarketingConsent) {
       setSetupWizardStep(1);
       setStep2ErrorMsg('⚠️ आगे बढ़ने के लिए WhatsApp पर समाचार अपडेट्स व सूचनाएं प्राप्त करने की सहमति देना अनिवार्य है।');
+      return;
+    }
+
+    // Mandatory Checkbox: 7-Day Free Trial & Terms Acceptance (Step 2)
+    if (!acceptedTerms) {
+      setSetupWizardStep(2);
+      setStep2ErrorMsg('⚠️ आगे बढ़ने के लिए 7-दिवसीय फ्री ट्रायल व नियम-शर्तें (Terms) स्वीकार करना अनिवार्य है।');
       return;
     }
 
@@ -2237,6 +2237,14 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                         <span>सोशल मीडिया स्टोरी व रील्स एक्सपोर्टर</span>
                       </li>
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>Google SEO ऑटो-इंडेक्सिंग व शेयर कार्ड्स</span>
+                      </li>
+                      <li className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>सुरक्षित क्लाउड स्टोरेज व ड्राफ्ट बैकअप</span>
+                      </li>
                     </ul>
                   </div>
 
@@ -2313,6 +2321,53 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   </div>
                 </div>
 
+                {/* Mobile-Only Horizontal Scrollable Benefit Cards (Swipeable Carousel) */}
+                <div className="lg:hidden flex overflow-x-auto gap-2.5 pb-1 pt-0.5 scrollbar-none snap-x -mx-1 px-1">
+                  {/* Card 1: 7-Day PRO Trial */}
+                  <div className="min-w-[240px] max-w-[260px] p-2.5 bg-gradient-to-br from-amber-500/15 via-slate-900 to-yellow-600/15 border border-amber-500/50 rounded-2xl shrink-0 snap-start space-y-1 shadow-md">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-black text-amber-300 flex items-center gap-1">
+                        <Crown className="w-3.5 h-3.5 text-amber-400" />
+                        <span>7-Day Free Trial</span>
+                      </span>
+                      <span className="px-1.5 py-0.2 bg-amber-400 text-slate-950 text-[9px] font-black rounded">
+                        PRO सक्रिय
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-300 leading-tight">
+                      ₹4,199/माह मूल्य के <strong>PRO फीचर्स</strong> 7 दिन मुफ़्त (50+ फ्रेम्स, 1080p Full HD)।
+                    </p>
+                  </div>
+
+                  {/* Card 2: AI Tools & Features */}
+                  <div className="min-w-[240px] max-w-[260px] p-2.5 bg-slate-900 border border-slate-700 rounded-2xl shrink-0 snap-start space-y-1 shadow-md">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-black text-emerald-300 flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>AI स्मार्ट टूल्स</span>
+                      </span>
+                      <span className="text-[9px] text-emerald-400 font-mono">1-क्लिक</span>
+                    </div>
+                    <p className="text-[10px] text-slate-300 leading-tight">
+                      AI हेडलाइन जनरेटर, ऑटो-कैप्शन व एक क्लिक में सोशल कार्ड शेयरिंग।
+                    </p>
+                  </div>
+
+                  {/* Card 3: 24x7 Support */}
+                  <div className="min-w-[240px] max-w-[260px] p-2.5 bg-slate-900 border border-slate-700 rounded-2xl shrink-0 snap-start space-y-1 shadow-md">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-black text-sky-300 flex items-center gap-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-sky-400" />
+                        <span>सुरक्षा व सहायता</span>
+                      </span>
+                      <span className="text-[9px] text-amber-400 font-mono">24x7</span>
+                    </div>
+                    <p className="text-[10px] text-slate-300 leading-tight">
+                      हेल्पलाइन: <span className="text-emerald-400 font-mono font-bold">+91 9425008598</span> (100% डेटा सुरक्षित)।
+                    </p>
+                  </div>
+                </div>
+
                 {/* 2-Step Progress Indicator */}
                 <div className="bg-slate-900/90 border border-amber-500/30 rounded-2xl p-2.5 sm:p-3 shadow-lg flex items-center justify-between">
                   <div className="flex items-center gap-2 sm:gap-3">
@@ -2386,20 +2441,20 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   <button
                     type="button"
                     onClick={() => setAccountType('channel')}
-                    className={`p-3 rounded-xl border-2 flex items-start gap-3 transition-all text-left cursor-pointer ${
+                    className={`p-3 rounded-xl border-2 flex items-start gap-2.5 transition-all text-left cursor-pointer ${
                       accountType === 'channel'
                         ? 'bg-amber-500/15 border-amber-400 ring-2 ring-amber-400/20 text-white shadow-lg'
                         : 'bg-slate-900/80 border-slate-700/80 hover:border-slate-600 text-slate-300'
                     }`}
                   >
-                    <div className={`p-2 rounded-lg shrink-0 ${accountType === 'channel' ? 'bg-amber-400 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400'}`}>
+                    <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${accountType === 'channel' ? 'bg-amber-400 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400'}`}>
                       <Tv className="w-5 h-5" />
                     </div>
-                    <div>
-                      <div className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5 whitespace-nowrap">
                         <span>समाचार चैनल के रूप में</span>
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                      <p className="text-[11px] text-slate-300 mt-0.5 leading-snug line-clamp-2">
                         अपने न्यूज़ चैनल, डिजिटल पोर्टल या मीडिया संस्थान की पहचान के साथ खाता बनाएँ।
                       </p>
                     </div>
@@ -2408,20 +2463,20 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                   <button
                     type="button"
                     onClick={() => setAccountType('reporter')}
-                    className={`p-3 rounded-xl border-2 flex items-start gap-3 transition-all text-left cursor-pointer ${
+                    className={`p-3 rounded-xl border-2 flex items-start gap-2.5 transition-all text-left cursor-pointer ${
                       accountType === 'reporter'
                         ? 'bg-amber-500/15 border-amber-400 ring-2 ring-amber-400/20 text-white shadow-lg'
                         : 'bg-slate-900/80 border-slate-700/80 hover:border-slate-600 text-slate-300'
                     }`}
                   >
-                    <div className={`p-2 rounded-lg shrink-0 ${accountType === 'reporter' ? 'bg-amber-400 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400'}`}>
+                    <div className={`p-2 rounded-lg shrink-0 mt-0.5 ${accountType === 'reporter' ? 'bg-amber-400 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400'}`}>
                       <User className="w-5 h-5" />
                     </div>
-                    <div>
-                      <div className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-black text-xs sm:text-sm text-white flex items-center gap-1.5 whitespace-nowrap">
                         <span>पत्रकार / रिपोर्टर के रूप में</span>
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                      <p className="text-[11px] text-slate-300 mt-0.5 leading-snug line-clamp-2">
                         अपनी व्यक्तिगत पत्रकार पहचान के साथ समाचार एवं रिपोर्टिंग संबंधी कार्यों के लिए खाता बनाएँ।
                       </p>
                     </div>
@@ -2697,50 +2752,19 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                 </div>
               </div>
 
-              {/* SECTION B: MANDATORY CHECKBOXES (Compulsory 7-Day Free Trial & WhatsApp Consent) */}
-              <div className="p-3.5 bg-slate-950/90 rounded-xl border border-amber-500/40 space-y-2.5">
+              {/* SECTION B: MANDATORY WHATSAPP NOTIFICATIONS CONSENT (Step 1) */}
+              <div className="p-3 bg-slate-950/90 rounded-xl border border-emerald-500/40 space-y-1.5">
                 <div className="flex items-center justify-between pb-1 border-b border-slate-800">
-                  <span className="text-xs font-black text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <span className="text-xs font-black text-emerald-300 uppercase tracking-wider flex items-center gap-1.5">
                     <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    <span>अनिवार्य नियम, शर्तें व सहमति (2 Checks Required) *</span>
+                    <span>WhatsApp सहमति (Mandatory) *</span>
                   </span>
-                  <span className="text-[10px] text-amber-400 font-bold bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/40">
+                  <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/40">
                     अनिवार्य
                   </span>
                 </div>
 
-                <label className="flex items-start gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    required
-                    checked={acceptedTerms}
-                    onChange={(e) => setAcceptedTerms(e.target.checked)}
-                    className="w-4 h-4 mt-0.5 accent-amber-400 rounded cursor-pointer shrink-0"
-                  />
-                  <div className="text-xs text-slate-300 leading-snug">
-                    <span className="font-bold text-white">
-                      1. मुझे 7-दिवसीय फ्री ट्रायल (PRO फीचर्स ₹4,199/माह मूल्य) स्वीकार हैं एवं मैंने{' '}
-                      <button
-                        type="button"
-                        onClick={() => setLegalModalTab('terms')}
-                        className="text-amber-400 underline hover:text-amber-300 font-bold cursor-pointer"
-                      >
-                        नियम व शर्तें (Terms & Conditions)
-                      </button>{' '}
-                      और{' '}
-                      <button
-                        type="button"
-                        onClick={() => setLegalModalTab('privacy')}
-                        className="text-amber-400 underline hover:text-amber-300 font-bold cursor-pointer"
-                      >
-                        गोपनीयता नीति (Privacy Policy)
-                      </button>{' '}
-                      को ध्यानपूर्वक पढ़ लिया है और मैं इनसे सहमत हूँ। *
-                    </span>
-                  </div>
-                </label>
-
-                <label className="flex items-start gap-2.5 cursor-pointer select-none pt-2 border-t border-slate-850">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none pt-1">
                   <input
                     type="checkbox"
                     required
@@ -2748,9 +2772,9 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                     onChange={(e) => setWhatsappMarketingConsent(e.target.checked)}
                     className="w-4 h-4 mt-0.5 accent-emerald-500 rounded cursor-pointer shrink-0"
                   />
-                  <div className="text-xs text-slate-300 leading-snug">
+                  <div className="text-xs text-slate-200 leading-snug">
                     <span className="font-bold text-white">
-                      2. हाँ, मैं AI NEWS MAKER से WhatsApp पर महत्वपूर्ण समाचार अलर्ट्स, तकनीकी अपडेट्स व सूचनाएं प्राप्त करने की सहमति देता/देती हूँ। *
+                      हाँ, मैं AI NEWS MAKER से WhatsApp पर महत्वपूर्ण समाचार अलर्ट्स, तकनीकी अपडेट्स व सूचनाएं प्राप्त करने की सहमति देता/देती हूँ। *
                     </span>
                   </div>
                 </label>
@@ -2797,10 +2821,6 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                         }
                         if (!subscription.isMobileLocked && (!isWhatsappVerified || cleanDigits !== verifiedWhatsappNumber)) {
                           setStep2ErrorMsg('⚠️ आगे बढ़ने के लिए WhatsApp OTP द्वारा अपना मोबाइल नंबर सत्यापित करना अनिवार्य है।');
-                          return;
-                        }
-                        if (!acceptedTerms) {
-                          setStep2ErrorMsg('⚠️ आगे बढ़ने के लिए 7-दिवसीय फ्री ट्रायल व नियम-शर्तें स्वीकार करना अनिवार्य है।');
                           return;
                         }
                         if (!whatsappMarketingConsent) {
@@ -3236,6 +3256,50 @@ export const AuthWelcomeScreen: React.FC<AuthWelcomeScreenProps> = ({
                     className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs sm:text-sm focus:border-amber-400 focus:outline-hidden font-mono placeholder:text-slate-500/80 placeholder:font-normal"
                   />
                 </div>
+              </div>
+
+              {/* SECTION F: MANDATORY 7-DAY FREE TRIAL & TERMS ACCEPTANCE CHECKBOX (Step 2) */}
+              <div className="p-3.5 bg-slate-950/90 rounded-xl border border-amber-500/40 space-y-2.5">
+                <div className="flex items-center justify-between pb-1 border-b border-slate-800">
+                  <span className="text-xs font-black text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>7-दिवसीय फ्री ट्रायल व सेवा नियम (Mandatory Check) *</span>
+                  </span>
+                  <span className="text-[10px] text-amber-400 font-bold bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/40">
+                    अनिवार्य
+                  </span>
+                </div>
+
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    required
+                    checked={acceptedTerms}
+                    onChange={(e) => setAcceptedTerms(e.target.checked)}
+                    className="w-4 h-4 mt-0.5 accent-amber-400 rounded cursor-pointer shrink-0"
+                  />
+                  <div className="text-xs text-slate-200 leading-snug">
+                    <span className="font-bold text-white">
+                      मुझे 7-दिवसीय फ्री ट्रायल (PRO फीचर्स ₹4,199/माह मूल्य) स्वीकार हैं एवं मैंने{' '}
+                      <button
+                        type="button"
+                        onClick={() => setLegalModalTab('terms')}
+                        className="text-amber-400 underline hover:text-amber-300 font-bold cursor-pointer"
+                      >
+                        नियम व शर्तें (Terms & Conditions)
+                      </button>{' '}
+                      और{' '}
+                      <button
+                        type="button"
+                        onClick={() => setLegalModalTab('privacy')}
+                        className="text-amber-400 underline hover:text-amber-300 font-bold cursor-pointer"
+                      >
+                        गोपनीयता नीति (Privacy Policy)
+                      </button>{' '}
+                      को ध्यानपूर्वक पढ़ लिया है और मैं इनसे सहमत हूँ। *
+                    </span>
+                  </div>
+                </label>
               </div>
 
               {/* Step 2 Error Message (Uniqueness & Validation) */}

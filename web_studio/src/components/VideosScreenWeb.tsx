@@ -1240,12 +1240,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
             </span>
 
             {/* Admin Latest Sort Indicator */}
-            {isAdmin && (
-              <span className="px-3 py-1.5 bg-amber-500/20 border border-amber-400/40 text-amber-300 text-xs font-black rounded-xl flex items-center gap-1.5 shadow-sm">
-                <Clock className="w-3.5 h-3.5 text-amber-400" />
-                <span>🕒 नवीनतम प्रथम (Latest)</span>
-              </span>
-            )}
+
 
             {/* Ratio Filter Dropdown */}
             <div className="relative">

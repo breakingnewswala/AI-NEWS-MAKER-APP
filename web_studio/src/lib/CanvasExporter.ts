@@ -2897,7 +2897,7 @@ async function drawGraphic001Canvas(
 
     const baseW = Math.round(width * 0.18);
     const baseH = Math.round(height * 0.115);
-    const scale = Math.min(1.8, Math.max(0.5, card.logoSizePercent ? card.logoSizePercent / 100 : (card.logoScale ?? 1.25)));
+    const scale = Math.min(1.8, Math.max(0.5, card.logoSizePercent ? card.logoSizePercent / 100 : (card.logoScale ?? 1.0)));
 
     let lW = Math.round(baseW * scale);
     let lH = Math.round(baseH * scale);
@@ -3125,7 +3125,7 @@ async function drawGraphic001Canvas(
   ctx.fillStyle = redGrad;
   ctx.fillRect(0, bannerY, width, bannerH);
 
-  // Left & Right Chevron Accent Stripes (strictly bounded to bannerY .. bannerY + bannerH)
+  // Left & Right Distinct Theme Accent Stripes (strictly bounded to bannerY .. bannerY + bannerH)
   ctx.save();
   ctx.beginPath();
   ctx.rect(0, bannerY, width, bannerH);
@@ -3133,47 +3133,134 @@ async function drawGraphic001Canvas(
   ctx.fillStyle = activeBasicTheme.chevronColor;
   ctx.globalAlpha = activeBasicTheme.isLightPlate ? 0.35 : 0.6;
   const chevronW = width * 0.10; // 10% width matching CardPreview
+  const accent = activeBasicTheme.accentStyle || 'chevrons';
 
-  const drawChevronLeft = (pts: [number, number][]) => {
-    ctx.beginPath();
-    ctx.moveTo((pts[0][0] / 100) * chevronW, bannerY + (pts[0][1] / 440) * bannerH);
-    for (let i = 1; i < pts.length; i++) {
-      ctx.lineTo((pts[i][0] / 100) * chevronW, bannerY + (pts[i][1] / 440) * bannerH);
-    }
-    ctx.closePath();
-    ctx.fill();
-  };
+  if (accent === 'tech-bars') {
+    const bars = [
+      { y: 30, w: 70 }, { y: 70, w: 90 }, { y: 110, w: 50 }, { y: 150, w: 85 },
+      { y: 190, w: 60 }, { y: 230, w: 95 }, { y: 270, w: 45 }, { y: 310, w: 80 },
+      { y: 350, w: 65 }, { y: 390, w: 75 }
+    ];
+    bars.forEach((b) => {
+      const barH = (14 / 440) * bannerH;
+      const curY = bannerY + (b.y / 440) * bannerH;
+      const curW = (b.w / 100) * chevronW;
+      ctx.fillRect(0, curY, curW, barH);
+      ctx.fillRect(width - curW, curY, curW, barH);
+    });
+  } else if (accent === 'diamonds') {
+    const diamonds = [
+      { cy: 55, rx: 30, ry: 25 },
+      { cy: 160, rx: 35, ry: 30 },
+      { cy: 270, rx: 35, ry: 30 },
+      { cy: 380, rx: 35, ry: 30 }
+    ];
+    diamonds.forEach((d) => {
+      const cY = bannerY + (d.cy / 440) * bannerH;
+      const rY = (d.ry / 440) * bannerH;
+      const rX = (d.rx / 100) * chevronW;
+      // Left diamond
+      const cXLeft = chevronW * 0.45;
+      ctx.beginPath();
+      ctx.moveTo(cXLeft, cY - rY);
+      ctx.lineTo(cXLeft + rX, cY);
+      ctx.lineTo(cXLeft, cY + rY);
+      ctx.lineTo(cXLeft - rX, cY);
+      ctx.closePath();
+      ctx.fill();
+      // Right diamond
+      const cXRight = width - chevronW * 0.45;
+      ctx.beginPath();
+      ctx.moveTo(cXRight, cY - rY);
+      ctx.lineTo(cXRight + rX, cY);
+      ctx.lineTo(cXRight, cY + rY);
+      ctx.lineTo(cXRight - rX, cY);
+      ctx.closePath();
+      ctx.fill();
+    });
+  } else if (accent === 'minimal-lines') {
+    const lines = [
+      { x: 15, y: 20, h: 400, w: 10 },
+      { x: 40, y: 60, h: 320, w: 8 },
+      { x: 62, y: 100, h: 240, w: 6 }
+    ];
+    lines.forEach((l) => {
+      const lineH = (l.h / 440) * bannerH;
+      const curY = bannerY + (l.y / 440) * bannerH;
+      const curW = (l.w / 100) * chevronW;
+      const curXLeft = (l.x / 100) * chevronW;
+      ctx.fillRect(curXLeft, curY, curW, lineH);
+      const curXRight = width - curXLeft - curW;
+      ctx.fillRect(curXRight, curY, curW, lineH);
+    });
+  } else if (accent === 'dots') {
+    const dots = [
+      { x: 25, y: 40, r: 10 }, { x: 55, y: 40, r: 8 },
+      { x: 25, y: 100, r: 12 }, { x: 65, y: 100, r: 9 },
+      { x: 25, y: 160, r: 14 }, { x: 70, y: 160, r: 10 },
+      { x: 25, y: 220, r: 14 }, { x: 70, y: 220, r: 10 },
+      { x: 25, y: 280, r: 12 }, { x: 65, y: 280, r: 9 },
+      { x: 25, y: 340, r: 10 }, { x: 55, y: 340, r: 8 },
+      { x: 25, y: 400, r: 8 }, { x: 50, y: 400, r: 6 }
+    ];
+    dots.forEach((dot) => {
+      const curY = bannerY + (dot.y / 440) * bannerH;
+      const curR = (dot.r / 440) * bannerH;
+      const curXLeft = (dot.x / 100) * chevronW;
+      ctx.beginPath();
+      ctx.arc(curXLeft, curY, curR, 0, Math.PI * 2);
+      ctx.fill();
+      const curXRight = width - (dot.x / 100) * chevronW;
+      ctx.beginPath();
+      ctx.arc(curXRight, curY, curR, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  } else {
+    // Default chevrons
+    const drawChevronLeft = (pts: [number, number][]) => {
+      ctx.beginPath();
+      ctx.moveTo((pts[0][0] / 100) * chevronW, bannerY + (pts[0][1] / 440) * bannerH);
+      for (let i = 1; i < pts.length; i++) {
+        ctx.lineTo((pts[i][0] / 100) * chevronW, bannerY + (pts[i][1] / 440) * bannerH);
+      }
+      ctx.closePath();
+      ctx.fill();
+    };
 
-  const drawChevronRight = (pts: [number, number][]) => {
-    ctx.beginPath();
-    ctx.moveTo(width - ((100 - pts[0][0]) / 100) * chevronW, bannerY + (pts[0][1] / 440) * bannerH);
-    for (let i = 1; i < pts.length; i++) {
-      ctx.lineTo(width - ((100 - pts[i][0]) / 100) * chevronW, bannerY + (pts[i][1] / 440) * bannerH);
-    }
-    ctx.closePath();
-    ctx.fill();
-  };
+    const drawChevronRight = (pts: [number, number][]) => {
+      ctx.beginPath();
+      ctx.moveTo(width - ((100 - pts[0][0]) / 100) * chevronW, bannerY + (pts[0][1] / 440) * bannerH);
+      for (let i = 1; i < pts.length; i++) {
+        ctx.lineTo(width - ((100 - pts[i][0]) / 100) * chevronW, bannerY + (pts[i][1] / 440) * bannerH);
+      }
+      ctx.closePath();
+      ctx.fill();
+    };
 
-  // Left chevrons
-  drawChevronLeft([[0, 20], [60, 20], [30, 80], [0, 80]]);
-  drawChevronLeft([[0, 100], [75, 100], [35, 180], [0, 180]]);
-  drawChevronLeft([[0, 200], [90, 200], [40, 300], [0, 300]]);
-  drawChevronLeft([[0, 320], [80, 320], [30, 420], [0, 420]]);
+    drawChevronLeft([[0, 20], [60, 20], [30, 80], [0, 80]]);
+    drawChevronLeft([[0, 100], [75, 100], [35, 180], [0, 180]]);
+    drawChevronLeft([[0, 200], [90, 200], [40, 300], [0, 300]]);
+    drawChevronLeft([[0, 320], [80, 320], [30, 420], [0, 420]]);
 
-  // Right chevrons
-  drawChevronRight([[100, 20], [40, 20], [70, 80], [100, 80]]);
-  drawChevronRight([[100, 100], [25, 100], [65, 180], [100, 180]]);
-  drawChevronRight([[100, 200], [10, 200], [60, 300], [100, 300]]);
-  drawChevronRight([[100, 320], [20, 320], [70, 420], [100, 420]]);
+    drawChevronRight([[100, 20], [40, 20], [70, 80], [100, 80]]);
+    drawChevronRight([[100, 100], [25, 100], [65, 180], [100, 180]]);
+    drawChevronRight([[100, 200], [10, 200], [60, 300], [100, 300]]);
+    drawChevronRight([[100, 320], [20, 320], [70, 420], [100, 420]]);
+  }
   ctx.restore();
 
-  // Glowing Divider Beam above headline banner (matching SVG streakGlow / CardPreview)
+  // Glowing Divider Beam above headline banner with theme-specific gradient shadow (matching CardPreview)
+  const beamGlowColor = activeBasicTheme.headlineHighlightColor || (activeBasicTheme.isLightPlate ? '#DC2626' : '#FFE600');
   const streakGrad = ctx.createLinearGradient(0, bannerY, width, bannerY);
   activeBasicTheme.beamCanvasStops.forEach(([pos, col]) => {
     streakGrad.addColorStop(pos, col);
   });
+  ctx.save();
+  ctx.shadowColor = beamGlowColor;
+  ctx.shadowBlur = 12;
   ctx.fillStyle = streakGrad;
   ctx.fillRect(0, bannerY - 3, width, 6);
+  ctx.restore();
 
   // Bevel highlight lines matching banner edges
   ctx.fillStyle = activeBasicTheme.bevelTopColor;
@@ -3185,7 +3272,7 @@ async function drawGraphic001Canvas(
     // Render headline text using Canonical Layout & Safe-Zone Engine (Part E: Up to 4 lines support)
     const rawHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
     const fontFam = card.headlineFontFamily || 'Baloo 2';
-    const highlightColor = card.highlightColor || activeBasicTheme.headlineHighlightColor || (activeBasicTheme.isLightPlate ? '#DC2626' : '#FFE600');
+    const highlightColor = card.highlightColor || (activeBasicTheme.isLightPlate ? '#DC2626' : (activeBasicTheme.headlineHighlightColor || '#FFE600'));
     const defaultTextColor = activeBasicTheme.isLightPlate ? '#0B132B' : (card.headlineColor || '#FFFFFF');
 
     // Use previewHeadlineLayout to maintain 100% WYSIWYG line-break parity with CardPreview
@@ -7604,10 +7691,15 @@ export async function drawThemeFooterBar(
   }
   const isLightBg = luminance >= 0.5;
   const effectiveCustomText = customFooterConfig?.footerTextColor || footerTextColor;
-  const textColor = (effectiveCustomText && effectiveCustomText.trim())
+  const isWhiteCustom = effectiveCustomText && (
+    effectiveCustomText.toLowerCase() === '#ffffff' ||
+    effectiveCustomText.toLowerCase() === '#fff' ||
+    effectiveCustomText.toLowerCase() === 'white'
+  );
+  const textColor = (effectiveCustomText && effectiveCustomText.trim() && !(isLightBg && isWhiteCustom))
     ? effectiveCustomText
-    : (isLightBg ? '#0F172A' : '#FFFFFF');
-  const separatorColor = isLightBg ? 'rgba(15, 23, 42, 0.35)' : 'rgba(255, 255, 255, 0.45)';
+    : (isLightBg ? '#0B132B' : '#FFFFFF');
+  const separatorColor = isLightBg ? 'rgba(11, 19, 43, 0.4)' : 'rgba(255, 255, 255, 0.45)';
 
   // Top subtle border line (Centered with frame-proportional width)
   const footerWidthPct = (customFooterConfig?.footerWidthPct ?? 92);

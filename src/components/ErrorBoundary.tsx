@@ -34,20 +34,22 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('Uncaught error in UI component:', error, errorInfo);
     try {
       const msg = (error && error.message) ? error.message : '';
-      // Only auto-recover once for genuine missing script chunks, NEVER on network/fetch errors
+      // Detect obsolete or missing script chunks (e.g. after newly deployed build)
       const isChunkError = (
         msg.indexOf('Loading chunk') !== -1 ||
-        msg.indexOf('dynamically imported module') !== -1
+        msg.indexOf('dynamically imported module') !== -1 ||
+        msg.indexOf('Failed to fetch') !== -1
       );
       if (isChunkError) {
-        const CHUNK_KEY = '__chunk_recovery_attempted';
-        let hasRecovered = false;
+        const CHUNK_TIME_KEY = '__chunk_recovery_timestamp';
+        let lastRecovery = 0;
         try {
-          hasRecovered = sessionStorage.getItem(CHUNK_KEY) === 'true';
+          lastRecovery = Number(sessionStorage.getItem(CHUNK_TIME_KEY) || '0');
         } catch {}
-        if (!hasRecovered) {
+        // Auto-recover if no recovery was attempted in the last 15 seconds (prevents tight loops)
+        if (Date.now() - lastRecovery > 15000) {
           try {
-            sessionStorage.setItem(CHUNK_KEY, 'true');
+            sessionStorage.setItem(CHUNK_TIME_KEY, String(Date.now()));
           } catch {}
           this.handleHardReset();
           return;
@@ -56,8 +58,22 @@ export class ErrorBoundary extends Component<Props, State> {
     } catch {}
   }
 
-  // Graceful in-place retry without wiping caches or forcing full-page browser reloads
+  // Graceful in-place retry; for chunk errors, performs clean reload
   private handleReset = () => {
+    const msg = (this.state.error && this.state.error.message) ? this.state.error.message : '';
+    const isChunkError = (
+      msg.indexOf('Loading chunk') !== -1 ||
+      msg.indexOf('dynamically imported module') !== -1 ||
+      msg.indexOf('Failed to fetch') !== -1
+    );
+    if (isChunkError) {
+      try {
+        sessionStorage.removeItem('__chunk_recovery_timestamp');
+      } catch {}
+      this.handleHardReset();
+      return;
+    }
+
     this.setState({ isResetting: true });
     setTimeout(() => {
       this.setState({ hasError: false, error: null, isResetting: false });

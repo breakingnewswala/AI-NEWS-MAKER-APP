@@ -700,7 +700,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         : (isGraphic1 || isGraphic3 ? '#FFFFFF' : (isMorning ? '#FFFFFF' : (isLightTemplate ? '#000000' : '#FFFFFF')))));
 
     const defaultTemplateHighlight = df?.primaryHighlightColor || df?.quoteHighlightColor || (isBasicTheme
-      ? (basicTheme.headlineHighlightColor || (basicTheme.isLightPlate ? '#DC2626' : '#FFE600'))
+      ? (basicTheme.isLightPlate ? '#DC2626' : (basicTheme.headlineHighlightColor || '#FFE600'))
       : (isGraphic4
         ? '#DC2626'
         : isGraphic2
@@ -714,7 +714,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         : '#FFE600'));
 
     const highlightColor = customHighlight || card.highlightColor || defaultTemplateHighlight;
-    const isBlackText = baseTextColor.toLowerCase() === '#000000' || baseTextColor.toLowerCase() === 'black' || baseTextColor.toLowerCase() === '#0f172a';
+    const isBlackText = baseTextColor.toLowerCase() === '#000000' || baseTextColor.toLowerCase() === 'black' || baseTextColor.toLowerCase() === '#0f172a' || baseTextColor.toLowerCase() === '#0b132b';
 
     const effectiveFontSize = Math.max(7, Math.round(canonicalLayout.fontSize * previewScale));
     const effectiveLineHeight = Math.max(9, Math.round(canonicalLayout.lineHeight * previewScale));
@@ -1579,7 +1579,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
           ) : null
         ) : getActiveHeaderPng(card) ? (
           <HeaderGraphic customHeaderPng={getActiveHeaderPng(card)} />
-        ) : (Boolean(currentDynamicFrame) || Boolean(card.customDynamicFrame) || card.frameDesign === 'graphic_001' || card.frameDesign === 'graphic_002' || card.frameDesign === 'graphic_003' || card.frameDesign === 'graphic_004' || card.frameDesign === 'jacket-default' || (card.frameDesign && card.frameDesign.startsWith('df_')) || card.frameDesign === 'classic_breaking' || Boolean(card.channelLogoUrl || card.channelLogoPngUrl)) ? (
+        ) : (Boolean(currentDynamicFrame) || Boolean(card.customDynamicFrame) || card.frameDesign === 'graphic_001' || card.frameDesign === 'graphic_002' || card.frameDesign === 'graphic_003' || card.frameDesign === 'graphic_004' || isBasicNewsTheme(card.frameDesign) || !card.frameDesign || card.frameDesign === 'jacket-default' || (card.frameDesign && card.frameDesign.startsWith('df_')) || card.frameDesign === 'classic_breaking' || Boolean(card.channelLogoUrl || card.channelLogoPngUrl)) ? (
           /* Dynamic frames, canonical graphic templates, and frames with channel logos have their own dedicated header and logo elements */
           null
         ) : card.frameDesign === 'custom-png' ? (
@@ -1589,7 +1589,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               brandTagline={card.brandTagline}
               brandName={card.brandName}
               customLogoUrl={card.customLogoUrl}
-              logoScale={card.logoScale ?? 1.25}
+              logoScale={card.logoScale ?? 1.0}
             />
           )
         ) : (
@@ -1599,7 +1599,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             brandTagline={card.brandTagline}
             brandName={card.brandName}
             customLogoUrl={card.customLogoUrl}
-            logoScale={card.logoScale ?? 1.25}
+            logoScale={card.logoScale ?? 1.0}
           />
         )}
       </div>
@@ -2118,7 +2118,7 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
 
             const baseW = 18;
             const baseH = 11.5;
-            const scale = Math.min(1.8, Math.max(0.5, card.logoScale ?? 1.25));
+            const scale = Math.min(1.8, Math.max(0.5, card.logoScale ?? 1.0));
             const lW = baseW * scale;
             const lH = baseH * scale;
 
@@ -2283,13 +2283,18 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
             }}
           >
             {/* Glowing Divider Beam above headline banner matching CanvasExporter */}
-            <div
-              className="absolute inset-x-0 -top-[3px] h-[6px] pointer-events-none"
-              style={{
-                background: activeBasicTheme.beamGradient,
-                boxShadow: `0 0 10px ${activeBasicTheme.isLightPlate ? '#DC2626' : '#FFE600'}`,
-              }}
-            />
+            {(() => {
+              const beamGlowColor = activeBasicTheme.headlineHighlightColor || (activeBasicTheme.isLightPlate ? '#DC2626' : '#FFE600');
+              return (
+                <div
+                  className="absolute inset-x-0 -top-[3px] h-[6px] pointer-events-none"
+                  style={{
+                    background: activeBasicTheme.beamGradient,
+                    boxShadow: `0 0 12px ${beamGlowColor}, 0 0 4px ${beamGlowColor}`,
+                  }}
+                />
+              );
+            })()}
             {/* Subtle top & bottom banner highlight bevels */}
             <div
               className="absolute inset-x-0 top-0 h-[3px] opacity-85 pointer-events-none"
@@ -2304,23 +2309,153 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
               }}
             />
 
-            {/* Left & Right Chevron Accent Stripes matching exported graphic */}
-            <svg className="absolute left-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
-              <g fill={activeBasicTheme.chevronColor} opacity={activeBasicTheme.isLightPlate ? 0.35 : 0.6}>
-                <polygon points="0,20 60,20 30,80 0,80" />
-                <polygon points="0,100 75,100 35,180 0,180" />
-                <polygon points="0,200 90,200 40,300 0,300" />
-                <polygon points="0,320 80,320 30,420 0,420" />
-              </g>
-            </svg>
-            <svg className="absolute right-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
-              <g fill={activeBasicTheme.chevronColor} opacity={activeBasicTheme.isLightPlate ? 0.35 : 0.6}>
-                <polygon points="100,20 40,20 70,80 100,80" />
-                <polygon points="100,100 25,100 65,180 100,180" />
-                <polygon points="100,200 10,200 60,300 100,300" />
-                <polygon points="100,320 20,320 70,420 100,420" />
-              </g>
-            </svg>
+            {/* Distinct Side Decorative Accents for each Theme Style */}
+            {(() => {
+              const accent = activeBasicTheme.accentStyle || 'chevrons';
+              const opac = activeBasicTheme.isLightPlate ? 0.35 : 0.6;
+              const col = activeBasicTheme.chevronColor;
+
+              if (accent === 'tech-bars') {
+                return (
+                  <>
+                    <svg className="absolute left-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+                      <g fill={col} opacity={opac}>
+                        <rect x="0" y="30" width="70" height="14" rx="2" />
+                        <rect x="0" y="70" width="90" height="14" rx="2" />
+                        <rect x="0" y="110" width="50" height="14" rx="2" />
+                        <rect x="0" y="150" width="85" height="14" rx="2" />
+                        <rect x="0" y="190" width="60" height="14" rx="2" />
+                        <rect x="0" y="230" width="95" height="14" rx="2" />
+                        <rect x="0" y="270" width="45" height="14" rx="2" />
+                        <rect x="0" y="310" width="80" height="14" rx="2" />
+                        <rect x="0" y="350" width="65" height="14" rx="2" />
+                        <rect x="0" y="390" width="75" height="14" rx="2" />
+                      </g>
+                    </svg>
+                    <svg className="absolute right-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+                      <g fill={col} opacity={opac}>
+                        <rect x="30" y="30" width="70" height="14" rx="2" />
+                        <rect x="10" y="70" width="90" height="14" rx="2" />
+                        <rect x="50" y="110" width="50" height="14" rx="2" />
+                        <rect x="15" y="150" width="85" height="14" rx="2" />
+                        <rect x="40" y="190" width="60" height="14" rx="2" />
+                        <rect x="5" y="230" width="95" height="14" rx="2" />
+                        <rect x="55" y="270" width="45" height="14" rx="2" />
+                        <rect x="20" y="310" width="80" height="14" rx="2" />
+                        <rect x="35" y="350" width="65" height="14" rx="2" />
+                        <rect x="25" y="390" width="75" height="14" rx="2" />
+                      </g>
+                    </svg>
+                  </>
+                );
+              }
+              if (accent === 'diamonds') {
+                return (
+                  <>
+                    <svg className="absolute left-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+                      <g fill={col} opacity={opac}>
+                        <polygon points="40,30 70,55 40,80 10,55" />
+                        <polygon points="50,130 85,160 50,190 15,160" />
+                        <polygon points="45,240 80,270 45,300 10,270" />
+                        <polygon points="50,350 85,380 50,410 15,380" />
+                      </g>
+                    </svg>
+                    <svg className="absolute right-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+                      <g fill={col} opacity={opac}>
+                        <polygon points="60,30 90,55 60,80 30,55" />
+                        <polygon points="50,130 85,160 50,190 15,160" />
+                        <polygon points="55,240 90,270 55,300 20,270" />
+                        <polygon points="50,350 85,380 50,410 15,380" />
+                      </g>
+                    </svg>
+                  </>
+                );
+              }
+              if (accent === 'minimal-lines') {
+                return (
+                  <>
+                    <svg className="absolute left-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+                      <g fill={col} opacity={opac}>
+                        <rect x="15" y="20" width="10" height="400" rx="4" />
+                        <rect x="40" y="60" width="8" height="320" rx="3" />
+                        <rect x="62" y="100" width="6" height="240" rx="2" />
+                      </g>
+                    </svg>
+                    <svg className="absolute right-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+                      <g fill={col} opacity={opac}>
+                        <rect x="75" y="20" width="10" height="400" rx="4" />
+                        <rect x="52" y="60" width="8" height="320" rx="3" />
+                        <rect x="32" y="100" width="6" height="240" rx="2" />
+                      </g>
+                    </svg>
+                  </>
+                );
+              }
+              if (accent === 'dots') {
+                return (
+                  <>
+                    <svg className="absolute left-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+                      <g fill={col} opacity={opac}>
+                        <circle cx="25" cy="40" r="10" />
+                        <circle cx="55" cy="40" r="8" />
+                        <circle cx="25" cy="100" r="12" />
+                        <circle cx="65" cy="100" r="9" />
+                        <circle cx="25" cy="160" r="14" />
+                        <circle cx="70" cy="160" r="10" />
+                        <circle cx="25" cy="220" r="14" />
+                        <circle cx="70" cy="220" r="10" />
+                        <circle cx="25" cy="280" r="12" />
+                        <circle cx="65" cy="280" r="9" />
+                        <circle cx="25" cy="340" r="10" />
+                        <circle cx="55" cy="340" r="8" />
+                        <circle cx="25" cy="400" r="8" />
+                        <circle cx="50" cy="400" r="6" />
+                      </g>
+                    </svg>
+                    <svg className="absolute right-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+                      <g fill={col} opacity={opac}>
+                        <circle cx="75" cy="40" r="10" />
+                        <circle cx="45" cy="40" r="8" />
+                        <circle cx="75" cy="100" r="12" />
+                        <circle cx="35" cy="100" r="9" />
+                        <circle cx="75" cy="160" r="14" />
+                        <circle cx="30" cy="160" r="10" />
+                        <circle cx="75" cy="220" r="14" />
+                        <circle cx="30" cy="220" r="10" />
+                        <circle cx="75" cy="280" r="12" />
+                        <circle cx="35" cy="280" r="9" />
+                        <circle cx="75" cy="340" r="10" />
+                        <circle cx="45" cy="340" r="8" />
+                        <circle cx="75" cy="400" r="8" />
+                        <circle cx="50" cy="400" r="6" />
+                      </g>
+                    </svg>
+                  </>
+                );
+              }
+
+              // Default: classic chevrons
+              return (
+                <>
+                  <svg className="absolute left-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+                    <g fill={col} opacity={opac}>
+                      <polygon points="0,20 60,20 30,80 0,80" />
+                      <polygon points="0,100 75,100 35,180 0,180" />
+                      <polygon points="0,200 90,200 40,300 0,300" />
+                      <polygon points="0,320 80,320 30,420 0,420" />
+                    </g>
+                  </svg>
+                  <svg className="absolute right-0 inset-y-0 h-full w-[10%] pointer-events-none" viewBox="0 0 100 440" preserveAspectRatio="none">
+                    <g fill={col} opacity={opac}>
+                      <polygon points="100,20 40,20 70,80 100,80" />
+                      <polygon points="100,100 25,100 65,180 100,180" />
+                      <polygon points="100,200 10,200 60,300 100,300" />
+                      <polygon points="100,320 20,320 70,420 100,420" />
+                    </g>
+                  </svg>
+                </>
+              );
+            })()}
 
             {/* Headline Text: Center vertically & horizontally within 90% Action Safe bounds */}
             <div className="relative z-10 w-full h-full flex items-center justify-center px-[5%] pt-2 sm:pt-3">

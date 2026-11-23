@@ -4570,15 +4570,64 @@ function loadSocialFeedDatabase(): any[] {
         const now = Date.now();
         // Auto-purge cards older than 72 hours
         const active = parsed.filter((item) => (now - (item.createdAt || 0)) <= SOCIAL_FEED_TTL_MS);
-        if (active.length !== parsed.length) {
-          saveSocialFeedDatabase(active);
+        if (active.length > 0) {
+          if (active.length !== parsed.length) {
+            saveSocialFeedDatabase(active);
+          }
+          return active;
         }
-        return active;
       }
     }
   } catch (e) {
     console.error("Error reading social_feed_database.json:", e);
   }
+
+  // Auto-seed from latest news if empty so Social Feed is always active and populated
+  try {
+    const posts = typeof loadNewsDatabase === "function" ? loadNewsDatabase() : [];
+    if (Array.isArray(posts) && posts.length > 0) {
+      const now = Date.now();
+      const validPosts = posts
+        .filter((p) => p && p.title && !p._deleted)
+        .slice(0, 15);
+
+      const seeded = validPosts.map((p, idx) => {
+        const isBrand = idx % 2 === 0;
+        const channelName = isBrand ? "AI News Maker" : (p.sourceChannel || p.sourceName || "दैनिक समाचार");
+        const cleanThumb = (typeof p.imageUrl === "string" && !p.imageUrl.startsWith("data:") && p.imageUrl.length < 500) ? p.imageUrl : "";
+        return {
+          id: `social_feed_${p.id || now + "_" + idx}`,
+          headline: String(p.title || "ताज़ा समाचार").slice(0, 300),
+          caption: String(p.summary || p.fullContent || p.title || "").slice(0, 500),
+          category: String(p.category || "General").slice(0, 50),
+          channelName: channelName.slice(0, 80),
+          reporterName: isBrand ? "AI News Desk" : "संवाददाता",
+          cardType: isBrand ? "brand" : "user",
+          isOfficialBrand: isBrand,
+          thumbnailUrl: cleanThumb,
+          aspectRatio: "4:5",
+          seoHashtags: [
+            "#AINewsMaker",
+            "#BreakingNews",
+            "#ताज़ा_समाचार",
+            "#HindiNews",
+            "#DigitalPatrakar",
+            "#NewsUpdate",
+          ],
+          updatedAt: now - idx * 1800000,
+          createdAt: now - idx * 1800000,
+        };
+      });
+
+      if (seeded.length > 0) {
+        saveSocialFeedDatabase(seeded);
+        return seeded;
+      }
+    }
+  } catch (seedErr) {
+    console.error("Error auto-seeding social feed:", seedErr);
+  }
+
   return [];
 }
 
@@ -5583,7 +5632,32 @@ app.get("/api/analytics/feed-summary", (req, res) => {
     const feedType = (req.query.type || "news").toString().toLowerCase();
     const aDb = loadAnalyticsDatabase();
     const newsDb = loadNewsDatabase();
-    const videosDb = loadVideosDatabase();
+    const rawVideosDb = loadVideosDatabase();
+
+    const isRealVideoItem = (v: any): boolean => {
+      if (!v || !v.id) return false;
+      const id = String(v.id);
+      if (['vid-1', 'vid-2', 'vid-3', 'vid-4', 'vid-5'].includes(id)) return false;
+      if (id.startsWith('demo-') || id.startsWith('sample-') || id.startsWith('dummy-')) return false;
+      if (v.videoUrl && typeof v.videoUrl === 'string' && (v.videoUrl.includes('mov_bbb.mp4') || v.videoUrl.includes('sample-videos') || v.videoUrl.includes('commondatastorage.googleapis.com/gtv-videos-bucket'))) return false;
+      if (v.title && (v.title.includes('विशेष ग्राउंड रिपोर्ट') || v.title.includes('राहुल गांधी') || v.title.includes('सामान्य User को यह Button') || v.title.includes('दिवाली से पहले HERO'))) return false;
+      return true;
+    };
+
+    const parseNumericStat = (val: any): number => {
+      if (typeof val === 'number' && !isNaN(val)) return val;
+      if (!val) return 0;
+      const str = String(val).replace(/,/g, '').trim();
+      const kMatch = str.match(/([\d.]+)\s*k/i);
+      if (kMatch) return Math.round(parseFloat(kMatch[1]) * 1000);
+      const mMatch = str.match(/([\d.]+)\s*m/i);
+      if (mMatch) return Math.round(parseFloat(mMatch[1]) * 1000000);
+      const digits = str.replace(/[^\d.]/g, '');
+      const n = parseFloat(digits);
+      return isNaN(n) ? 0 : Math.round(n);
+    };
+
+    const videosDb = rawVideosDb.filter(isRealVideoItem);
     const rssDb = loadRssSourcesDatabase();
 
     const activeRssSources = rssDb.filter((s: any) => s.isActive).length;
@@ -5660,7 +5734,32 @@ app.get("/api/admin/analytics/summary", (req, res) => {
     if (!aDb.userGraphics) aDb.userGraphics = {};
 
     const newsDb = loadNewsDatabase();
-    const videosDb = loadVideosDatabase();
+    const rawVideosDb = loadVideosDatabase();
+
+    const isRealVideoItem = (v: any): boolean => {
+      if (!v || !v.id) return false;
+      const id = String(v.id);
+      if (['vid-1', 'vid-2', 'vid-3', 'vid-4', 'vid-5'].includes(id)) return false;
+      if (id.startsWith('demo-') || id.startsWith('sample-') || id.startsWith('dummy-')) return false;
+      if (v.videoUrl && typeof v.videoUrl === 'string' && (v.videoUrl.includes('mov_bbb.mp4') || v.videoUrl.includes('sample-videos') || v.videoUrl.includes('commondatastorage.googleapis.com/gtv-videos-bucket'))) return false;
+      if (v.title && (v.title.includes('विशेष ग्राउंड रिपोर्ट') || v.title.includes('राहुल गांधी') || v.title.includes('सामान्य User को यह Button') || v.title.includes('दिवाली से पहले HERO'))) return false;
+      return true;
+    };
+
+    const parseNumericStat = (val: any): number => {
+      if (typeof val === 'number' && !isNaN(val)) return val;
+      if (!val) return 0;
+      const str = String(val).replace(/,/g, '').trim();
+      const kMatch = str.match(/([\d.]+)\s*k/i);
+      if (kMatch) return Math.round(parseFloat(kMatch[1]) * 1000);
+      const mMatch = str.match(/([\d.]+)\s*m/i);
+      if (mMatch) return Math.round(parseFloat(mMatch[1]) * 1000000);
+      const digits = str.replace(/[^\d.]/g, '');
+      const n = parseFloat(digits);
+      return isNaN(n) ? 0 : Math.round(n);
+    };
+
+    const videosDb = rawVideosDb.filter(isRealVideoItem);
 
     // Synchronize registered users so every registered user appears in user-wise analytics
     const allUsers = loadUsersMasterDatabase();
@@ -5744,15 +5843,18 @@ app.get("/api/admin/analytics/summary", (req, res) => {
         sortedItems = itemsDb.slice(0, 8).map((p: any, idx: number) => ({
           id: p.id || `item_${idx + 1}`,
           title: p.title || p.headline || `समाचार #${idx + 1}`,
-          views: (p as any).views || Math.max(1, 24 - idx * 2),
-          creates: (p as any).creates || Math.max(0, 8 - idx),
+          views: parseNumericStat((p as any).views) || Math.max(1, 24 - idx * 2),
+          creates: parseNumericStat((p as any).creates) || Math.max(0, 8 - idx),
         }));
       }
 
+      const totalCalculatedViews = sortedItems.reduce((acc, it) => acc + parseNumericStat(it.views), 0);
+      const totalCalculatedCreates = sortedItems.reduce((acc, it) => acc + parseNumericStat(it.creates), 0);
+
       return {
         uniqueUsers: sec.uniqueUsers?.length || 0,
-        totalViews: sec.totalViews || (sortedItems.reduce((acc, it) => acc + (it.views || 0), 0)),
-        clickCreate: sec.clickCreate || (sortedItems.reduce((acc, it) => acc + (it.creates || 0), 0)),
+        totalViews: sec.totalViews ? parseNumericStat(sec.totalViews) : totalCalculatedViews,
+        clickCreate: sec.clickCreate ? parseNumericStat(sec.clickCreate) : totalCalculatedCreates,
         generationStarts: sec.generationStarts || 0,
         generationSuccess: sec.generationSuccess || sec.downloads || 0,
         downloads: sec.downloads || 0,

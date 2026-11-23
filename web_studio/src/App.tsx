@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react';
+import { lazyWithRetry } from './lib/lazyWithRetry';
 import { NewsCardData, AIAnalysisResult, ChannelProfile, FrameDesign } from './types';
 import { INITIAL_PRESETS, PLACEHOLDER_NEWS_IMG } from './data/presets';
-const CardPreview = React.lazy(() => import('./components/CardPreview').then((m) => ({ default: m.CardPreview })));
-const CardEditor = React.lazy(() => import('./components/CardEditor').then((m) => ({ default: m.CardEditor })));
-const AIGenerateImageModal = React.lazy(() => import('./components/AIGenerateImageModal').then((m) => ({ default: m.AIGenerateImageModal })));
-const NewsCommandModal = React.lazy(() => import('./components/NewsCommandModal').then((m) => ({ default: m.NewsCommandModal })));
+const CardPreview = lazyWithRetry(() => import('./components/CardPreview').then((m) => ({ default: m.CardPreview })), 'CardPreview');
+const CardEditor = lazyWithRetry(() => import('./components/CardEditor').then((m) => ({ default: m.CardEditor })), 'CardEditor');
+const AIGenerateImageModal = lazyWithRetry(() => import('./components/AIGenerateImageModal').then((m) => ({ default: m.AIGenerateImageModal })), 'AIGenerateImageModal');
+const NewsCommandModal = lazyWithRetry(() => import('./components/NewsCommandModal').then((m) => ({ default: m.NewsCommandModal })), 'NewsCommandModal');
 import { buildHashtags } from './components/CaptionModal';
-const CaptionModal = React.lazy(() => import('./components/CaptionModal').then((m) => ({ default: m.CaptionModal })));
+const CaptionModal = lazyWithRetry(() => import('./components/CaptionModal').then((m) => ({ default: m.CaptionModal })), 'CaptionModal');
 import type { ReporterUser } from './components/LoginModal';
-const LoginModal = React.lazy(() => import('./components/LoginModal').then((m) => ({ default: m.LoginModal })));
+const LoginModal = lazyWithRetry(() => import('./components/LoginModal').then((m) => ({ default: m.LoginModal })), 'LoginModal');
 import { ErrorBoundary } from './components/ErrorBoundary';
-const AppGuideModal = React.lazy(() => import('./components/AppGuideModal').then((m) => ({ default: m.AppGuideModal })));
-const DraftsModal = React.lazy(() => import('./components/DraftsModal').then((m) => ({ default: m.DraftsModal })));
+const AppGuideModal = lazyWithRetry(() => import('./components/AppGuideModal').then((m) => ({ default: m.AppGuideModal })), 'AppGuideModal');
+const DraftsModal = lazyWithRetry(() => import('./components/DraftsModal').then((m) => ({ default: m.DraftsModal })), 'DraftsModal');
 import {
   saveOrUpdateDraft,
   getActiveDraftId,
@@ -19,15 +20,15 @@ import {
   SavedDraftRecord,
 } from './lib/draftManager';
 import { APP_CURRENT_VERSION, type AppVersionInfo } from './components/AppUpdateModal';
-const AppUpdateModal = React.lazy(() => import('./components/AppUpdateModal').then((m) => ({ default: m.AppUpdateModal })));
-const CloudSettingsModal = React.lazy(() => import('./components/CloudSettingsModal').then((m) => ({ default: m.CloudSettingsModal })));
-const GoogleSheetsUserSyncModal = React.lazy(() => import('./components/GoogleSheetsUserSyncModal').then((m) => ({ default: m.GoogleSheetsUserSyncModal })));
-const ChannelOnboardingModal = React.lazy(() => import('./components/ChannelOnboardingModal').then((m) => ({ default: m.ChannelOnboardingModal })));
-const InstallPwaModal = React.lazy(() => import('./components/InstallPwaModal').then((m) => ({ default: m.InstallPwaModal })));
-const NotificationPermissionModal = React.lazy(() => import('./components/NotificationPermissionModal').then((m) => ({ default: m.NotificationPermissionModal })));
-const AuthWelcomeScreen = React.lazy(() => import('./components/AuthWelcomeScreen').then((m) => ({ default: m.AuthWelcomeScreen })));
+const AppUpdateModal = lazyWithRetry(() => import('./components/AppUpdateModal').then((m) => ({ default: m.AppUpdateModal })), 'AppUpdateModal');
+const CloudSettingsModal = lazyWithRetry(() => import('./components/CloudSettingsModal').then((m) => ({ default: m.CloudSettingsModal })), 'CloudSettingsModal');
+const GoogleSheetsUserSyncModal = lazyWithRetry(() => import('./components/GoogleSheetsUserSyncModal').then((m) => ({ default: m.GoogleSheetsUserSyncModal })), 'GoogleSheetsUserSyncModal');
+const ChannelOnboardingModal = lazyWithRetry(() => import('./components/ChannelOnboardingModal').then((m) => ({ default: m.ChannelOnboardingModal })), 'ChannelOnboardingModal');
+const InstallPwaModal = lazyWithRetry(() => import('./components/InstallPwaModal').then((m) => ({ default: m.InstallPwaModal })), 'InstallPwaModal');
+const NotificationPermissionModal = lazyWithRetry(() => import('./components/NotificationPermissionModal').then((m) => ({ default: m.NotificationPermissionModal })), 'NotificationPermissionModal');
+const AuthWelcomeScreen = lazyWithRetry(() => import('./components/AuthWelcomeScreen').then((m) => ({ default: m.AuthWelcomeScreen })), 'AuthWelcomeScreen');
 import { BrandedNewsLoadingModal, BrandedLoaderMode } from './components/BrandedNewsLoadingModal';
-const NewsDetailModal = React.lazy(() => import('./components/NewsDetailModal').then((m) => ({ default: m.NewsDetailModal })));
+const NewsDetailModal = lazyWithRetry(() => import('./components/NewsDetailModal').then((m) => ({ default: m.NewsDetailModal })), 'NewsDetailModal');
 import { AppNotificationModal } from './components/AppNotificationModal';
 import { showAppSuccess, showAppConfirm } from './lib/notificationService';
 import { getApiUrl, getApiBaseUrl, ensureAuthToken, setAuthToken, getAuthHeaders, getAuthToken, isTokenExpired, clearAuthTokens, reauthenticateAdmin } from './lib/apiConfig';
@@ -92,25 +93,25 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
-const VideoStudioWeb = React.lazy(() => import('./components/VideoStudioWeb').then((m) => ({ default: m.VideoStudioWeb })));
-const RemotionTestStudio = React.lazy(() => import('./components/RemotionTestStudio').then((m) => ({ default: m.RemotionTestStudio })));
+const VideoStudioWeb = lazyWithRetry(() => import('./components/VideoStudioWeb').then((m) => ({ default: m.VideoStudioWeb })), 'VideoStudioWeb');
+const RemotionTestStudio = lazyWithRetry(() => import('./components/RemotionTestStudio').then((m) => ({ default: m.RemotionTestStudio })), 'RemotionTestStudio');
 import { FRAME_OPTIONS } from './lib/HeaderDesigns';
 import type { AutoFillNewsData } from './components/InlineAiNewsTools';
 import { AppTopBarWeb } from './components/AppTopBarWeb';
 import { AppBottomBarWeb } from './components/AppBottomBarWeb';
 import { HomeScreenWeb } from './components/HomeScreenWeb';
-const VideosScreenWeb = React.lazy(() => import('./components/VideosScreenWeb').then((m) => ({ default: m.VideosScreenWeb })));
-const ProfileScreenWeb = React.lazy(() => import('./components/ProfileScreenWeb').then((m) => ({ default: m.ProfileScreenWeb })));
-const NewsroomScreenWeb = React.lazy(() => import('./components/NewsroomScreenWeb').then((m) => ({ default: m.NewsroomScreenWeb })));
+const VideosScreenWeb = lazyWithRetry(() => import('./components/VideosScreenWeb').then((m) => ({ default: m.VideosScreenWeb })), 'VideosScreenWeb');
+const ProfileScreenWeb = lazyWithRetry(() => import('./components/ProfileScreenWeb').then((m) => ({ default: m.ProfileScreenWeb })), 'ProfileScreenWeb');
+const NewsroomScreenWeb = lazyWithRetry(() => import('./components/NewsroomScreenWeb').then((m) => ({ default: m.NewsroomScreenWeb })), 'NewsroomScreenWeb');
 import { addProjectToHistory } from './lib/projectHistoryManager';
-const TermsPage = React.lazy(() => import('./components/TermsPage').then((m) => ({ default: m.TermsPage })));
-const PrivacyPolicyPage = React.lazy(() => import('./components/PrivacyPolicyPage').then((m) => ({ default: m.PrivacyPolicyPage })));
-const AccountDeletionPage = React.lazy(() => import('./components/AccountDeletionPage').then((m) => ({ default: m.AccountDeletionPage })));
-const SupportContactPage = React.lazy(() => import('./components/SupportContactPage').then((m) => ({ default: m.SupportContactPage })));
-const RefundCancellationPolicyPage = React.lazy(() => import('./components/RefundCancellationPolicyPage').then((m) => ({ default: m.RefundCancellationPolicyPage })));
+const TermsPage = lazyWithRetry(() => import('./components/TermsPage').then((m) => ({ default: m.TermsPage })), 'TermsPage');
+const PrivacyPolicyPage = lazyWithRetry(() => import('./components/PrivacyPolicyPage').then((m) => ({ default: m.PrivacyPolicyPage })), 'PrivacyPolicyPage');
+const AccountDeletionPage = lazyWithRetry(() => import('./components/AccountDeletionPage').then((m) => ({ default: m.AccountDeletionPage })), 'AccountDeletionPage');
+const SupportContactPage = lazyWithRetry(() => import('./components/SupportContactPage').then((m) => ({ default: m.SupportContactPage })), 'SupportContactPage');
+const RefundCancellationPolicyPage = lazyWithRetry(() => import('./components/RefundCancellationPolicyPage').then((m) => ({ default: m.RefundCancellationPolicyPage })), 'RefundCancellationPolicyPage');
 import { AppFooterWeb } from './components/AppFooterWeb';
-const GraphicStudioGuideModal = React.lazy(() => import('./components/GraphicStudioGuideModal').then((m) => ({ default: m.GraphicStudioGuideModal })));
-const PackagePurchaseModal = React.lazy(() => import('./components/PackagePurchaseModal').then((m) => ({ default: m.PackagePurchaseModal })));
+const GraphicStudioGuideModal = lazyWithRetry(() => import('./components/GraphicStudioGuideModal').then((m) => ({ default: m.GraphicStudioGuideModal })), 'GraphicStudioGuideModal');
+const PackagePurchaseModal = lazyWithRetry(() => import('./components/PackagePurchaseModal').then((m) => ({ default: m.PackagePurchaseModal })), 'PackagePurchaseModal');
 import {
   triggerBreakingNewsAlert,
   addNotification,
@@ -463,6 +464,48 @@ export type FeedStatus = 'loading' | 'verified' | 'empty' | 'error';
 
 let globalLastAdminAuthToastTime = 0;
 
+export function isFreshBreakingNews(p: any): boolean {
+  if (!p) return false;
+  const now = Date.now();
+  const maxAgeMs = 3 * 60 * 60 * 1000; // Strictly 3 hours maximum age
+
+  // 1. Numeric timestamp / createdAt check
+  const rawTs = p.timestamp ?? p.createdAt ?? (p.fullPost && (p.fullPost.timestamp ?? p.fullPost.createdAt));
+  if (rawTs !== undefined && rawTs !== null) {
+    const tsNum = typeof rawTs === 'number' ? rawTs : new Date(rawTs).getTime();
+    if (!isNaN(tsNum) && tsNum > 1000000000) {
+      return (now - tsNum) <= maxAgeMs;
+    }
+  }
+
+  // 2. Published time string heuristic check
+  const timeStr = String(p.publishedTime || p.time || '').toLowerCase();
+  if (
+    timeStr.includes('दिन') ||
+    timeStr.includes('day') ||
+    timeStr.includes('सप्ताह') ||
+    timeStr.includes('week') ||
+    timeStr.includes('महीना') ||
+    timeStr.includes('month') ||
+    timeStr.includes('साल') ||
+    timeStr.includes('year') ||
+    timeStr.includes('कल') ||
+    timeStr.includes('yesterday')
+  ) {
+    return false;
+  }
+
+  const hoursMatch = timeStr.match(/(\d+)\s*(घंटे|घंटा|hour|hr|h)/);
+  if (hoursMatch) {
+    const hrs = parseInt(hoursMatch[1], 10);
+    if (!isNaN(hrs) && hrs > 3) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export default function App() {
   // Only true in native Android APK WebView (via AndroidBridge, file:///android_asset or appassets domain)
   const isAndroidEnvironment = typeof window !== 'undefined' && (
@@ -570,7 +613,7 @@ export default function App() {
   });
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [breakingNewsAlert, setBreakingNewsAlert] = useState<{
+  const [breakingNewsAlerts, setBreakingNewsAlerts] = useState<Array<{
     id: string;
     title: string;
     summary?: string;
@@ -579,7 +622,28 @@ export default function App() {
     imageUrl?: string;
     publishedTime?: string;
     fullPost?: NewsFeedPost;
-  } | null>(null);
+  }>>([]);
+  const [activeBreakingIndex, setActiveBreakingIndex] = useState(0);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+
+  const breakingNewsAlert = breakingNewsAlerts.length > 0
+    ? (breakingNewsAlerts[activeBreakingIndex] || breakingNewsAlerts[0])
+    : null;
+
+  const setBreakingNewsAlert = (alert: any) => {
+    if (!alert) {
+      setBreakingNewsAlerts([]);
+      setActiveBreakingIndex(0);
+    } else if (Array.isArray(alert)) {
+      setBreakingNewsAlerts(alert.filter((it: any) => isFreshBreakingNews(it)));
+      setActiveBreakingIndex(0);
+    } else {
+      if (isFreshBreakingNews(alert)) {
+        setBreakingNewsAlerts([alert]);
+        setActiveBreakingIndex(0);
+      }
+    }
+  };
 
   useEffect(() => {
     const handleBreakingAlertEvent = (e: any) => {
@@ -1020,11 +1084,13 @@ export default function App() {
                     linkTab: 'home',
                   });
                 });
-                const hasBreaking = newItems.some((p: any) => Boolean(p.breaking || p.isBreaking || p.type === 'breaking' || p.category === 'ब्रेकिंग न्यूज़'));
-                if (hasBreaking) {
+                const freshBreakingItems = newItems.filter((p: any) => {
+                  const isBreaking = Boolean(p.breaking || p.isBreaking || p.type === 'breaking' || p.category === 'ब्रेकिंग न्यूज़');
+                  return isBreaking && isFreshBreakingNews(p);
+                });
+                if (freshBreakingItems.length > 0) {
                   playBreakingNewsAlertSound();
-                  const breakingItem = newItems.find((p: any) => Boolean(p.breaking || p.isBreaking || p.type === 'breaking' || p.category === 'ब्रेकिंग न्यूज़')) || newItems[0];
-                  setBreakingNewsAlert({
+                  const alerts = freshBreakingItems.map((breakingItem: any) => ({
                     id: String(breakingItem.id),
                     title: breakingItem.title,
                     summary: breakingItem.summary || breakingItem.description || breakingItem.content || '',
@@ -1033,8 +1099,10 @@ export default function App() {
                     imageUrl: breakingItem.imageUrl || breakingItem.image || breakingItem.thumbnailUrl || '',
                     publishedTime: breakingItem.publishedTime || breakingItem.time || 'अभी-अभी',
                     fullPost: breakingItem,
-                  });
-                  setToastMessage('🚨 नई ब्रेकिंग न्यूज़ प्रकाशित हुई!');
+                  }));
+                  setBreakingNewsAlerts(alerts);
+                  setActiveBreakingIndex(0);
+                  setToastMessage(alerts.length > 1 ? `🚨 ${alerts.length} नई ब्रेकिंग न्यूज़ प्रकाशित हुईं!` : '🚨 नई ब्रेकिंग न्यूज़ प्रकाशित हुई!');
                 } else {
                   playNormalNotificationSound();
                   setToastMessage('📰 नई खबर स्वीकृत और होम फ़ीड में जोड़ी गई!');
@@ -4381,11 +4449,25 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#070D1E] text-slate-100 flex flex-col font-sans transition-colors w-full max-w-full overflow-x-clip">
-      {/* Impressive Premium Breaking News Pop-up Modal (Issue 5) */}
+      {/* Impressive Premium Breaking News Pop-up Modal (Filtered <3h, Horizontal Swipe, Clean OK Button) */}
       {breakingNewsAlert && (
         <div className="fixed inset-0 z-[120] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div
-            className="relative w-full max-w-md bg-gradient-to-b from-[#180a14] via-[#0d1527] to-[#070d1e] rounded-3xl p-5 sm:p-6 shadow-[0_0_60px_rgba(244,63,94,0.35)] border-2 border-rose-500/70 ring-4 ring-rose-500/20 text-white flex flex-col gap-4 animate-in zoom-in-95 duration-200"
+            onTouchStart={(e) => setTouchStartX(e.touches[0].clientX)}
+            onTouchEnd={(e) => {
+              if (touchStartX === null || breakingNewsAlerts.length <= 1) return;
+              const touchEndX = e.changedTouches[0].clientX;
+              const diff = touchStartX - touchEndX;
+              if (Math.abs(diff) > 40) {
+                if (diff > 0) {
+                  setActiveBreakingIndex((prev) => (prev + 1) % breakingNewsAlerts.length);
+                } else {
+                  setActiveBreakingIndex((prev) => (prev - 1 + breakingNewsAlerts.length) % breakingNewsAlerts.length);
+                }
+              }
+              setTouchStartX(null);
+            }}
+            className="relative w-full max-w-md bg-gradient-to-b from-[#180a14] via-[#0d1527] to-[#070d1e] rounded-3xl p-5 sm:p-6 shadow-[0_0_60px_rgba(244,63,94,0.35)] border-2 border-rose-500/70 ring-4 ring-rose-500/20 text-white flex flex-col gap-3.5 animate-in zoom-in-95 duration-200 select-none"
             role="dialog"
             aria-modal="true"
             aria-labelledby="breaking-news-modal-title"
@@ -4400,8 +4482,8 @@ export default function App() {
               <X className="w-4 h-4" />
             </button>
 
-            {/* Glowing Header Badge with Pulse Indicator */}
-            <div className="flex items-center gap-2">
+            {/* Glowing Header Badge with Pulse Indicator and Multi-Item Counter */}
+            <div className="flex items-center justify-between gap-2">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-rose-600/30 border border-rose-500/60 text-rose-300 text-xs font-black tracking-wide shadow-lg">
                 <span className="relative flex h-2.5 w-2.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
@@ -4409,11 +4491,52 @@ export default function App() {
                 </span>
                 <span>🚨 नई ब्रेकिंग न्यूज़ प्रकाशित हुई!</span>
               </div>
+
+              {breakingNewsAlerts.length > 1 && (
+                <div className="flex items-center gap-1.5 mr-8">
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-950/80 text-rose-300 border border-rose-500/40">
+                    {activeBreakingIndex + 1} / {breakingNewsAlerts.length}
+                  </span>
+                </div>
+              )}
             </div>
+
+            {/* Multi-Item Navigation Arrows & Dots if multiple fresh breaking items exist */}
+            {breakingNewsAlerts.length > 1 && (
+              <div className="flex items-center justify-between text-xs text-slate-400 px-2 py-1 bg-slate-900/70 rounded-xl border border-slate-800/80">
+                <button
+                  type="button"
+                  onClick={() => setActiveBreakingIndex((prev) => (prev - 1 + breakingNewsAlerts.length) % breakingNewsAlerts.length)}
+                  className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center gap-1 transition text-xs font-bold"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>पिछली</span>
+                </button>
+                <div className="flex items-center gap-1.5">
+                  {breakingNewsAlerts.map((_, idx) => (
+                    <span
+                      key={idx}
+                      onClick={() => setActiveBreakingIndex(idx)}
+                      className={`h-1.5 rounded-full cursor-pointer transition-all ${
+                        idx === activeBreakingIndex ? 'w-5 bg-rose-500' : 'w-2 bg-slate-700 hover:bg-slate-500'
+                      }`}
+                    />
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveBreakingIndex((prev) => (prev + 1) % breakingNewsAlerts.length)}
+                  className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center gap-1 transition text-xs font-bold"
+                >
+                  <span>अगली</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
 
             {/* Optional Image Banner */}
             {breakingNewsAlert.imageUrl && (
-              <div className="relative w-full h-44 rounded-2xl overflow-hidden border border-rose-500/30 bg-slate-950/60">
+              <div className="relative w-full h-40 rounded-2xl overflow-hidden border border-rose-500/30 bg-slate-950/60">
                 <img
                   src={breakingNewsAlert.imageUrl}
                   alt={breakingNewsAlert.title}
@@ -4446,34 +4569,29 @@ export default function App() {
             {/* Headline Title */}
             <h3
               id="breaking-news-modal-title"
-              className="text-base sm:text-lg font-black text-white leading-snug tracking-tight line-clamp-3 text-left"
+              className="text-base sm:text-lg font-black text-white leading-snug tracking-tight line-clamp-3 text-left font-['Baloo_2',sans-serif]"
             >
               {breakingNewsAlert.title}
             </h3>
 
             {/* Summary Snippet */}
             {breakingNewsAlert.summary && (
-              <div className="bg-slate-950/50 p-3 rounded-xl border border-slate-800/60 text-xs text-slate-300 leading-relaxed line-clamp-3 text-left">
+              <div className="bg-slate-950/50 p-2.5 rounded-xl border border-slate-800/60 text-xs text-slate-300 leading-relaxed line-clamp-3 text-left">
                 {breakingNewsAlert.summary}
               </div>
             )}
 
-            {/* Action Buttons */}
+            {/* Action Buttons: Simple OK dismiss button & View in Home Feed */}
             <div className="flex flex-col gap-2 pt-1">
               <button
                 type="button"
                 onClick={() => {
-                  const post = breakingNewsAlert.fullPost || posts.find((p) => String(p.id) === String(breakingNewsAlert.id));
                   setBreakingNewsAlert(null);
-                  if (post) {
-                    handleOpenStudioWithNews(post);
-                  } else {
-                    navigateToTab('studio');
-                  }
                 }}
-                className="w-full bg-gradient-to-r from-rose-600 via-red-600 to-amber-500 hover:from-rose-500 hover:to-amber-400 text-white font-black py-3 px-4 rounded-xl shadow-[0_0_20px_rgba(244,63,94,0.4)] flex items-center justify-center gap-2 text-sm transition-all transform active:scale-98"
+                className="w-full bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 text-white font-black py-3 px-4 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.35)] flex items-center justify-center gap-2 text-sm transition-all transform active:scale-98 cursor-pointer"
               >
-                <span>🎨 खबर से ग्राफिक बनाएं</span>
+                <Check className="w-4 h-4" />
+                <span>ठीक है (OK)</span>
               </button>
 
               <button
@@ -4483,7 +4601,7 @@ export default function App() {
                   navigateToTab('home');
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="w-full bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700/70 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-xs transition-colors"
+                className="w-full bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700/70 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-xs transition-colors cursor-pointer"
               >
                 <span>📰 होम फ़ीड में देखें</span>
               </button>

@@ -7372,7 +7372,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                               </span>
                             </div>
                             <div className="flex items-center gap-3 shrink-0 font-mono text-[11px]">
-                              <span className="text-blue-300">👁️ {item.views} व्यूज</span>
+                              <span className="text-blue-300">
+                                👁️ {typeof item.views === 'number'
+                                  ? (item.views >= 1000 ? `${(item.views / 1000).toFixed(1).replace(/\.0$/, '')}K` : item.views)
+                                  : String(item.views || 0).replace('देखा गया', '').trim()} व्यूज
+                              </span>
                               <span className="text-amber-400">🎨 {item.creates} ग्राफिक</span>
                               <span className="text-slate-400 text-[10px]">👉 विवरण</span>
                             </div>
@@ -7475,7 +7479,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                         <Eye className="w-3.5 h-3.5 text-blue-400" />
                       </div>
                       <div className="text-xl sm:text-2xl font-black font-mono text-white mt-1">
-                        {analyticsData?.video?.totalViews ?? 0}
+                        {typeof analyticsData?.video?.totalViews === 'number'
+                          ? (analyticsData.video.totalViews >= 1000 ? `${(analyticsData.video.totalViews / 1000).toFixed(1).replace(/\.0$/, '')}K` : analyticsData.video.totalViews)
+                          : (String(analyticsData?.video?.totalViews || '0').replace('देखा गया', '').trim() || 0)}
                       </div>
                       <span className="text-[10px] text-slate-500">कुल वीडियो दर्शक</span>
                     </div>
@@ -7561,7 +7567,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                               </span>
                             </div>
                             <div className="flex items-center gap-3 shrink-0 font-mono text-[11px]">
-                              <span className="text-blue-300">👁️ {item.views} व्यूज</span>
+                              <span className="text-blue-300">
+                                👁️ {typeof item.views === 'number'
+                                  ? (item.views >= 1000 ? `${(item.views / 1000).toFixed(1).replace(/\.0$/, '')}K` : item.views)
+                                  : String(item.views || 0).replace('देखा गया', '').trim()} व्यूज
+                              </span>
                               <span className="text-purple-300">🎬 {item.creates} उपयोग</span>
                             </div>
                           </div>

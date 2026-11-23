@@ -16571,14 +16571,56 @@ function loadSocialFeedDatabase() {
       if (Array.isArray(parsed)) {
         const now = Date.now();
         const active = parsed.filter((item) => now - (item.createdAt || 0) <= SOCIAL_FEED_TTL_MS);
-        if (active.length !== parsed.length) {
-          saveSocialFeedDatabase(active);
+        if (active.length > 0) {
+          if (active.length !== parsed.length) {
+            saveSocialFeedDatabase(active);
+          }
+          return active;
         }
-        return active;
       }
     }
   } catch (e) {
     console.error("Error reading social_feed_database.json:", e);
+  }
+  try {
+    const posts = typeof loadNewsDatabase === "function" ? loadNewsDatabase() : [];
+    if (Array.isArray(posts) && posts.length > 0) {
+      const now = Date.now();
+      const validPosts = posts.filter((p) => p && p.title && !p._deleted).slice(0, 15);
+      const seeded = validPosts.map((p, idx) => {
+        const isBrand = idx % 2 === 0;
+        const channelName = isBrand ? "AI News Maker" : p.sourceChannel || p.sourceName || "\u0926\u0948\u0928\u093F\u0915 \u0938\u092E\u093E\u091A\u093E\u0930";
+        const cleanThumb = typeof p.imageUrl === "string" && !p.imageUrl.startsWith("data:") && p.imageUrl.length < 500 ? p.imageUrl : "";
+        return {
+          id: `social_feed_${p.id || now + "_" + idx}`,
+          headline: String(p.title || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930").slice(0, 300),
+          caption: String(p.summary || p.fullContent || p.title || "").slice(0, 500),
+          category: String(p.category || "General").slice(0, 50),
+          channelName: channelName.slice(0, 80),
+          reporterName: isBrand ? "AI News Desk" : "\u0938\u0902\u0935\u093E\u0926\u0926\u093E\u0924\u093E",
+          cardType: isBrand ? "brand" : "user",
+          isOfficialBrand: isBrand,
+          thumbnailUrl: cleanThumb,
+          aspectRatio: "4:5",
+          seoHashtags: [
+            "#AINewsMaker",
+            "#BreakingNews",
+            "#\u0924\u093E\u091C\u093C\u093E_\u0938\u092E\u093E\u091A\u093E\u0930",
+            "#HindiNews",
+            "#DigitalPatrakar",
+            "#NewsUpdate"
+          ],
+          updatedAt: now - idx * 18e5,
+          createdAt: now - idx * 18e5
+        };
+      });
+      if (seeded.length > 0) {
+        saveSocialFeedDatabase(seeded);
+        return seeded;
+      }
+    }
+  } catch (seedErr) {
+    console.error("Error auto-seeding social feed:", seedErr);
   }
   return [];
 }
@@ -17381,7 +17423,29 @@ app.get("/api/analytics/feed-summary", (req, res) => {
     const feedType = (req.query.type || "news").toString().toLowerCase();
     const aDb = loadAnalyticsDatabase();
     const newsDb = loadNewsDatabase();
-    const videosDb = loadVideosDatabase();
+    const rawVideosDb = loadVideosDatabase();
+    const isRealVideoItem = (v) => {
+      if (!v || !v.id) return false;
+      const id = String(v.id);
+      if (["vid-1", "vid-2", "vid-3", "vid-4", "vid-5"].includes(id)) return false;
+      if (id.startsWith("demo-") || id.startsWith("sample-") || id.startsWith("dummy-")) return false;
+      if (v.videoUrl && typeof v.videoUrl === "string" && (v.videoUrl.includes("mov_bbb.mp4") || v.videoUrl.includes("sample-videos") || v.videoUrl.includes("commondatastorage.googleapis.com/gtv-videos-bucket"))) return false;
+      if (v.title && (v.title.includes("\u0935\u093F\u0936\u0947\u0937 \u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0930\u093F\u092A\u094B\u0930\u094D\u091F") || v.title.includes("\u0930\u093E\u0939\u0941\u0932 \u0917\u093E\u0902\u0927\u0940") || v.title.includes("\u0938\u093E\u092E\u093E\u0928\u094D\u092F User \u0915\u094B \u092F\u0939 Button") || v.title.includes("\u0926\u093F\u0935\u093E\u0932\u0940 \u0938\u0947 \u092A\u0939\u0932\u0947 HERO"))) return false;
+      return true;
+    };
+    const parseNumericStat = (val) => {
+      if (typeof val === "number" && !isNaN(val)) return val;
+      if (!val) return 0;
+      const str = String(val).replace(/,/g, "").trim();
+      const kMatch = str.match(/([\d.]+)\s*k/i);
+      if (kMatch) return Math.round(parseFloat(kMatch[1]) * 1e3);
+      const mMatch = str.match(/([\d.]+)\s*m/i);
+      if (mMatch) return Math.round(parseFloat(mMatch[1]) * 1e6);
+      const digits = str.replace(/[^\d.]/g, "");
+      const n = parseFloat(digits);
+      return isNaN(n) ? 0 : Math.round(n);
+    };
+    const videosDb = rawVideosDb.filter(isRealVideoItem);
     const rssDb = loadRssSourcesDatabase();
     const activeRssSources = rssDb.filter((s) => s.isActive).length;
     const totalPosts = newsDb.length;
@@ -17450,7 +17514,29 @@ app.get("/api/admin/analytics/summary", (req, res) => {
     const aDb = loadAnalyticsDatabase();
     if (!aDb.userGraphics) aDb.userGraphics = {};
     const newsDb = loadNewsDatabase();
-    const videosDb = loadVideosDatabase();
+    const rawVideosDb = loadVideosDatabase();
+    const isRealVideoItem = (v) => {
+      if (!v || !v.id) return false;
+      const id = String(v.id);
+      if (["vid-1", "vid-2", "vid-3", "vid-4", "vid-5"].includes(id)) return false;
+      if (id.startsWith("demo-") || id.startsWith("sample-") || id.startsWith("dummy-")) return false;
+      if (v.videoUrl && typeof v.videoUrl === "string" && (v.videoUrl.includes("mov_bbb.mp4") || v.videoUrl.includes("sample-videos") || v.videoUrl.includes("commondatastorage.googleapis.com/gtv-videos-bucket"))) return false;
+      if (v.title && (v.title.includes("\u0935\u093F\u0936\u0947\u0937 \u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0930\u093F\u092A\u094B\u0930\u094D\u091F") || v.title.includes("\u0930\u093E\u0939\u0941\u0932 \u0917\u093E\u0902\u0927\u0940") || v.title.includes("\u0938\u093E\u092E\u093E\u0928\u094D\u092F User \u0915\u094B \u092F\u0939 Button") || v.title.includes("\u0926\u093F\u0935\u093E\u0932\u0940 \u0938\u0947 \u092A\u0939\u0932\u0947 HERO"))) return false;
+      return true;
+    };
+    const parseNumericStat = (val) => {
+      if (typeof val === "number" && !isNaN(val)) return val;
+      if (!val) return 0;
+      const str = String(val).replace(/,/g, "").trim();
+      const kMatch = str.match(/([\d.]+)\s*k/i);
+      if (kMatch) return Math.round(parseFloat(kMatch[1]) * 1e3);
+      const mMatch = str.match(/([\d.]+)\s*m/i);
+      if (mMatch) return Math.round(parseFloat(mMatch[1]) * 1e6);
+      const digits = str.replace(/[^\d.]/g, "");
+      const n = parseFloat(digits);
+      return isNaN(n) ? 0 : Math.round(n);
+    };
+    const videosDb = rawVideosDb.filter(isRealVideoItem);
     const allUsers = loadUsersMasterDatabase();
     for (const u of allUsers) {
       const emailKey = (u.email || "").toLowerCase().trim();
@@ -17508,14 +17594,16 @@ app.get("/api/admin/analytics/summary", (req, res) => {
         sortedItems = itemsDb.slice(0, 8).map((p, idx) => ({
           id: p.id || `item_${idx + 1}`,
           title: p.title || p.headline || `\u0938\u092E\u093E\u091A\u093E\u0930 #${idx + 1}`,
-          views: p.views || Math.max(1, 24 - idx * 2),
-          creates: p.creates || Math.max(0, 8 - idx)
+          views: parseNumericStat(p.views) || Math.max(1, 24 - idx * 2),
+          creates: parseNumericStat(p.creates) || Math.max(0, 8 - idx)
         }));
       }
+      const totalCalculatedViews = sortedItems.reduce((acc, it) => acc + parseNumericStat(it.views), 0);
+      const totalCalculatedCreates = sortedItems.reduce((acc, it) => acc + parseNumericStat(it.creates), 0);
       return {
         uniqueUsers: sec.uniqueUsers?.length || 0,
-        totalViews: sec.totalViews || sortedItems.reduce((acc, it) => acc + (it.views || 0), 0),
-        clickCreate: sec.clickCreate || sortedItems.reduce((acc, it) => acc + (it.creates || 0), 0),
+        totalViews: sec.totalViews ? parseNumericStat(sec.totalViews) : totalCalculatedViews,
+        clickCreate: sec.clickCreate ? parseNumericStat(sec.clickCreate) : totalCalculatedCreates,
         generationStarts: sec.generationStarts || 0,
         generationSuccess: sec.generationSuccess || sec.downloads || 0,
         downloads: sec.downloads || 0,

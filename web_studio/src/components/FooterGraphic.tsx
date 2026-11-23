@@ -97,10 +97,15 @@ export const FooterGraphic: React.FC<FooterGraphicProps> = ({
   // Calculate Contrast & Colors
   const luminance = getLuminance(effectiveBgColor);
   const isLightBg = luminance >= 0.5;
-  const effectiveTextColor = effectiveCustomTextColor && effectiveCustomTextColor.trim() !== ''
+  const isWhiteCustomText = effectiveCustomTextColor && (
+    effectiveCustomTextColor.toLowerCase() === '#ffffff' ||
+    effectiveCustomTextColor.toLowerCase() === '#fff' ||
+    effectiveCustomTextColor.toLowerCase() === 'white'
+  );
+  const effectiveTextColor = (effectiveCustomTextColor && effectiveCustomTextColor.trim() !== '' && !(isLightBg && isWhiteCustomText))
     ? effectiveCustomTextColor
-    : (isLightBg ? '#000000' : '#FFFFFF');
-  const separatorColor = isLightBg ? 'rgba(15, 23, 42, 0.35)' : 'rgba(255, 255, 255, 0.45)';
+    : (isLightBg ? '#0B132B' : '#FFFFFF');
+  const separatorColor = isLightBg ? 'rgba(11, 19, 43, 0.4)' : 'rgba(255, 255, 255, 0.45)';
   const sepChar = footerConfig?.separator === 'none' ? '' : (footerConfig?.separator || '|');
 
   // 1. Social Username: From user profile only, no hardcoded '@AINewsMaker' default

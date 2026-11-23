@@ -13,7 +13,7 @@ export const HeaderGraphic: React.FC<HeaderGraphicProps> = ({
   brandTagline,
   brandName,
   customLogoUrl,
-  logoScale = 1.25,
+  logoScale = 1.0,
 }) => {
   // If user uploaded a custom header PNG, render it directly
   if (customHeaderPng) {
@@ -40,11 +40,11 @@ export const HeaderGraphic: React.FC<HeaderGraphicProps> = ({
       <div className="pt-3.5 pl-3.5 sm:pt-4 sm:pl-4">
         {isCustomBranded ? (
           <div className="flex items-center gap-2 sm:gap-2.5 max-w-[260px] sm:max-w-[300px] pointer-events-auto">
-            {/* Custom Logo Image (Transparent / No colored background) OR Vector Emblem */}
+            {/* Custom Logo Image: Clean logo only, zero leaked channel name text */}
             {customLogoUrl ? (
               <div
                 style={{
-                  transform: `scale(${logoScale ?? 1.25})`,
+                  transform: `scale(${logoScale ?? 1.0})`,
                   transformOrigin: 'left center',
                 }}
                 className="relative max-h-12 sm:max-h-16 flex items-center justify-center shrink-0 transition-transform"
@@ -65,17 +65,19 @@ export const HeaderGraphic: React.FC<HeaderGraphicProps> = ({
               </div>
             )}
 
-            {/* Text: Custom Brand Name + Tagline */}
-            <div className="flex flex-col leading-none">
-              <span className="text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] font-black text-base sm:text-lg tracking-tight font-['Mukta']">
-                {brandName}
-              </span>
-              {brandTagline && (
-                <div className="bg-black text-white text-[8px] sm:text-[9.5px] font-bold px-1.5 py-0.5 rounded tracking-tight mt-1 whitespace-nowrap font-['Noto_Sans_Devanagari']">
-                  {brandTagline}
-                </div>
-              )}
-            </div>
+            {/* Text: Custom Brand Name + Tagline ONLY when user has NO logo image */}
+            {!customLogoUrl && brandName && brandName.trim() !== '' && brandName.trim() !== 'योर लोगो' && (
+              <div className="flex flex-col leading-none">
+                <span className="text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] font-black text-base sm:text-lg tracking-tight font-['Mukta']">
+                  {brandName}
+                </span>
+                {brandTagline && (
+                  <div className="bg-black text-white text-[8px] sm:text-[9.5px] font-bold px-1.5 py-0.5 rounded tracking-tight mt-1 whitespace-nowrap font-['Noto_Sans_Devanagari']">
+                    {brandTagline}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ) : (
           /* Clean Sample Placeholder: 'YOUR LOGO' */

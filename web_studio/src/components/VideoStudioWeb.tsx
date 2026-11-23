@@ -1495,6 +1495,72 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   // Completed Download State for Fallback Direct Click (Part G.21)
   const [completedDownloadUrl, setCompletedDownloadUrl] = useState<string | null>(null);
   const [completedDownloadFilename, setCompletedDownloadFilename] = useState<string | null>(null);
+  const completedBlobRef = useRef<Blob | null>(null);
+  const [isVideoSuccessModalOpen, setIsVideoSuccessModalOpen] = useState<boolean>(false);
+
+  // Robust Browser File Download Helper
+  const triggerBrowserDownload = (blob: Blob, filename: string): boolean => {
+    try {
+      if ((window as any).AndroidBridge?.downloadVideo) {
+        try {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const base64data = reader.result as string;
+            (window as any).AndroidBridge.downloadVideo(base64data, filename);
+          };
+          reader.readAsDataURL(blob);
+          return true;
+        } catch {
+          const u = URL.createObjectURL(blob);
+          (window as any).AndroidBridge.downloadVideo(u, filename);
+          return true;
+        }
+      }
+
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = filename;
+      link.setAttribute('download', filename);
+      link.rel = 'noopener noreferrer';
+      link.style.position = 'fixed';
+      link.style.left = '-9999px';
+      link.style.top = '-9999px';
+      link.style.width = '1px';
+      link.style.height = '1px';
+      link.style.opacity = '0.01';
+      link.target = '_self';
+      document.body.appendChild(link);
+
+      try {
+        const clickEvent = new MouseEvent('click', {
+          view: window,
+          bubbles: true,
+          cancelable: true,
+        });
+        link.dispatchEvent(clickEvent);
+      } catch {
+        link.click();
+      }
+
+      setTimeout(() => {
+        try {
+          if (link.parentNode) document.body.removeChild(link);
+        } catch {}
+      }, 3000);
+
+      setTimeout(() => {
+        try {
+          URL.revokeObjectURL(objectUrl);
+        } catch {}
+      }, 120000);
+
+      return true;
+    } catch (err) {
+      console.error('triggerBrowserDownload error:', err);
+      return false;
+    }
+  };
   
   // Auto-set aspect ratio based on incoming video - default 9:16 for reels or incoming ratio
   const [aspect, setAspect] = useState<VideoAspect>(() => {
@@ -1939,6 +2005,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     setClips([]);
     setActiveClipIndex(0);
     setCompletedDownloadUrl(null);
+    completedBlobRef.current = null;
 
     // Reset duration and playback time
     setDuration(0);
@@ -2289,6 +2356,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       const localUrl = URL.createObjectURL(file);
       setVideoUrl(localUrl);
       setCompletedDownloadUrl(null);
+    completedBlobRef.current = null;
+      completedBlobRef.current = null;
       setIsPlaying(false);
       setTrimStart(0);
 
@@ -2657,26 +2726,35 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   };
 
   // Export Full Video File with Complete Composition (Parity Guarantee: Video + Frame + Audio)
-  const handleDownloadVideo = async () => {
+  const handleDownloadVideo = async (forceRerender: boolean = false) => {
     if (isExporting) return;
 
     // If video is already rendered and ready, instantly download without re-rendering!
-    if (completedDownloadUrl) {
+    if (!forceRerender && (completedDownloadUrl || completedBlobRef.current)) {
       const filename = completedDownloadFilename || generateVideoDownloadFileName('mp4');
-      if ((window as any).AndroidBridge?.downloadVideo) {
-        (window as any).AndroidBridge.downloadVideo(completedDownloadUrl, filename);
-      } else {
+      if (completedBlobRef.current) {
+        triggerBrowserDownload(completedBlobRef.current, filename);
+      } else if (completedDownloadUrl) {
         const link = document.createElement('a');
         link.href = completedDownloadUrl;
         link.download = filename;
-        link.style.display = 'none';
+        link.setAttribute('download', filename);
+        link.style.position = 'fixed';
+        link.style.left = '-9999px';
+        link.style.top = '-9999px';
+        link.style.opacity = '0.01';
         document.body.appendChild(link);
-        link.click();
+        try {
+          link.dispatchEvent(new MouseEvent('click', { view: window, bubbles: true, cancelable: true }));
+        } catch {
+          link.click();
+        }
         setTimeout(() => {
           if (link.parentNode) document.body.removeChild(link);
-        }, 1000);
+        }, 3000);
       }
-      showToast('✅ तैयार वीडियो पुनः डाउनलोड हो गया!');
+      setIsVideoSuccessModalOpen(true);
+      showToast('✅ तैयार वीडियो तुरंत डाउनलोड हो रहा है!');
       return;
     }
 
@@ -3337,32 +3415,15 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         console.warn('Saving video to local project history failed:', vHistErr);
       }
 
+      completedBlobRef.current = finalBlob;
       setCompletedDownloadUrl(downloadUrl);
       setCompletedDownloadFilename(filename);
 
-      if ((window as any).AndroidBridge?.downloadVideo) {
-        try {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            const base64data = reader.result as string;
-            (window as any).AndroidBridge.downloadVideo(base64data, filename);
-          };
-          reader.readAsDataURL(finalBlob);
-        } catch {
-          (window as any).AndroidBridge.downloadVideo(downloadUrl, filename);
-        }
-      } else {
-        const link = document.createElement('a');
-        link.href = downloadUrl;
-        link.download = filename;
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        setTimeout(() => {
-          if (link.parentNode) document.body.removeChild(link);
-          URL.revokeObjectURL(downloadUrl);
-        }, 60000);
-      }
+      // Trigger file download using robust browser-compatible helper
+      triggerBrowserDownload(finalBlob, filename);
+
+      // Open Success Modal directly so the user has an immediate, unmissable click-to-save button & sharing
+      setIsVideoSuccessModalOpen(true);
 
       showToast(`✅ ${ext.toUpperCase()} वीडियो पूरी न्यूज़ जैकेट के साथ डाउनलोड हुआ (${Math.round(totalDuration)}s)!`);
       triggerVideoWelcomeReward();
@@ -7233,6 +7294,97 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Video Render Complete & Instant Download Modal Dialog */}
+      {isVideoSuccessModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-gradient-to-b from-slate-900 via-slate-950 to-black border-2 border-emerald-500/80 rounded-3xl w-full max-w-md shadow-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-emerald-500/30">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-400 shadow-inner">
+                  <CheckCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-emerald-300">वीडियो रेंडर 100% पूर्ण!</h3>
+                  <p className="text-[11px] text-slate-300">पूरी न्यूज़ जैकेट व ऑडियो के साथ तैयार</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsVideoSuccessModalOpen(false)}
+                className="p-1.5 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 bg-emerald-950/40 border border-emerald-600/30 rounded-2xl text-center space-y-1">
+              <div className="text-xs font-bold text-emerald-200">
+                फाइल नाम: <span className="font-mono text-emerald-400">{completedDownloadFilename || 'news_video.mp4'}</span>
+              </div>
+              <div className="text-[11px] text-slate-300">
+                यदि आपका ब्राउज़र स्वचालित डाउनलोड प्रारंभ नहीं कर सका है, तो नीचे दिए गए हरे बटन पर तुरंत क्लिक करें:
+              </div>
+            </div>
+
+            {/* Direct 1-Click Native Save Link Button */}
+            <a
+              href={completedDownloadUrl || '#'}
+              download={completedDownloadFilename || 'news_video.mp4'}
+              onClick={() => {
+                if (completedBlobRef.current) {
+                  triggerBrowserDownload(completedBlobRef.current, completedDownloadFilename || 'news_video.mp4');
+                }
+                showToast('✅ वीडियो आपके डिवाइस में सेव हो रहा है!');
+              }}
+              className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-sm rounded-2xl shadow-xl flex items-center justify-center gap-2 cursor-pointer transition active:scale-95 animate-pulse"
+            >
+              <Download className="w-5 h-5" />
+              <span>⬇ सीधे वीडियो फाइल सेव करें (Save Video Now)</span>
+            </a>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(generatedCaptionText);
+                  showToast('✅ सोशल कैप्शन कॉपी हो गया!');
+                }}
+                className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
+              >
+                <Share2 className="w-4 h-4 text-amber-400" />
+                <span>📋 कैप्शन कॉपी करें</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsVideoSuccessModalOpen(false);
+                  handleDownloadVideo(true);
+                }}
+                className="py-2.5 px-3 bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
+              >
+                <RotateCcw className="w-4 h-4 text-slate-400" />
+                <span>🔄 पुनः रेंडर करें</span>
+              </button>
+            </div>
+
+            {onNavigateHome && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsVideoSuccessModalOpen(false);
+                  handleNavigateHome();
+                }}
+                className="w-full py-2.5 bg-neutral-900 hover:bg-neutral-800 text-slate-300 font-bold text-xs rounded-xl border border-neutral-700 flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>होम पेज पर वापस जाएं</span>
+              </button>
+            )}
           </div>
         </div>
       )}
