@@ -2042,9 +2042,16 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     if (audioFileInputRef.current) audioFileInputRef.current.value = '';
     if (logoInputRef.current) logoInputRef.current.value = '';
 
-    // Return to Step 1
+    // Close confirmation modal
+    setIsResetConfirmModalOpen(false);
+
+    // Return to Step 1 & Quick Video Mode
+    setIsReadyToUseMode(true);
     setQuickStep(1);
-    showToast('🔄 वर्तमान वीडियो प्रोजेक्ट रीसेट हो गया');
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    showToast('🔄 वर्तमान वीडियो प्रोजेक्ट रीसेट हो गया (चरण 1 पर लौटे)');
   };
 
   const handleResetTask = () => {
@@ -3637,8 +3644,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           {renderModeSwitcherBar()}
         </div>
 
-        {/* LEFT COLUMN (42%): Live Video Canvas with Sticky Jacket Overlay */}
-        <aside className="w-full lg:w-[42%] lg:sticky lg:top-[72px] self-start max-h-[calc(100vh-85px)] z-20 flex flex-col gap-3 overflow-y-auto">
+        {/* LEFT COLUMN (36% Desktop / 34% XL): Live Video Canvas with Sticky Jacket Overlay */}
+        <aside className="w-full lg:w-[36%] xl:w-[34%] lg:sticky lg:top-[72px] self-start max-h-[calc(100vh-85px)] z-20 flex flex-col gap-3 overflow-y-auto">
           <div className="w-full bg-black p-3 sm:p-4 rounded-2xl border border-neutral-800 shadow-2xl flex flex-col items-center">
             {/* Top Status: Live Canvas, stable indicator (no ping), adjacent Reset & Draft buttons */}
             <div className="w-full flex items-center justify-between mb-2 px-1 gap-1">
@@ -4602,8 +4609,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           </div>
         </aside>
 
-        {/* RIGHT COLUMN (58%): Video Controls & Overlay Customization Form */}
-        <section className="w-full lg:w-[58%] flex flex-col gap-4 min-w-0">
+        {/* RIGHT COLUMN (64% Desktop / 66% XL): Video Controls & Overlay Customization Form */}
+        <section className="w-full lg:w-[64%] xl:w-[66%] flex flex-col gap-4 min-w-0">
           {/* Hidden File Inputs */}
           <input
             type="file"
@@ -4680,16 +4687,16 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   </div>
                 </div>
 
-                {/* Horizontal Compact Step Navigation Pills with Icons & Hindi Text (7 Steps) */}
-                <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[10.5px] sm:text-xs font-bold w-full">
+                {/* Horizontal Compact Step Navigation Pills without Tickmarks (All 7 Steps Visible side-by-side) */}
+                <div className="flex items-center gap-1 sm:gap-1.5 w-full text-[10px] sm:text-xs font-bold overflow-hidden">
                   {[
-                    { step: 1, label: 'वीडियो व फ्रेम्स', icon: Film, ok: Boolean((videoUrl && videoUrl.trim()) || clips.length > 0) },
-                    { step: 2, label: 'संगीत व ऑडियो', icon: Music, ok: Boolean(audioOption === 'original' || audioOption === 'none' || (audioOption === 'bgm' && (bgmTrack || customAudioUrl))) },
-                    { step: 3, label: 'हेडलाइन', icon: Type, ok: Boolean(headline && headline.trim().length > 0) },
-                    { step: 4, label: 'लोकेशन', icon: MapPin, ok: Boolean(location && location.trim().length > 0) },
-                    { step: 5, label: 'लोगो व ब्रांडिंग', icon: Sparkles, ok: Boolean((socialHandle && socialHandle.trim().length > 0) || (channelTag && channelTag.trim().length > 0) || (mobileNumber && mobileNumber.trim().length > 0)) },
-                    { step: 6, label: 'वॉटरमार्क', icon: Shield, ok: Boolean(!showWatermark || watermarkType === 'none' || watermarkCustomText || watermarkText || watermarkImage) },
-                    { step: 7, label: 'डाउनलोड', icon: Download, ok: quickVideoValidation.isValid },
+                    { step: 1, label: 'वीडियो', fullLabel: 'वीडियो व फ्रेम्स', icon: Film, ok: Boolean((videoUrl && videoUrl.trim()) || clips.length > 0) },
+                    { step: 2, label: 'ऑडियो', fullLabel: 'संगीत व ऑडियो', icon: Music, ok: Boolean(audioOption === 'original' || audioOption === 'none' || (audioOption === 'bgm' && (bgmTrack || customAudioUrl))) },
+                    { step: 3, label: 'हेडलाइन', fullLabel: 'हेडलाइन', icon: Type, ok: Boolean(headline && headline.trim().length > 0) },
+                    { step: 4, label: 'लोकेशन', fullLabel: 'लोकेशन', icon: MapPin, ok: Boolean(location && location.trim().length > 0) },
+                    { step: 5, label: 'ब्रांडिंग', fullLabel: 'लोगो व ब्रांडिंग', icon: Sparkles, ok: Boolean((socialHandle && socialHandle.trim().length > 0) || (channelTag && channelTag.trim().length > 0) || (mobileNumber && mobileNumber.trim().length > 0)) },
+                    { step: 6, label: 'वॉटरमार्क', fullLabel: 'वॉटरमार्क', icon: Shield, ok: Boolean(!showWatermark || watermarkType === 'none' || watermarkCustomText || watermarkText || watermarkImage) },
+                    { step: 7, label: 'डाउनलोड', fullLabel: 'डाउनलोड', icon: Download, ok: quickVideoValidation.isValid },
                   ].map((s) => {
                     const isActive = quickStep === s.step;
                     const IconComp = s.icon;
@@ -4698,22 +4705,26 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                         key={s.step}
                         type="button"
                         onClick={() => setQuickStep(s.step)}
-                        className={`flex-shrink-0 px-2.5 py-1.5 sm:px-3 sm:py-1 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                        title={`चरण ${s.step}: ${s.fullLabel}`}
+                        className={`flex-1 min-w-0 px-1 py-1 sm:px-1.5 sm:py-1 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer select-none ${
                           isActive
-                            ? 'bg-gradient-to-r from-red-600 to-amber-500 text-white font-black shadow-md'
+                            ? 'bg-gradient-to-r from-red-600 to-amber-500 text-white font-black shadow-md ring-1 ring-white/20'
                             : s.ok
-                            ? 'bg-slate-800/80 text-emerald-400 hover:bg-slate-800'
-                            : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800'
+                            ? 'bg-slate-800/80 text-emerald-300 border border-emerald-500/30 hover:bg-slate-800'
+                            : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800 border border-slate-800'
                         }`}
                       >
-                        <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-black shrink-0 ${
-                          isActive ? 'bg-white text-red-600' : 'bg-amber-400 text-neutral-950'
+                        <span className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full flex items-center justify-center text-[8.5px] sm:text-[9.5px] font-black shrink-0 ${
+                          isActive
+                            ? 'bg-white text-red-600'
+                            : s.ok
+                            ? 'bg-emerald-400 text-slate-950 font-black'
+                            : 'bg-amber-400 text-neutral-950'
                         }`}>
                           {s.step}
                         </span>
-                        <IconComp className="w-3.5 h-3.5 shrink-0" />
-                        <span>{s.label}</span>
-                        {s.ok && !isActive && <Check className="w-2.5 h-2.5 text-emerald-400 shrink-0" />}
+                        <IconComp className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 hidden xs:inline-block" />
+                        <span className="truncate">{s.label}</span>
                       </button>
                     );
                   })}
@@ -6084,10 +6095,15 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       setIsReadyToUseMode(true);
                       showToast('⚡ क्विक वीडियो मोड (Quick Video Mode) पर वापस लौटे');
                     }}
-                    className="w-full py-3.5 px-5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs sm:text-sm shadow-xl flex items-center justify-center gap-2 cursor-pointer transition active:scale-95"
+                    className="w-full py-3 px-5 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-xl shadow-xl flex flex-col items-center justify-center gap-0.5 cursor-pointer transition active:scale-95"
                   >
-                    <span>⚡</span>
-                    <span>क्विक वीडियो मोड (Quick Video Mode) पर वापस लौटें</span>
+                    <div className="flex items-center gap-1.5 text-xs sm:text-sm font-black">
+                      <span>⚡</span>
+                      <span>क्विक वीडियो मोड (Quick Video Mode)</span>
+                    </div>
+                    <div className="text-[11px] sm:text-xs font-bold text-slate-900/90">
+                      पर वापस जाएं
+                    </div>
                   </button>
                 </div>
               </div>

@@ -4605,23 +4605,24 @@ function loadSocialFeedDatabase(): any[] {
     const posts = typeof loadNewsDatabase === "function" ? loadNewsDatabase() : [];
     if (Array.isArray(posts) && posts.length > 0) {
       const now = Date.now();
-      const validPosts = posts
-        .filter((p) => p && p.title && !p._deleted)
-        .slice(0, 15);
+      // Approved posts for AI News Maker Official Brand Cards
+      const approvedPosts = posts.filter((p) => p && p.title && !p._deleted && (p.isApproved || p.status === "published" || p.status === "APPROVED" || p.approvalStatus === "APPROVED"));
+      const brandSourcePosts = approvedPosts.length > 0 ? approvedPosts : posts.filter((p) => p && p.title && !p._deleted).slice(0, 8);
 
-      const seeded = validPosts.map((p, idx) => {
-        const isBrand = idx % 2 === 0;
-        const channelName = isBrand ? "AI News Maker" : (p.sourceChannel || p.sourceName || "दैनिक समाचार");
+      const brandCards = brandSourcePosts.slice(0, 8).map((p, idx) => {
         const cleanThumb = (typeof p.imageUrl === "string" && !p.imageUrl.startsWith("data:") && p.imageUrl.length < 500) ? p.imageUrl : "";
+        const templateVariants = ["two_photo", "circle_photo", "breaking_banner", "full_photo"];
+        const templateVariant = templateVariants[idx % templateVariants.length];
         return {
-          id: `social_feed_${p.id || now + "_" + idx}`,
+          id: `social_feed_brand_${p.id || now + "_" + idx}`,
           headline: String(p.title || "ताज़ा समाचार").slice(0, 300),
           caption: String(p.summary || p.fullContent || p.title || "").slice(0, 500),
-          category: String(p.category || "General").slice(0, 50),
-          channelName: channelName.slice(0, 80),
-          reporterName: isBrand ? "AI News Desk" : "संवाददाता",
-          cardType: isBrand ? "brand" : "user",
-          isOfficialBrand: isBrand,
+          category: String(p.category || "प्रमुख खबरें").slice(0, 50),
+          channelName: "AI News Maker Official",
+          reporterName: "AI News Desk / Master Admin",
+          cardType: "brand",
+          isOfficialBrand: true,
+          templateVariant,
           thumbnailUrl: cleanThumb,
           aspectRatio: "4:5",
           seoHashtags: [
@@ -4629,17 +4630,47 @@ function loadSocialFeedDatabase(): any[] {
             "#BreakingNews",
             "#ताज़ा_समाचार",
             "#HindiNews",
-            "#DigitalPatrakar",
-            "#NewsUpdate",
+            "#MasterAdminApproved",
           ],
           updatedAt: now - idx * 1800000,
           createdAt: now - idx * 1800000,
         };
       });
 
-      if (seeded.length > 0) {
-        saveSocialFeedDatabase(seeded);
-        return seeded;
+      // User Cards for Real Users (e.g. Anmol Sandesh, Local Reporters - Strictly No Nai Dunia)
+      const userSourcePosts = posts.filter((p) => p && p.title && !p._deleted).slice(0, 7);
+      const userCards = userSourcePosts.map((p, idx) => {
+        const cleanThumb = (typeof p.imageUrl === "string" && !p.imageUrl.startsWith("data:") && p.imageUrl.length < 500) ? p.imageUrl : "";
+        return {
+          id: `social_feed_user_${p.id || now + "_u_" + idx}`,
+          headline: String(p.title || "क्षेत्रीय मुख्य समाचार").slice(0, 300),
+          caption: String(p.summary || p.fullContent || p.title || "").slice(0, 500),
+          category: String(p.category || "स्थानीय हलचल").slice(0, 50),
+          channelName: "Anmol Sandesh",
+          reporterName: "Anmol Sandesh Digital",
+          location: "उमरिया / अनूपपुर (म.प्र.)",
+          channelLogoUrl: "/assets/anmol_sandesh_logo.png",
+          cardType: "user",
+          isOfficialBrand: false,
+          templateVariant: "user_card",
+          thumbnailUrl: cleanThumb,
+          aspectRatio: "4:5",
+          seoHashtags: [
+            "#AnmolSandesh",
+            "#UmariaNews",
+            "#MPNews",
+            "#DigitalPatrakar",
+            "#AINewsMaker",
+          ],
+          updatedAt: now - idx * 2400000,
+          createdAt: now - idx * 2400000,
+        };
+      });
+
+      const combined = [...brandCards, ...userCards];
+      if (combined.length > 0) {
+        saveSocialFeedDatabase(combined);
+        return combined;
       }
     }
   } catch (seedErr) {
@@ -5064,8 +5095,21 @@ app.get(["/api/user/wallet", "/api/wallet"], (req, res) => {
       postTitle: c.newsTitle,
     }));
 
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    // Auto-prune transactions older than 30 days from memory/disk (30-day Retention Requirement)
+    if (Array.isArray(rDb.transactions)) {
+      const initialCount = rDb.transactions.length;
+      rDb.transactions = rDb.transactions.filter(t => {
+        const time = typeof t.createdAt === "number" ? t.createdAt : new Date(t.createdAt).getTime();
+        return !isNaN(time) && time >= thirtyDaysAgo;
+      });
+      if (rDb.transactions.length !== initialCount) {
+        saveRewardsDatabase(rDb);
+      }
+    }
+
     // User's transactions
-    const userTransactions = rDb.transactions.filter(t =>
+    const userTransactions = (rDb.transactions || []).filter(t =>
       (email && t.userEmail && t.userEmail.toLowerCase() === email) ||
       (userId && t.userId && t.userId === userId)
     );

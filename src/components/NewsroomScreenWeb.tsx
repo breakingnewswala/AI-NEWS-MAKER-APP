@@ -1543,7 +1543,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                         : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
                     }`}
                   >
-                    <span>🌐 यूज़र कार्ड्स - SEO ({socialFeedCards.filter((c) => c.cardType !== 'brand' && !c.isOfficialBrand).length})</span>
+                    <span>🌐 यूज़र कार्ड्स - SEO ({socialFeedCards.filter((c) => c.cardType !== 'brand' && !c.isOfficialBrand && !(c.channelName || '').toLowerCase().includes('dunia') && !(c.channelName || '').includes('दुनिया')).length})</span>
                   </button>
                 </div>
 
@@ -1567,8 +1567,9 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                       .filter((c) => {
                         // Filter by type (All vs Brand vs User)
                         const isBrand = Boolean(c.cardType === 'brand' || c.isOfficialBrand);
+                        const isNaiDunia = (c.channelName || '').toLowerCase().includes('dunia') || (c.channelName || '').includes('दुनिया');
                         if (socialFeedFilter === 'brand' && !isBrand) return false;
-                        if (socialFeedFilter === 'user' && isBrand) return false;
+                        if (socialFeedFilter === 'user' && (isBrand || isNaiDunia)) return false;
 
                         // Search query
                         if (!socialFeedSearch) return true;
@@ -1588,7 +1589,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                           '#ताज़ा_समाचार',
                           '#DigitalPatrakar',
                         ]).join(' ');
-                        const postShareText = `${card.headline || 'ताज़ा समाचार'}\n\n${card.caption ? card.caption.slice(0, 140) + '...' : ''}\n\n📲 पूरी खबर और लाइव डिजिटल न्यूज़ कार्ड्स देखें: https://www.ainewsmaker.online\n\n${hashtags}`;
+                        const postShareText = `${card.headline || 'ताज़ा समाचार'}\n\n${card.caption ? card.caption.slice(0, 140) + '...' : ''}\n\n📲 ऐसी ही खबरों व आकर्षक ग्राफ़िक्स के लिए आज ही AI News Maker विज़िट करें: https://www.ainewsmaker.online\n\n${hashtags}`;
 
                         return (
                           <div
@@ -1623,28 +1624,46 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                               {/* Dark Vignette & Gradient Overlays */}
                               <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-black/70 pointer-events-none" />
 
-                              {/* Graphic Top Bar: Logo, Channel & Category */}
+                              {/* Graphic Top Bar: Logo, Channel, Location & Category */}
                               <div className="relative z-10 flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-1.5 min-w-0">
-                                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-black text-[10px] shrink-0 border ${
-                                    isBrandCard
-                                      ? 'bg-gradient-to-tr from-amber-500 to-red-600 text-slate-950 border-amber-300 shadow'
-                                      : 'bg-cyan-600 text-white border-cyan-400 shadow'
-                                  }`}>
-                                    {isBrandCard ? 'AI' : (card.channelName || 'N').slice(0, 2).toUpperCase()}
+                                  {isBrandCard ? (
+                                    <div className="w-6 h-6 rounded-lg bg-white p-0.5 flex items-center justify-center shrink-0 border border-amber-400 shadow">
+                                      <img
+                                        src="/assets/ai_news_maker_logo.png"
+                                        alt="AI News Maker"
+                                        className="w-full h-full object-contain"
+                                        onError={(e) => {
+                                          (e.currentTarget as any).style.display = 'none';
+                                        }}
+                                      />
+                                    </div>
+                                  ) : (
+                                    <div className="w-6 h-6 rounded-lg bg-cyan-600 text-white font-black text-[10px] flex items-center justify-center shrink-0 border border-cyan-400 shadow">
+                                      {(card.channelName || 'AS').slice(0, 2).toUpperCase()}
+                                    </div>
+                                  )}
+                                  <div className="min-w-0 flex flex-col">
+                                    <span className="text-[11px] font-black text-white truncate max-w-[130px] drop-shadow">
+                                      {isBrandCard ? 'AI News Maker Official' : card.channelName || 'Anmol Sandesh'}
+                                    </span>
+                                    {card.location && !isBrandCard && (
+                                      <span className="text-[9px] text-amber-300 font-bold truncate max-w-[120px]">
+                                        📍 {card.location}
+                                      </span>
+                                    )}
                                   </div>
-                                  <span className="text-[11px] font-black text-white truncate max-w-[120px] drop-shadow">
-                                    {isBrandCard ? 'AI News Maker Official' : card.channelName || 'यूज़र चैनल'}
-                                  </span>
                                 </div>
 
                                 <div className="flex items-center gap-1 shrink-0">
                                   <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-red-600 text-white shadow uppercase tracking-wide">
-                                    {card.category || 'ब्रेकिंग'}
+                                    {card.category || 'प्रमुख खबर'}
                                   </span>
-                                  <span className="text-[9px] font-mono text-slate-300 bg-black/60 px-1 py-0.5 rounded border border-white/10">
-                                    4:5
-                                  </span>
+                                  {isBrandCard && card.templateVariant && (
+                                    <span className="text-[8.5px] font-bold text-amber-300 bg-amber-950/80 px-1 py-0.5 rounded border border-amber-700/60">
+                                      {card.templateVariant === 'two_photo' ? '2-फोटो' : card.templateVariant === 'circle_photo' ? 'सर्कल' : 'ऑफिशियल'}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
 
@@ -1668,11 +1687,27 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                                   {card.headline || 'अनाम समाचार'}
                                 </h4>
 
-                                {/* Permanent Official AI News Maker Promo Strip */}
-                                <div className="py-1 px-2 bg-gradient-to-r from-red-600 via-amber-600 to-red-600 rounded-lg text-white font-black text-[9.5px] sm:text-[10px] flex items-center justify-between shadow-md border border-white/20">
-                                  <div className="flex items-center gap-1.5 truncate">
-                                    <span className="w-3.5 h-3.5 rounded bg-white text-slate-950 flex items-center justify-center font-black text-[8px] shrink-0">AI</span>
-                                    <span className="truncate">ऐसी ही खबरों व आकर्षक ग्राफ़िक्स के लिए आज ही AI News Maker डाउनलोड करें!</span>
+                                {/* Permanent Official AI News Maker Promo Strip (Complete 2-Line Info with Logo) */}
+                                <div className="py-1.5 px-2 bg-gradient-to-r from-red-700 via-red-600 to-amber-600 rounded-xl text-white shadow-md border border-amber-400/40 flex items-center gap-2">
+                                  <div className="w-7 h-7 rounded-lg bg-white p-0.5 flex items-center justify-center shrink-0 shadow-sm border border-amber-300">
+                                    <img
+                                      src="/assets/ai_news_maker_logo.png"
+                                      alt="AI News Maker"
+                                      className="w-full h-full object-contain"
+                                      onError={(e) => {
+                                        (e.currentTarget as any).style.display = 'none';
+                                      }}
+                                    />
+                                  </div>
+                                  <div className="min-w-0 flex-1 leading-tight text-[10px] sm:text-[10.5px] font-black">
+                                    <div className="text-amber-200 drop-shadow-xs truncate">
+                                      ऐसी ही खबरों व आकर्षक ग्राफ़िक्स हेतु AI News Maker डाउनलोड करें
+                                    </div>
+                                    <div className="text-[9px] sm:text-[9.5px] text-white/95 font-bold flex items-center gap-1.5 pt-0.5">
+                                      <span>विजिट करें: www.ainewsmaker.online</span>
+                                      <span className="text-amber-300">•</span>
+                                      <span className="text-amber-300 font-extrabold">स्मार्ट स्टूडियो</span>
+                                    </div>
                                   </div>
                                   <span className="shrink-0 text-xs">📲</span>
                                 </div>
@@ -1698,7 +1733,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => deleteSocialFeedCard(card.id)}
-                                    className="p-1 text-slate-500 hover:text-red-400 rounded transition"
+                                    className="p-1 text-slate-500 hover:text-red-400 rounded transition cursor-pointer"
                                     title="कार्ड हटाएँ"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -1721,16 +1756,22 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                                   </a>
                                 </div>
                               ) : (
-                                <div className="p-2 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-[10px] text-cyan-200 space-y-1 border-t border-slate-800">
+                                <div className="p-2.5 rounded-xl bg-cyan-950/50 border border-cyan-500/40 text-[10px] text-cyan-200 space-y-1.5 border-t border-slate-800">
                                   <div className="flex items-center justify-between">
-                                    <span className="font-bold text-cyan-300 flex items-center gap-1">
+                                    <span className="font-bold text-cyan-300 flex items-center gap-1.5">
                                       <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
                                       <span>Google Image SEO Index</span>
                                     </span>
-                                    <span className="text-emerald-400 font-bold">✓ Ready for Indexing</span>
+                                    <span className="text-emerald-400 font-bold bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-700/60 text-[9.5px]">
+                                      ✓ Ready for Indexing
+                                    </span>
                                   </div>
-                                  <div className="text-[10px] text-slate-300 truncate">
-                                    Brand Anchor: <strong className="text-amber-300 font-bold">AI News Maker</strong> ({card.channelName || 'Reporter'})
+                                  <div className="flex items-center justify-between text-[10px] text-slate-300 pt-0.5">
+                                    <span>चैनल: <strong className="text-amber-300 font-bold">{card.channelName || 'Anmol Sandesh'}</strong></span>
+                                    <span>स्थान: <strong className="text-white font-bold">{card.location || 'उमरिया / अनूपपुर'}</strong></span>
+                                  </div>
+                                  <div className="text-[9.5px] text-cyan-300/80 font-mono truncate">
+                                    SEO Meta: {(card.seoHashtags || ['#AnmolSandesh', '#DigitalPatrakar', '#AINewsMaker']).join(' ')}
                                   </div>
                                 </div>
                               )}

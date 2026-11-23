@@ -334,7 +334,7 @@ export const PackagePurchaseModal: React.FC<PackagePurchaseModalProps> = ({
           {/* Secure Guarantee */}
           <div className="flex items-center justify-center gap-2 text-xs text-slate-500 pt-1">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>100% सुरक्षित भुगतान | Instant Activation | Razorpay व Cashfree UPI / कार्ड सपोर्ट</span>
+            <span>100% सुरक्षित भुगतान | Instant Activation | Cashfree Payments • UPI, क्रेडिट कार्ड व डेबिट कार्ड सपोर्ट</span>
           </div>
         </div>
       </div>

@@ -51,6 +51,7 @@ import { getApiUrl, getAuthHeaders, getAuthToken, ensureAuthToken, isTokenExpire
 import { showAppNotification, showAppSuccess, showAppError, showAppWarning, showAppConfirm } from '../lib/notificationService';
 import { APP_SUPPORT_CONFIG } from '../lib/supportConfig';
 import { CashfreePaymentModal } from './CashfreePaymentModal';
+import { COIN_PACKAGES, CoinPackage } from './CoinRechargeModal';
 import { AdvancedLogoCropEditor, CropConfig } from './AdvancedLogoCropEditor';
 import {
   getUserSubscription,
@@ -751,6 +752,52 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
   const [claimSubmitSuccess, setClaimSubmitSuccess] = useState<string>('');
   const [claimSubmitError, setClaimSubmitError] = useState<string>('');
+  const [walletRechargeProcessingId, setWalletRechargeProcessingId] = useState<string | null>(null);
+  const [walletRechargeFeedback, setWalletRechargeFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleExecuteWalletRecharge = async (pack: CoinPackage) => {
+    setWalletRechargeProcessingId(pack.id);
+    setWalletRechargeFeedback(null);
+    try {
+      const email = (currentUser?.email || channelProfile?.email || '').toLowerCase().trim();
+      const uid = currentUser?.userId || currentUser?.uid || email;
+      const res = await fetch('/api/wallet/recharge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          userId: uid,
+          packId: pack.id,
+          amount: pack.price,
+          coins: pack.coins,
+          paymentMethod: 'cashfree',
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setWalletRechargeFeedback({
+          type: 'success',
+          text: `🎉 बधाई हो! ₹${pack.price} में ${pack.coins.toLocaleString('en-IN')} कॉइन्स आपके वॉलेट में तुरंत जुड़ गए!`,
+        });
+        fetchUserWallet();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('wallet_balance_updated', { detail: { balance: data.wallet?.coinBalance } }));
+        }
+      } else {
+        setWalletRechargeFeedback({
+          type: 'error',
+          text: data.error || 'रिचार्ज असफल रहा। कृपया पुनः प्रयास करें।',
+        });
+      }
+    } catch (e: any) {
+      setWalletRechargeFeedback({
+        type: 'error',
+        text: e.message || 'नेटवर्क समस्या के कारण रिचार्ज प्रक्रिया पूरी नहीं हो सकी।',
+      });
+    } finally {
+      setWalletRechargeProcessingId(null);
+    }
+  };
 
   const fetchUserWallet = () => {
     const email = (currentUser?.email || channelProfile?.email || '').toLowerCase().trim();
@@ -3740,23 +3787,30 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         {/* User Identity & Active Plan Header Card */}
         {(() => {
           const formatTrialExpiryDate = (timestamp?: number): string => {
-            if (!timestamp || isNaN(timestamp)) return '7 दिन बाद';
+            let targetMs = timestamp && !isNaN(timestamp) && timestamp > 0 ? timestamp : 0;
+            if (!targetMs) {
+              const startMs = subscription.trialStartedAt || (channelProfile as any)?.createdAt || currentUser?.createdAt || (Date.now() - (7 - (subscription.daysRemaining || 7)) * 86400000);
+              const validStart = startMs && !isNaN(Number(startMs)) ? Number(startMs) : Date.now();
+              targetMs = validStart + 7 * 86400000;
+            }
             try {
-              const d = new Date(timestamp);
+              const d = new Date(targetMs);
               return (
                 d.toLocaleDateString('hi-IN', {
                   day: '2-digit',
                   month: 'short',
                   year: 'numeric',
                 }) +
-                ' ' +
+                ', ' +
                 d.toLocaleTimeString('hi-IN', {
                   hour: '2-digit',
                   minute: '2-digit',
+                  hour12: true,
                 })
               );
             } catch {
-              return 'सत्यापित';
+              const d = new Date(Date.now() + 7 * 86400000);
+              return d.toLocaleDateString('hi-IN', { day: '2-digit', month: 'short', year: 'numeric' });
             }
           };
           const displayUserName = currentUser?.name || channelProfile.fullName || 'यूज़र';
@@ -4158,6 +4212,105 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     </div>
                   </div>
 
+                  {/* DIRECT 1-CLICK COIN RECHARGE PACKS (User Request: All 3 Options with Easy Direct Click) */}
+                  <div className="bg-slate-900 border-2 border-amber-500/50 rounded-2xl p-4 sm:p-5 shadow-xl space-y-4">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                      <div>
+                        <h4 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                          <Coins className="w-5 h-5 text-amber-400" />
+                          <span>कॉइन रिचार्ज पैक चुनें (Instant Coin Recharge Packs)</span>
+                        </h4>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          दैनिक लिमिट समाप्त होने पर भी बिना रुके तुरंत ग्राफिक्स एक्सपोर्ट करने हेतु कॉइन्स रिचार्ज करें
+                        </p>
+                      </div>
+                      <span className="text-[11px] px-2.5 py-1 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 font-bold shrink-0">
+                        ⚡ इंस्टैंट क्रेडिट (Cashfree PG)
+                      </span>
+                    </div>
+
+                    {walletRechargeFeedback && (
+                      <div className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                        walletRechargeFeedback.type === 'success'
+                          ? 'bg-emerald-950/80 border border-emerald-600 text-emerald-300'
+                          : 'bg-red-950/80 border border-red-600 text-red-300'
+                      }`}>
+                        {walletRechargeFeedback.type === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> : <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />}
+                        <span>{walletRechargeFeedback.text}</span>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                      {COIN_PACKAGES.map((pkg) => {
+                        const isProcessing = walletRechargeProcessingId === pkg.id;
+                        return (
+                          <div
+                            key={pkg.id}
+                            className={`rounded-2xl p-4 flex flex-col justify-between gap-3 transition relative overflow-hidden shadow-lg ${
+                              pkg.popular
+                                ? 'bg-gradient-to-b from-slate-900 via-amber-950/40 to-slate-900 border-2 border-amber-400 ring-2 ring-amber-400/20'
+                                : pkg.bestValue
+                                ? 'bg-gradient-to-b from-slate-900 via-purple-950/30 to-slate-900 border-2 border-purple-500/80'
+                                : 'bg-slate-950/80 border border-slate-800 hover:border-slate-700'
+                            }`}
+                          >
+                            {pkg.badge && (
+                              <div className="absolute top-2.5 right-2.5">
+                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border shadow-xs ${pkg.badgeColor || 'bg-amber-400 text-slate-950 border-amber-300'}`}>
+                                  {pkg.badge}
+                                </span>
+                              </div>
+                            )}
+
+                            <div className="space-y-1.5 pt-1">
+                              <div className="text-xs font-black text-slate-400 uppercase tracking-wide">
+                                {pkg.nameHi}
+                              </div>
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-2xl sm:text-3xl font-black text-amber-300 font-mono">
+                                  {pkg.coins.toLocaleString('en-IN')}
+                                </span>
+                                <span className="text-xs font-bold text-amber-400/80">Coins</span>
+                              </div>
+                              <div className="text-base sm:text-lg font-black text-white font-mono">
+                                ₹{pkg.price}
+                                <span className="text-xs text-slate-400 font-sans ml-1 font-normal">मात्र</span>
+                              </div>
+                              <p className="text-[11px] text-slate-400 leading-relaxed pt-1">
+                                {pkg.description}
+                              </p>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleExecuteWalletRecharge(pkg)}
+                              disabled={isProcessing}
+                              className={`w-full py-2.5 px-3 rounded-xl font-black text-xs shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 disabled:opacity-50 ${
+                                pkg.popular
+                                  ? 'bg-gradient-to-r from-amber-400 to-yellow-500 text-slate-950 hover:from-amber-300'
+                                  : pkg.bestValue
+                                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500'
+                                  : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
+                              }`}
+                            >
+                              {isProcessing ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  <span>रिचार्ज हो रहा है...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Zap className="w-3.5 h-3.5 text-current shrink-0" />
+                                  <span>तुरंत रिचार्ज करें (₹{pkg.price})</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   {/* 2. HOW IT WORKS GUIDE */}
                   <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-700/80 rounded-2xl p-4 shadow-md space-y-3">
                     <h4 className="text-xs sm:text-sm font-black text-amber-300 flex items-center gap-2">
@@ -4317,47 +4470,71 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                     )}
                   </div>
 
-                  {/* 5. WALLET TRANSACTIONS LOG */}
-                  <div className="space-y-3 border-t border-slate-800/80 pt-4">
-                    <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
-                      <Coins className="w-4 h-4 text-amber-400" />
-                      <span>वॉलेट लेन-देन विवरण (Transaction Log)</span>
-                    </h4>
+                  {/* 5. WALLET TRANSACTIONS LOG (30-day Retention with Auto-Delete Notice) */}
+                  {(() => {
+                    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+                    const validTxs = walletTransactions.filter((tx) => {
+                      const time = tx.createdAt ? (typeof tx.createdAt === 'number' ? tx.createdAt : new Date(tx.createdAt).getTime()) : Date.now();
+                      return !isNaN(time) && time >= thirtyDaysAgo;
+                    });
 
-                    {walletTransactions.length === 0 ? (
-                      <div className="p-3 bg-slate-900/40 border border-slate-800/60 rounded-xl text-center text-xs text-slate-400">
-                        वॉलेट में अभी तक कोई लेन-देन दर्ज नहीं हुआ है।
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                        {walletTransactions.map((tx) => (
-                          <div
-                            key={tx.id}
-                            className="p-2.5 bg-slate-900/60 border border-slate-800/80 rounded-xl flex items-center justify-between text-xs"
-                          >
-                            <div className="min-w-0 pr-2">
-                              <div className="font-bold text-white truncate">{tx.description}</div>
-                              <div className="text-[10px] text-slate-400 mt-0.5">
-                                {new Date(tx.createdAt).toLocaleString('hi-IN')}
-                              </div>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <div
-                                className={`font-mono font-black ${
-                                  tx.type === 'credit' ? 'text-emerald-400' : 'text-red-400'
-                                }`}
-                              >
-                                {tx.type === 'credit' ? `+${tx.amount}` : `-${tx.amount}`} कॉइन्स
-                              </div>
-                              <div className="text-[10px] text-slate-400 font-mono">
-                                बैलेंस: {tx.balanceAfter}
-                              </div>
-                            </div>
+                    return (
+                      <div className="space-y-3 border-t border-slate-800/80 pt-4">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs sm:text-sm font-black text-white flex items-center gap-2">
+                            <Coins className="w-4 h-4 text-amber-400" />
+                            <span>वॉलेट लेन-देन विवरण (Transaction Log)</span>
+                          </h4>
+                          <span className="text-[10px] text-amber-400 bg-amber-950/60 border border-amber-800/60 px-2 py-0.5 rounded-full font-bold">
+                            30 दिन रिकॉर्ड
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          (पिछले 30 दिनों का लेन-देन विवरण • 30 दिन पुराने रिकॉर्ड्स स्वतः मेमोरी से डिलीट हो जाते हैं)
+                        </p>
+
+                        {validTxs.length === 0 ? (
+                          <div className="p-4 bg-slate-900/40 border border-slate-800/60 rounded-xl text-center text-xs text-slate-400">
+                            पिछले 30 दिनों में कोई लेन-देन दर्ज नहीं हुआ है।
                           </div>
-                        ))}
+                        ) : (
+                          <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                            {validTxs.map((tx) => {
+                              const isCredit = tx.transactionType === 'credit' || tx.type === 'credit';
+                              const amt = Math.abs(tx.coinAmount || tx.amount || 0);
+                              return (
+                                <div
+                                  key={tx.id}
+                                  className="p-2.5 bg-slate-900/60 border border-slate-800/80 rounded-xl flex items-center justify-between text-xs"
+                                >
+                                  <div className="min-w-0 pr-2">
+                                    <div className="font-bold text-white truncate">{tx.description}</div>
+                                    <div className="text-[10px] text-slate-400 mt-0.5">
+                                      {new Date(tx.createdAt).toLocaleString('hi-IN')}
+                                    </div>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <div
+                                      className={`font-mono font-black ${
+                                        isCredit ? 'text-emerald-400' : 'text-red-400'
+                                      }`}
+                                    >
+                                      {isCredit ? `+${amt}` : `-${amt}`} कॉइन्स
+                                    </div>
+                                    {tx.balanceAfter !== undefined && (
+                                      <div className="text-[10px] text-slate-400 font-mono">
+                                        बैलेंस: {tx.balanceAfter}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>

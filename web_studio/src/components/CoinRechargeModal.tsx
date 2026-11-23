@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Coins,
   X,
@@ -171,8 +172,14 @@ export const CoinRechargeModal: React.FC<CoinRechargeModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const filteredTransactions = transactions.filter((tx) => {
+    const time = tx.createdAt ? (typeof tx.createdAt === 'number' ? tx.createdAt : new Date(tx.createdAt).getTime()) : Date.now();
+    return !isNaN(time) && time >= thirtyDaysAgo;
+  });
+
+  const modalContent = (
+    <div className="fixed inset-0 z-[99999] bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150">
       <div className="relative max-w-lg w-full bg-slate-900 border-2 border-amber-500/70 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
         {/* Modal Header */}
         <div className="px-5 py-4 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between">
@@ -398,21 +405,29 @@ export const CoinRechargeModal: React.FC<CoinRechargeModalProps> = ({
           {/* Tab 2: Transaction History */}
           {activeTab === 'history' && (
             <div className="space-y-3">
-              <span className="text-xs font-bold text-slate-400 block">
-                हाल के लेन-देन (Recent Wallet Transactions):
-              </span>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-400 block">
+                  हाल के लेन-देन (Recent Wallet Transactions):
+                </span>
+                <span className="text-[10px] text-amber-400 bg-amber-950/60 border border-amber-800/60 px-2 py-0.5 rounded-full font-bold">
+                  30 दिन रिकॉर्ड
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                (पिछले 30 दिनों का लेन-देन विवरण • 30 दिन पुराने रिकॉर्ड्स स्वतः मेमोरी से डिलीट हो जाते हैं)
+              </p>
 
-              {transactions.length === 0 ? (
+              {filteredTransactions.length === 0 ? (
                 <div className="p-6 bg-slate-950/60 border border-slate-800 rounded-2xl text-center space-y-1.5">
                   <div className="text-2xl">📋</div>
-                  <p className="text-xs font-bold text-slate-300">कोई लेन-देन नहीं मिला</p>
+                  <p className="text-xs font-bold text-slate-300">पिछले 30 दिनों में कोई लेन-देन नहीं मिला</p>
                   <p className="text-[11px] text-slate-400">
                     जैसे ही आप कॉइन अर्जित करेंगे या रिचार्ज करेंगे, विवरण यहाँ दिखेगा।
                   </p>
                 </div>
               ) : (
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                  {transactions.map((tx, idx) => {
+                  {filteredTransactions.map((tx, idx) => {
                     const isCredit = tx.transactionType === 'credit' || tx.type === 'credit';
                     const amount = tx.coinAmount || tx.amount || 0;
                     return (
@@ -459,4 +474,6 @@ export const CoinRechargeModal: React.FC<CoinRechargeModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

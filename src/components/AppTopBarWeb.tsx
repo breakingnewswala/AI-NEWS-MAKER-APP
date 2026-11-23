@@ -717,16 +717,16 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
             }}
           />
         </React.Suspense>
-
-        {/* Dedicated Coin Wallet & Recharge Modal */}
-        <CoinRechargeModal
-          isOpen={isCoinRechargeModalOpen}
-          onClose={() => setIsCoinRechargeModalOpen(false)}
-          currentUserEmail={currentUser?.email}
-          currentUserId={(currentUser as any)?.userId || (currentUser as any)?.uid}
-          onBalanceUpdated={(newBal) => setWalletBalance(newBal)}
-        />
       </header>
+
+      {/* Dedicated Coin Wallet & Recharge Modal (Mounted outside sticky backdrop-blur header) */}
+      <CoinRechargeModal
+        isOpen={isCoinRechargeModalOpen}
+        onClose={() => setIsCoinRechargeModalOpen(false)}
+        currentUserEmail={currentUser?.email}
+        currentUserId={(currentUser as any)?.userId || (currentUser as any)?.uid}
+        onBalanceUpdated={(newBal) => setWalletBalance(newBal)}
+      />
     </>
   );
 };
