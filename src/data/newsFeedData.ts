@@ -91,6 +91,9 @@ export const FOUR_DAYS_MS = SEVEN_DAYS_MS; // Backwards compatibility alias
 
 export function isRealHindiNews(p: NewsFeedPost | any): boolean {
   if (!p || !p.id) return false;
+  if (p.id === 's3_story_01' || String(p.id).toLowerCase().includes('ty2e-sgluzgtnzwnz')) {
+    return false;
+  }
   const title = (p.title || p.headline || '').trim();
   const desc = (p.description || p.summary || '').trim();
   const text = `${title} ${desc}`;
@@ -111,6 +114,19 @@ export function isRealHindiNews(p: NewsFeedPost | any): boolean {
     lower.includes('russell brand') ||
     lower.includes('fantasy football')
   ) {
+    return false;
+  }
+
+  // Filter out website root portal summaries (e.g. homepage title / meta description scraped instead of news articles)
+  const rawUrl = (p.sourceUrl || p.url || p.link || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  const isRootDomain = Boolean(rawUrl && !rawUrl.includes('/'));
+  const isPortalMetaText =
+    lower.includes('hindi news paper') ||
+    lower.includes('समाचार वेबसाइट') ||
+    lower.includes('हिंदी न्यूज़ वेबसाइट') ||
+    lower.includes('breaking news, hindi news') ||
+    lower.includes('read all breaking news in hindi');
+  if (isRootDomain && isPortalMetaText) {
     return false;
   }
 

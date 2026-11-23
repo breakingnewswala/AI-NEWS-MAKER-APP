@@ -2905,6 +2905,9 @@ function isDummyWirePost(p: any): boolean {
   const title = String(p.title || p.headline || '').toLowerCase();
   const fullText = `${title} ${channel} ${id}`;
   if (
+    id === 's3_story_01' ||
+    id === 'web-src_1794763273176_ty2e-sgluzgtnzwnz' ||
+    id.includes('ty2e-sgluzgtnzwnz') ||
     channel.includes('wire') ||
     channel.includes('e2e') ||
     id.includes('wire') ||
@@ -2918,6 +2921,18 @@ function isDummyWirePost(p: any): boolean {
     fullText.includes('russell brand') ||
     fullText.includes('fantasy football')
   ) {
+    return true;
+  }
+  // Filter out website root portal summaries (e.g. homepage title / meta description scraped instead of news articles)
+  const rawUrl = (p.sourceUrl || p.url || p.link || '').trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  const isRootDomain = Boolean(rawUrl && !rawUrl.includes('/'));
+  const isPortalMetaText =
+    fullText.includes('hindi news paper') ||
+    fullText.includes('समाचार वेबसाइट') ||
+    fullText.includes('हिंदी न्यूज़ वेबसाइट') ||
+    fullText.includes('breaking news, hindi news') ||
+    fullText.includes('read all breaking news in hindi');
+  if (isRootDomain && isPortalMetaText) {
     return true;
   }
   return false;
@@ -3962,6 +3977,9 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
     try {
       const edDb = loadApprovedEditorialDatabase();
       const postData = req.body || {};
+      if (!approvedTitle) {
+        approvedTitle = postData.title || postData.headline || "समाचार";
+      }
       const hList = Array.isArray(postData.approvedHeadlines) && postData.approvedHeadlines.length > 0
         ? postData.approvedHeadlines
         : (Array.isArray(postData.headlineOptions) && postData.headlineOptions.length > 0 ? postData.headlineOptions : [approvedTitle]);

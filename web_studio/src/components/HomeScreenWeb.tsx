@@ -85,6 +85,8 @@ import { getApiUrl, getAuthHeaders, ensureAuthToken, getAuthToken, getAdminAuthH
 import { showAppNotification, showAppSuccess, showAppError, showAppWarning, showAppConfirm } from '../lib/notificationService';
 import {
   getActiveRssNewsPosts,
+  getAllSyncedRssNewsPosts,
+  getApprovedRssIds,
   getSavedNewsChannels,
   approveRssPost,
   isRssPostApproved,
@@ -1082,10 +1084,39 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       photoWatermarkTag: approvalPhotoTag === 'AI_GENERATED' ? 'AI GENERATED IMAGE' : approvalPhotoTag === 'SYMBOLIC' ? 'प्रतीकात्मक फोटो' : undefined,
       watermarkGlobalMode: approvalPhotoTag === 'AI_GENERATED' ? 'AI_GENERATED' : approvalPhotoTag === 'SYMBOLIC' ? 'SYMBOLIC_PHOTO' : 'OFF',
       layoutMode: approvalLayoutMode,
+      status: 'published',
+      approvalStatus: 'APPROVED',
+      publicationStatus: 'PUBLISHED',
+      isApproved: true,
+      isPublished: true,
+      isPrePublished: false,
+      editorialApproved: true,
+      approvedAt: Date.now(),
+      publishedAt: Date.now(),
     } as any;
     const ok = await approveRssPost(post.id, updatedPost);
     setPendingApprovalPost(null);
     if (ok) {
+      setApprovedRssIds((prev) => {
+        const next = new Set(prev);
+        next.add(post.id);
+        return next;
+      });
+      setLocalPosts((prev) => {
+        const filtered = (prev || []).filter((p) => p.id !== post.id);
+        return [updatedPost, ...filtered];
+      });
+      setActiveRssPosts((prev) => {
+        return (prev || []).map((p) => (p.id === post.id ? updatedPost : p));
+      });
+      try {
+        const raw = localStorage.getItem('app_news_posts_v2');
+        const parsed = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(parsed)) {
+          const nextList = [updatedPost, ...parsed.filter((p: any) => p.id !== post.id)];
+          localStorage.setItem('app_news_posts_v2', JSON.stringify(nextList));
+        }
+      } catch {}
       showAppSuccess('यह RSS खबर सफलतापूर्वक स्वीकृत व प्रकाशित कर दी गई है!', 'खबर स्वीकृत');
     } else {
       showAppError('खबर स्वीकृत करने में सर्वर त्रुटि हुई। खबर अभी भी पेंडिंग है।', 'स्वीकृति विफल');
@@ -1100,8 +1131,40 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       photoWatermarkTag: approvalPhotoTag === 'AI_GENERATED' ? 'AI GENERATED IMAGE' : approvalPhotoTag === 'SYMBOLIC' ? 'प्रतीकात्मक फोटो' : undefined,
       watermarkGlobalMode: approvalPhotoTag === 'AI_GENERATED' ? 'AI_GENERATED' : approvalPhotoTag === 'SYMBOLIC' ? 'SYMBOLIC_PHOTO' : 'OFF',
       layoutMode: approvalLayoutMode,
+      status: 'published',
+      approvalStatus: 'APPROVED',
+      publicationStatus: 'PUBLISHED',
+      isApproved: true,
+      isPublished: true,
+      isPrePublished: false,
+      editorialApproved: true,
+      approvedAt: Date.now(),
+      publishedAt: Date.now(),
     } as any;
-    approveRssPost(post.id, updatedPost).catch(() => {});
+    approveRssPost(post.id, updatedPost).then((ok) => {
+      if (ok) {
+        setApprovedRssIds((prev) => {
+          const next = new Set(prev);
+          next.add(post.id);
+          return next;
+        });
+        setLocalPosts((prev) => {
+          const filtered = (prev || []).filter((p) => p.id !== post.id);
+          return [updatedPost, ...filtered];
+        });
+        setActiveRssPosts((prev) => {
+          return (prev || []).map((p) => (p.id === post.id ? updatedPost : p));
+        });
+        try {
+          const raw = localStorage.getItem('app_news_posts_v2');
+          const parsed = raw ? JSON.parse(raw) : [];
+          if (Array.isArray(parsed)) {
+            const nextList = [updatedPost, ...parsed.filter((p: any) => p.id !== post.id)];
+            localStorage.setItem('app_news_posts_v2', JSON.stringify(nextList));
+          }
+        } catch {}
+      }
+    }).catch(() => {});
     setPendingApprovalPost(null);
 
     try {
@@ -1427,7 +1490,17 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     }
   };
 
-  const [approvedRssIds, setApprovedRssIds] = useState<Set<string>>(() => new Set<string>());
+  const [approvedRssIds, setApprovedRssIds] = useState<Set<string>>(() => {
+    const initialSet = getApprovedRssIds();
+    if (Array.isArray(posts)) {
+      posts.forEach((p) => {
+        if (p && p.id && (p.isApproved || (p as any).isPublished || p.status === 'published' || p.status === 'APPROVED' || (p as any).approvalStatus === 'APPROVED')) {
+          initialSet.add(p.id);
+        }
+      });
+    }
+    return initialSet;
+  });
   const [savedChannels, setSavedChannels] = useState<string[]>(() => getSavedNewsChannels());
 
   const [localPosts, setLocalPosts] = useState<NewsFeedPost[]>(() => posts);
@@ -1706,7 +1779,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   };
 
   // Active Admin RSS & Web Link Sources News Integration
-  const [activeRssPosts, setActiveRssPosts] = useState<NewsFeedPost[]>(() => getActiveRssNewsPosts());
+  const [activeRssPosts, setActiveRssPosts] = useState<NewsFeedPost[]>(() => getAllSyncedRssNewsPosts());
 
   useEffect(() => {
     // Purge any stale English dummy posts or test wire pollution from client storage
@@ -1735,12 +1808,16 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       }
     } catch {}
 
-    // Synchronize server-authoritative approved IDs on mount: replace state with exact server response (fail closed to empty Set)
+    // Synchronize server-authoritative approved IDs on mount
     syncAndMigrateLocalApprovals().then((serverSet) => {
-      setApprovedRssIds(serverSet instanceof Set ? serverSet : new Set<string>());
-    }).catch(() => {
-      setApprovedRssIds(new Set<string>());
-    });
+      if (serverSet instanceof Set && serverSet.size > 0) {
+        setApprovedRssIds((prev) => {
+          const merged = new Set(prev);
+          serverSet.forEach((id) => merged.add(id));
+          return merged;
+        });
+      }
+    }).catch(() => {});
   }, []);
 
   // Requirement: RSS Feed auto-sync every 10 minutes (600,000 ms)
@@ -1752,7 +1829,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         } else {
           await syncAllSourcesLive().catch(() => {});
         }
-        setActiveRssPosts(getActiveRssNewsPosts());
+        setActiveRssPosts(getAllSyncedRssNewsPosts());
       } catch (err) {
         console.error('[RSS 10-Min AutoSync] error:', err);
       }
@@ -1783,15 +1860,27 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
   useEffect(() => {
     const handleRssUpdate = () => {
-      setActiveRssPosts(getActiveRssNewsPosts());
+      setActiveRssPosts(getAllSyncedRssNewsPosts());
       syncAndMigrateLocalApprovals().then((serverSet) => {
-        setApprovedRssIds(serverSet instanceof Set ? serverSet : new Set<string>());
+        if (serverSet instanceof Set && serverSet.size > 0) {
+          setApprovedRssIds((prev) => {
+            const merged = new Set(prev);
+            serverSet.forEach((id) => merged.add(id));
+            return merged;
+          });
+        }
       }).catch(() => {});
     };
     const handleFeedRefresh = () => {
-      setActiveRssPosts(getActiveRssNewsPosts());
+      setActiveRssPosts(getAllSyncedRssNewsPosts());
       syncAndMigrateLocalApprovals().then((serverSet) => {
-        setApprovedRssIds(serverSet instanceof Set ? serverSet : new Set<string>());
+        if (serverSet instanceof Set && serverSet.size > 0) {
+          setApprovedRssIds((prev) => {
+            const merged = new Set(prev);
+            serverSet.forEach((id) => merged.add(id));
+            return merged;
+          });
+        }
       }).catch(() => {});
     };
     const handleCategoriesUpdate = () => {
@@ -2059,7 +2148,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const filteredPosts = useMemo(() => {
     const baseFiltered = combinedPosts.filter((p) => {
       // 1. Normal users cannot see unapproved RSS/Web feed items
-      if (!canModerate && !isRssPostApproved(p, approvedRssIds)) {
+      const isFeed = Boolean(p.id && (p.id.startsWith('rss-') || p.id.startsWith('web-')));
+      if (!canModerate && isFeed && !isRssPostApproved(p, approvedRssIds)) {
         return false;
       }
 
@@ -2072,7 +2162,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
       // 2b. Admin Published News Filter: show ONLY published/approved items
       if (canModerate && adminPublishedOnly) {
-        if (p.id && (p.id.startsWith('rss-') || p.id.startsWith('web-')) && !isRssPostApproved(p, approvedRssIds)) {
+        if (!isRssPostApproved(p, approvedRssIds)) {
           return false;
         }
       }

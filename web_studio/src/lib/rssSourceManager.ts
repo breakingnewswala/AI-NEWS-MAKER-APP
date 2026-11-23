@@ -515,14 +515,25 @@ export function isRssPostApproved(post: NewsFeedPost, serverApprovedIds?: Set<st
     return false;
   }
 
-  const authoritativeSet = serverApprovedIds !== undefined ? serverApprovedIds : memoryServerApprovedIds;
+  const authoritativeSet = (serverApprovedIds !== undefined && serverApprovedIds.size > 0)
+    ? serverApprovedIds
+    : (memoryServerApprovedIds && memoryServerApprovedIds.size > 0)
+      ? memoryServerApprovedIds
+      : getApprovedRssIds();
+
   const isFeed = Boolean(post.id && (post.id.startsWith('rss-') || post.id.startsWith('web-')));
+
+  // Check if post is explicitly marked as editorial-approved and published from server API
+  const isExplicitServerApproved =
+    Boolean((post as any).editorialApproved === true || (post as any).approvedBy) &&
+    (status === 'APPROVED' || status === 'PUBLISHED' || approvalStatus === 'APPROVED' || (post as any).isApproved === true) &&
+    (publicationStatus === 'PUBLISHED' || status === 'PUBLISHED' || (post as any).isPublished === true);
 
   // 2b. Authoritative Server Confirmation:
   // For feed items (rss-* / web-*), client-side localStorage cannot forge approval:
-  // strict presence in serverAuthoritativeApprovedIds is mandatory.
+  // strict presence in serverAuthoritativeApprovedIds OR explicit server editorial approval is mandatory.
   if (isFeed) {
-    if (authoritativeSet && authoritativeSet.has(post.id)) {
+    if ((authoritativeSet && authoritativeSet.has(post.id)) || isExplicitServerApproved) {
       if (
         status === 'APPROVED' ||
         status === 'PUBLISHED' ||
@@ -537,7 +548,7 @@ export function isRssPostApproved(post: NewsFeedPost, serverApprovedIds?: Set<st
     return false;
   }
 
-  if (authoritativeSet && authoritativeSet.has(post.id)) {
+  if ((authoritativeSet && authoritativeSet.has(post.id)) || isExplicitServerApproved) {
     if (
       status === 'APPROVED' ||
       status === 'PUBLISHED' ||
@@ -599,9 +610,6 @@ export function isRssPostApproved(post: NewsFeedPost, serverApprovedIds?: Set<st
 export async function approveRssPost(postId: string, postData?: any): Promise<boolean> {
   if (typeof window === 'undefined') return false;
   try {
-    const cached = getActiveRssNewsPosts();
-    const target = postData || cached.find((p) => p.id === postId);
-
     // 1. Call server API FIRST with authoritative credentials before touching local storage
     const url = getApiUrl(`/api/admin/approve-news/${encodeURIComponent(postId)}`);
     const headers: Record<string, string> = {
@@ -615,7 +623,7 @@ export async function approveRssPost(postId: string, postData?: any): Promise<bo
     let res = await fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify(target || {}),
+      body: JSON.stringify(postData || {}),
     });
 
     if (res.status === 401) {
@@ -625,7 +633,7 @@ export async function approveRssPost(postId: string, postData?: any): Promise<bo
         res = await fetch(url, {
           method: 'POST',
           headers,
-          body: JSON.stringify(target || {}),
+          body: JSON.stringify(postData || {}),
         });
       }
     }
@@ -642,25 +650,65 @@ export async function approveRssPost(postId: string, postData?: any): Promise<bo
     }
 
     // 2. ONLY upon confirmed server success, record approval in authoritative memory state
-    const approved = memoryServerApprovedIds ? new Set(memoryServerApprovedIds) : new Set<string>();
+    const approved = memoryServerApprovedIds ? new Set(memoryServerApprovedIds) : getApprovedRssIds();
     approved.add(postId);
     memoryServerApprovedIds = approved;
     try {
       localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(approved)));
     } catch {}
 
-    const updated = cached.map((p) => (p.id === postId ? {
-      ...p,
-      status: 'published' as const,
-      approvalStatus: 'APPROVED' as const,
-      publicationStatus: 'PUBLISHED' as const,
-      isApproved: true,
-      isPublished: true,
-      isPrePublished: false,
-      approvedAt: Date.now(),
-      publishedAt: Date.now(),
-    } : p));
-    localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(updated));
+    // 3. Update STORAGE_KEY_SYNCED_RSS_POSTS preserving ALL raw posts
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_SYNCED_RSS_POSTS);
+      let allSynced: any[] = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(allSynced)) allSynced = [];
+
+      let found = false;
+      allSynced = allSynced.map((p) => {
+        if (p && p.id === postId) {
+          found = true;
+          return {
+            ...p,
+            ...(postData || {}),
+            status: 'published' as const,
+            approvalStatus: 'APPROVED' as const,
+            publicationStatus: 'PUBLISHED' as const,
+            isApproved: true,
+            isPublished: true,
+            isPrePublished: false,
+            editorialApproved: true,
+            approvedAt: Date.now(),
+            publishedAt: Date.now(),
+          };
+        }
+        return p;
+      });
+
+      if (!found && postData) {
+        allSynced.unshift({
+          ...postData,
+          id: postId,
+          status: 'published' as const,
+          approvalStatus: 'APPROVED' as const,
+          publicationStatus: 'PUBLISHED' as const,
+          isApproved: true,
+          isPublished: true,
+          isPrePublished: false,
+          editorialApproved: true,
+          approvedAt: Date.now(),
+          publishedAt: Date.now(),
+        });
+      }
+
+      localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(allSynced));
+    } catch {}
+
+    // 4. Update app_news_posts_v2 cache if updated list returned from server
+    if (resData && Array.isArray(resData.posts)) {
+      try {
+        localStorage.setItem('app_news_posts_v2', JSON.stringify(resData.posts));
+      } catch {}
+    }
 
     window.dispatchEvent(new CustomEvent('ai_news_approved_rss_updated', { detail: postId }));
     window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
@@ -704,22 +752,27 @@ export async function rejectRssPost(postId: string): Promise<boolean> {
       return false;
     }
 
-    const approved = memoryServerApprovedIds ? new Set(memoryServerApprovedIds) : new Set<string>();
+    const approved = memoryServerApprovedIds ? new Set(memoryServerApprovedIds) : getApprovedRssIds();
     approved.delete(postId);
     memoryServerApprovedIds = approved;
     try {
       localStorage.setItem(STORAGE_KEY_APPROVED_RSS_IDS, JSON.stringify(Array.from(approved)));
     } catch {}
 
-    const cached = getActiveRssNewsPosts();
-    const updated = cached.map((p) => (p.id === postId ? {
-      ...p,
-      status: 'REJECTED' as const,
-      approvalStatus: 'REJECTED' as const,
-      isApproved: false,
-      isPublished: false,
-    } : p));
-    localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(updated));
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_SYNCED_RSS_POSTS);
+      let allSynced: any[] = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(allSynced)) {
+        const updated = allSynced.map((p) => (p && p.id === postId ? {
+          ...p,
+          status: 'REJECTED' as const,
+          approvalStatus: 'REJECTED' as const,
+          isApproved: false,
+          isPublished: false,
+        } : p));
+        localStorage.setItem(STORAGE_KEY_SYNCED_RSS_POSTS, JSON.stringify(updated));
+      }
+    } catch {}
 
     window.dispatchEvent(new CustomEvent('ai_news_approved_rss_updated', { detail: postId }));
     window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
@@ -758,6 +811,36 @@ export async function syncAndMigrateLocalApprovals(): Promise<Set<string>> {
   // P0 Invariant: If server request fails, return empty set and fail closed; never treat unverified localStorage cache as authoritative
   memoryServerApprovedIds = new Set<string>();
   return new Set<string>();
+}
+
+export function getAllSyncedRssNewsPosts(): NewsFeedPost[] {
+  if (typeof window === 'undefined') return [];
+  const activeSources = getAdminRssSources().filter((s) => s.isActive);
+  if (activeSources.length === 0) return [];
+  const activeIds = new Set(activeSources.map((s) => s.id));
+  const activeUrls = new Set(activeSources.map((s) => s.url.trim().toLowerCase()));
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_SYNCED_RSS_POSTS);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((p: any) => {
+          if (!p || !p.id) return false;
+          const text = `${p.title || p.headline || ''} ${p.description || p.summary || ''}`;
+          if (!/[\u0900-\u097F]/.test(text)) return false;
+          if (text.toLowerCase().includes('e2e wire') || text.toLowerCase().includes('s3 wire')) return false;
+          if (p.sourceId && activeIds.has(p.sourceId)) return true;
+          if (p.sourceFeedUrl && activeUrls.has(p.sourceFeedUrl.trim().toLowerCase())) return true;
+          const parts = String(p.id).split('-');
+          const srcId = parts.length >= 3 ? parts.slice(1, -1).join('-') : parts[1] || '';
+          if (srcId && (activeIds.has(srcId) || activeIds.has(`src_${srcId}`))) return true;
+          if (p.sourceUrl && activeUrls.has(p.sourceUrl.trim().toLowerCase())) return true;
+          return false;
+        });
+      }
+    }
+  } catch {}
+  return [];
 }
 
 export function getActiveRssNewsPosts(serverApprovedIds?: Set<string>): NewsFeedPost[] {

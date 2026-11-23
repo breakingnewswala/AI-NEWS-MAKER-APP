@@ -6,18 +6,8 @@
     <description>AI News Maker - रियल-टाइम ब्रेकिंग न्यूज़, वीडियो और ग्राफिक्स लाइव RSS फ़ीड</description>
     <language>hi</language>
     <copyright>© 2026 AI News Maker</copyright>
-    <lastBuildDate>Mon, 23 Nov 2026 08:53:36 GMT</lastBuildDate>
+    <lastBuildDate>Mon, 23 Nov 2026 10:32:03 GMT</lastBuildDate>
     <atom:link href="https://www.ainewsmaker.online/rss.xml" rel="self" type="application/rss+xml" />
-    <item>
-      <title><![CDATA[समाचार]]></title>
-      <link>https://www.ainewsmaker.online/#home</link>
-      <guid isPermaLink="false">s3_story_01</guid>
-      <pubDate>Fri, 20 Nov 2026 02:35:24 GMT</pubDate>
-      <description><![CDATA[]]></description>
-      <category>मुख्य समाचार</category>
-      <source url="https://www.ainewsmaker.online/#home">आरएसएस / वेब</source>
-      <enclosure url="/assets/internet_photo_search_fallback.jpg" length="0" type="image/jpeg" />
-    </item>
     <item>
       <title><![CDATA[धार-इंदौर के बीच यात्री ट्रेन संचालन को मिली हरी झंडी, दिसंबर में दौड़ सकती है]]></title>
       <link>https://www.naidunia.com/madhya-pradesh/dhar-green-light-given-for-passenger-train-operations-between-dhar-and-indore-first-memu-train-8477545</link>
@@ -77,16 +67,6 @@
       <category>📍 मध्यप्रदेश</category>
       <source url="https://www.naidunia.com/madhya-pradesh/jabalpur-a-youth-running-along-the-tracks-in-jabalpur-was-struck-and-killed-by-a-train-8477530">नई दुनिया</source>
       <enclosure url="https://img.naidunia.com/naidunia/ndnimg/18112026/18_11_2026-shahpura_police.jpg" length="0" type="image/jpeg" />
-    </item>
-    <item>
-      <title><![CDATA[Hindi News, हिंदी समाचार, News in Hindi, हिंदी न्यूज़, Breaking News, Hindi News Paper -]]></title>
-      <link>https://www.naidunia.com</link>
-      <guid isPermaLink="false">web-src_1794763273176_ty2e-SGluZGkgTmV3cy</guid>
-      <pubDate>Thu, 19 Nov 2026 03:36:09 GMT</pubDate>
-      <description><![CDATA[Nai Dunia Hindi News: Read all Breaking News in Hindi about Madhya Pradesh, Chhattisgarh, Politics, Bollywood, Cricket, Astrology, India and World. हिंदी में पढ़ें सभी ताजा समाचार सबसे प्रतिष्ठित हिंदी न्यूज़ वेबसाइ...]]></description>
-      <category>📍 मध्यप्रदेश</category>
-      <source url="https://www.naidunia.com">नई दुनिया</source>
-      <enclosure url="https://img.naidunia.com/naidunia/ndnimg/19112026/19_11_2026-mp_government_hospital_supply_crisis_m.webp" length="0" type="image/jpeg" />
     </item>
   </channel>
 </rss>

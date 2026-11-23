@@ -15346,7 +15346,13 @@ function isDummyWirePost(p) {
   const id = String(p.id || "").toLowerCase();
   const title = String(p.title || p.headline || "").toLowerCase();
   const fullText = `${title} ${channel} ${id}`;
-  if (channel.includes("wire") || channel.includes("e2e") || id.includes("wire") || id.startsWith("test_") || fullText.includes("s3 wire") || fullText.includes("e2e wire") || fullText.includes("unreachable feed") || fullText.includes("ssrf feed") || fullText.includes("grand theft auto") || fullText.includes("voyager 1") || fullText.includes("russell brand") || fullText.includes("fantasy football")) {
+  if (id === "s3_story_01" || id === "web-src_1794763273176_ty2e-sgluzgtnzwnz" || id.includes("ty2e-sgluzgtnzwnz") || channel.includes("wire") || channel.includes("e2e") || id.includes("wire") || id.startsWith("test_") || fullText.includes("s3 wire") || fullText.includes("e2e wire") || fullText.includes("unreachable feed") || fullText.includes("ssrf feed") || fullText.includes("grand theft auto") || fullText.includes("voyager 1") || fullText.includes("russell brand") || fullText.includes("fantasy football")) {
+    return true;
+  }
+  const rawUrl = (p.sourceUrl || p.url || p.link || "").trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+  const isRootDomain = Boolean(rawUrl && !rawUrl.includes("/"));
+  const isPortalMetaText = fullText.includes("hindi news paper") || fullText.includes("\u0938\u092E\u093E\u091A\u093E\u0930 \u0935\u0947\u092C\u0938\u093E\u0907\u091F") || fullText.includes("\u0939\u093F\u0902\u0926\u0940 \u0928\u094D\u092F\u0942\u091C\u093C \u0935\u0947\u092C\u0938\u093E\u0907\u091F") || fullText.includes("breaking news, hindi news") || fullText.includes("read all breaking news in hindi");
+  if (isRootDomain && isPortalMetaText) {
     return true;
   }
   return false;
@@ -16033,6 +16039,9 @@ app.post("/api/admin/approve-news/:id", requireAdminMiddleware, (req, res) => {
     try {
       const edDb = loadApprovedEditorialDatabase();
       const postData2 = req.body || {};
+      if (!approvedTitle) {
+        approvedTitle = postData2.title || postData2.headline || "\u0938\u092E\u093E\u091A\u093E\u0930";
+      }
       const hList = Array.isArray(postData2.approvedHeadlines) && postData2.approvedHeadlines.length > 0 ? postData2.approvedHeadlines : Array.isArray(postData2.headlineOptions) && postData2.headlineOptions.length > 0 ? postData2.headlineOptions : [approvedTitle];
       edDb[id] = {
         ...edDb[id] || {},
