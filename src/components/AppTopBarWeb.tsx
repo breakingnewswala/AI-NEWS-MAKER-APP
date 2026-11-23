@@ -21,6 +21,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 const AppGuideModal = React.lazy(() => import('./AppGuideModal').then((m) => ({ default: m.AppGuideModal })));
+import { CoinRechargeModal } from './CoinRechargeModal';
 import { ReporterUser } from './LoginModal';
 import { ThemeToggle } from './ThemeToggle';
 import {
@@ -81,6 +82,13 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   const [notificationsList, setNotificationsList] = useState<AppNotification[]>(() => getNotifications());
   const [notifPermission, setNotifPermission] = useState(() => getNotificationPermissionStatus());
   const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
+  const [isCoinRechargeModalOpen, setIsCoinRechargeModalOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleOpenWalletModal = () => setIsCoinRechargeModalOpen(true);
+    window.addEventListener('open_rewards_wallet', handleOpenWalletModal);
+    return () => window.removeEventListener('open_rewards_wallet', handleOpenWalletModal);
+  }, []);
 
   const isAdminUser = isUserAdmin(currentUser);
 
@@ -374,14 +382,9 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               {!isAdminUser && (
                 <button
                   type="button"
-                  onClick={() => {
-                    onNavigateToTab('profile');
-                    if (typeof window !== 'undefined') {
-                      window.dispatchEvent(new CustomEvent('open_rewards_wallet'));
-                    }
-                  }}
+                  onClick={() => setIsCoinRechargeModalOpen(true)}
                   className={`items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 bg-gradient-to-r from-amber-500/15 to-yellow-500/15 hover:from-amber-500/25 hover:to-yellow-500/25 text-amber-700 dark:text-amber-300 border border-amber-500/30 dark:border-amber-500/40 font-bold rounded-xl text-xs shadow-xs transition cursor-pointer shrink max-w-[85px] sm:max-w-none overflow-hidden ${(currentTab === 'home' || currentTab === 'videos') ? 'hidden md:flex' : 'flex'}`}
-                  title="रिवॉर्ड्स वॉलेट व कॉइन बैलेंस"
+                  title="रिवॉर्ड्स वॉलेट व कॉइन बैलेंस (रिचार्ज करने हेतु क्लिक करें)"
                 >
                   <Coins className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400 shrink-0" />
                   <span className="font-mono font-black min-w-[16px] text-center truncate">
@@ -714,6 +717,15 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
             }}
           />
         </React.Suspense>
+
+        {/* Dedicated Coin Wallet & Recharge Modal */}
+        <CoinRechargeModal
+          isOpen={isCoinRechargeModalOpen}
+          onClose={() => setIsCoinRechargeModalOpen(false)}
+          currentUserEmail={currentUser?.email}
+          currentUserId={(currentUser as any)?.userId || (currentUser as any)?.uid}
+          onBalanceUpdated={(newBal) => setWalletBalance(newBal)}
+        />
       </header>
     </>
   );

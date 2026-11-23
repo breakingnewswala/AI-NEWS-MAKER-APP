@@ -36228,6 +36228,52 @@ app.post("/api/admin/credit-coins", requireMasterAdminMiddleware, async (req, re
     return res.status(500).json({ error: cleanErrorMessage(err) });
   }
 });
+app.post("/api/wallet/recharge", (req, res) => {
+  try {
+    const { email, userId, packId, amount, coins, paymentMethod, orderId } = req.body || {};
+    const cleanEmail = String(email || "").toLowerCase().trim();
+    const cleanUserId = String(userId || cleanEmail || "").trim();
+    const coinAmount = Number(coins) || (packId === "starter" ? 1e3 : packId === "supersaver" ? 5e3 : 1e4);
+    const inrAmount = Number(amount) || (packId === "starter" ? 99 : packId === "supersaver" ? 299 : 499);
+    if (!cleanEmail && !cleanUserId) {
+      return res.status(400).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0908\u092E\u0947\u0932 \u0905\u0925\u0935\u093E ID \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
+    }
+    const walletKey = cleanEmail || cleanUserId;
+    const rDb = loadRewardsDatabase();
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+    rDb.wallets[walletKey].coinBalance += coinAmount;
+    rDb.wallets[walletKey].totalEarnedCoins += coinAmount;
+    const packName = packId === "starter" ? "\u0938\u094D\u091F\u093E\u0930\u094D\u091F\u0930 \u092A\u0948\u0915" : packId === "supersaver" ? "\u0938\u0941\u092A\u0930 \u0938\u0947\u0935\u0930 \u092A\u0948\u0915" : "\u092E\u0947\u0917\u093E \u092A\u094D\u0930\u094B \u092A\u0948\u0915";
+    const txId = `tx-recharge-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const tx = {
+      id: txId,
+      transactionId: txId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      description: `\u0915\u0949\u0907\u0928 \u0930\u093F\u091A\u093E\u0930\u094D\u091C (${packName}: \u20B9${inrAmount} \u092E\u0947\u0902 ${coinAmount} \u0915\u0949\u0907\u0928\u094D\u0938)`,
+      transactionType: "credit",
+      type: "credit",
+      coinAmount,
+      amount: coinAmount,
+      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      status: "completed",
+      createdAt: Date.now(),
+      createdBy: "payment_gateway"
+    };
+    rDb.transactions.unshift(tx);
+    saveRewardsDatabase(rDb);
+    return res.json({
+      success: true,
+      wallet: rDb.wallets[walletKey],
+      transaction: tx,
+      message: `\u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u20B9${inrAmount} \u092E\u0947\u0902 ${coinAmount} \u0915\u0949\u0907\u0928 \u0906\u092A\u0915\u0947 \u0935\u0949\u0932\u0947\u091F \u092E\u0947\u0902 \u091C\u094B\u0921\u093C\u0947 \u0917\u090F!`
+    });
+  } catch (err) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
 app.post("/api/wallet/unlock-frame", requireAuthMiddleware, (req, res) => {
   try {
     const authUser = req.user;

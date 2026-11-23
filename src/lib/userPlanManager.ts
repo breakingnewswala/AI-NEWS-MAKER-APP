@@ -1041,9 +1041,19 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
   const now = Date.now();
 
   let startTime = matchedUser?.trialStartedAt || (() => {
+    const userTrialKey = activeEmail ? `user_trial_start_${activeEmail.toLowerCase().trim()}` : null;
+    const userStartStr = userTrialKey ? localStorage.getItem(userTrialKey) : null;
+    if (userStartStr && !isNaN(parseInt(userStartStr, 10)) && parseInt(userStartStr, 10) > 0) {
+      return parseInt(userStartStr, 10);
+    }
     const startStr = localStorage.getItem(STORAGE_KEY_TRIAL_START);
     const parsed = startStr ? parseInt(startStr, 10) : 0;
-    return parsed && !isNaN(parsed) ? parsed : (matchedUser?.createdAt || now);
+    const computed = (parsed && !isNaN(parsed) && parsed > 0) ? parsed : (matchedUser?.createdAt || now);
+    if (typeof window !== 'undefined') {
+      if (userTrialKey) localStorage.setItem(userTrialKey, String(computed));
+      localStorage.setItem(STORAGE_KEY_TRIAL_START, String(computed));
+    }
+    return computed;
   })();
 
   const promoUsed = localStorage.getItem('ai_news_maker_plan_promo_used') || matchedUser?.activatedViaPromoCode || undefined;
@@ -1058,9 +1068,19 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
   let expiresAt = (matchedUser?.expiresAt && matchedUser.expiresAt > 0)
     ? matchedUser.expiresAt
     : (matchedUser?.trialEndsAt || (() => {
+        const userExpiryKey = activeEmail ? `user_trial_ends_${activeEmail.toLowerCase().trim()}` : null;
+        const userExpStr = userExpiryKey ? localStorage.getItem(userExpiryKey) : null;
+        if (userExpStr && !isNaN(parseInt(userExpStr, 10)) && parseInt(userExpStr, 10) > 0) {
+          return parseInt(userExpStr, 10);
+        }
         const expiresAtStr = localStorage.getItem('ai_news_maker_plan_expires_at');
         const parsed = expiresAtStr ? parseInt(expiresAtStr, 10) : 0;
-        return parsed && !isNaN(parsed) ? parsed : (startTime + (planDetail.durationDays || 7) * 24 * 60 * 60 * 1000);
+        const computed = (parsed && !isNaN(parsed) && parsed > 0) ? parsed : (startTime + (planDetail.durationDays || 7) * 24 * 60 * 60 * 1000);
+        if (typeof window !== 'undefined') {
+          if (userExpiryKey) localStorage.setItem(userExpiryKey, String(computed));
+          localStorage.setItem('ai_news_maker_plan_expires_at', String(computed));
+        }
+        return computed;
       })());
 
   // Priority Rule: Admin Upgrade > Paid Membership > Trial > Expired

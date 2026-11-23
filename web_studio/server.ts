@@ -28818,6 +28818,60 @@ app.post("/api/admin/credit-coins", requireMasterAdminMiddleware, async (req, re
   }
 });
 
+// User Coin Wallet Recharge Endpoint (Starter ₹99 / 1000, Super Saver ₹299 / 5000, Mega Pro ₹499 / 10000)
+app.post("/api/wallet/recharge", (req, res) => {
+  try {
+    const { email, userId, packId, amount, coins, paymentMethod, orderId } = req.body || {};
+    const cleanEmail = String(email || "").toLowerCase().trim();
+    const cleanUserId = String(userId || cleanEmail || "").trim();
+    const coinAmount = Number(coins) || (packId === 'starter' ? 1000 : packId === 'supersaver' ? 5000 : 10000);
+    const inrAmount = Number(amount) || (packId === 'starter' ? 99 : packId === 'supersaver' ? 299 : 499);
+
+    if (!cleanEmail && !cleanUserId) {
+      return res.status(400).json({ error: "उपयोगकर्ता ईमेल अथवा ID आवश्यक है" });
+    }
+
+    const walletKey = cleanEmail || cleanUserId;
+    const rDb = loadRewardsDatabase();
+    if (!rDb.wallets[walletKey]) {
+      rDb.wallets[walletKey] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+    }
+
+    rDb.wallets[walletKey].coinBalance += coinAmount;
+    rDb.wallets[walletKey].totalEarnedCoins += coinAmount;
+
+    const packName = packId === 'starter' ? 'स्टार्टर पैक' : packId === 'supersaver' ? 'सुपर सेवर पैक' : 'मेगा प्रो पैक';
+    const txId = `tx-recharge-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const tx: ServerWalletTransaction = {
+      id: txId,
+      transactionId: txId,
+      userId: cleanUserId,
+      userEmail: cleanEmail,
+      description: `कॉइन रिचार्ज (${packName}: ₹${inrAmount} में ${coinAmount} कॉइन्स)`,
+      transactionType: "credit",
+      type: "credit",
+      coinAmount,
+      amount: coinAmount,
+      balanceAfter: rDb.wallets[walletKey].coinBalance,
+      status: "completed",
+      createdAt: Date.now(),
+      createdBy: "payment_gateway",
+    };
+
+    rDb.transactions.unshift(tx);
+    saveRewardsDatabase(rDb);
+
+    return res.json({
+      success: true,
+      wallet: rDb.wallets[walletKey],
+      transaction: tx,
+      message: `सफलतापूर्वक ₹${inrAmount} में ${coinAmount} कॉइन आपके वॉलेट में जोड़े गए!`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: cleanErrorMessage(err) });
+  }
+});
+
 // Coin-Based Daily Frame Unlock with Asia/Kolkata expiry
 app.post("/api/wallet/unlock-frame", requireAuthMiddleware, (req, res) => {
   try {

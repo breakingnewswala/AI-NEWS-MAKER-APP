@@ -1497,8 +1497,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   const [completedDownloadFilename, setCompletedDownloadFilename] = useState<string | null>(null);
   const completedBlobRef = useRef<Blob | null>(null);
   const [isVideoSuccessModalOpen, setIsVideoSuccessModalOpen] = useState<boolean>(false);
+  const [isResetConfirmModalOpen, setIsResetConfirmModalOpen] = useState<boolean>(false);
 
-  // Robust Browser File Download Helper
+  // Robust Browser File Download Helper (Direct User Gesture & Blob URL)
   const triggerBrowserDownload = (blob: Blob, filename: string): boolean => {
     try {
       if ((window as any).AndroidBridge?.downloadVideo) {
@@ -1522,14 +1523,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       link.href = objectUrl;
       link.download = filename;
       link.setAttribute('download', filename);
-      link.rel = 'noopener noreferrer';
       link.style.position = 'fixed';
       link.style.left = '-9999px';
       link.style.top = '-9999px';
-      link.style.width = '1px';
-      link.style.height = '1px';
       link.style.opacity = '0.01';
-      link.target = '_self';
       document.body.appendChild(link);
 
       try {
@@ -1547,13 +1544,13 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         try {
           if (link.parentNode) document.body.removeChild(link);
         } catch {}
-      }, 3000);
+      }, 5000);
 
       setTimeout(() => {
         try {
           URL.revokeObjectURL(objectUrl);
         } catch {}
-      }, 120000);
+      }, 300000);
 
       return true;
     } catch (err) {
@@ -1911,19 +1908,19 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     // 4. Audio selection resolved
     const hasAudio = Boolean(audioOption === 'original' || audioOption === 'bgm' || audioOption === 'none');
     if (!hasAudio) {
-      missing.push({ key: 'audio', label: 'ऑडियो या संगीत विकल्प तय करें', step: 1 });
+      missing.push({ key: 'audio', label: 'ऑडियो या संगीत विकल्प तय करें', step: 2 });
     }
 
     // 5. Headline entered (trimmed non-empty)
     const hasHeadline = Boolean(headline && headline.trim().length > 0);
     if (!hasHeadline) {
-      missing.push({ key: 'headline', label: 'मुख्य हेडलाइन दर्ज करें (Headline Required)', step: 2 });
+      missing.push({ key: 'headline', label: 'मुख्य हेडलाइन दर्ज करें (Headline Required)', step: 3 });
     }
 
     // 6. Location entered (trimmed non-empty)
     const hasLocation = Boolean(location && location.trim().length > 0);
     if (!hasLocation) {
-      missing.push({ key: 'location', label: 'खबर की लोकेशन दर्ज करें (Location Required)', step: 3 });
+      missing.push({ key: 'location', label: 'खबर की लोकेशन दर्ज करें (Location Required)', step: 4 });
     }
 
     // 7. Footer/Social info present
@@ -1933,7 +1930,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       (mobileNumber && mobileNumber.trim().length > 0)
     );
     if (!hasFooter) {
-      missing.push({ key: 'footer', label: 'फ़ूटर या सोशल मीडिया जानकारी दर्ज करें', step: 4 });
+      missing.push({ key: 'footer', label: 'फ़ूटर या सोशल मीडिया जानकारी दर्ज करें', step: 5 });
     }
 
     const totalRequirements = 7;
@@ -2051,19 +2048,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   };
 
   const handleResetTask = () => {
-    if (headline.trim() || videoUrl || location.trim() || (clips && clips.length > 0)) {
-      showAppConfirm({
-        title: 'वीडियो स्टूडियो रीसेट',
-        message: 'क्या आप वर्तमान संपादन को रीसेट करना चाहते हैं? इससे सभी अनसेव्ड बदलाव हट जाएंगे।',
-        channelLogo: channelProfile?.channelLogoUrl,
-        confirmText: 'हाँ, रीसेट करें',
-        cancelText: 'रद्द करें',
-        isDestructive: true,
-        onConfirm: executeReset,
-      });
-      return;
-    }
-    executeReset();
+    setIsResetConfirmModalOpen(true);
   };
 
   // Draft Save Handler (Section 5)
@@ -2726,11 +2711,12 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   };
 
   // Export Full Video File with Complete Composition (Parity Guarantee: Video + Frame + Audio)
-  const handleDownloadVideo = async (forceRerender: boolean = false) => {
+  const handleDownloadVideo = async (forceRerender: boolean | any = false) => {
     if (isExporting) return;
+    const shouldForceRerender = typeof forceRerender === 'boolean' ? forceRerender : false;
 
     // If video is already rendered and ready, instantly download without re-rendering!
-    if (!forceRerender && (completedDownloadUrl || completedBlobRef.current)) {
+    if (!shouldForceRerender && (completedDownloadUrl || completedBlobRef.current)) {
       const filename = completedDownloadFilename || generateVideoDownloadFileName('mp4');
       if (completedBlobRef.current) {
         triggerBrowserDownload(completedBlobRef.current, filename);
@@ -2739,16 +2725,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         link.href = completedDownloadUrl;
         link.download = filename;
         link.setAttribute('download', filename);
-        link.style.position = 'fixed';
-        link.style.left = '-9999px';
-        link.style.top = '-9999px';
-        link.style.opacity = '0.01';
         document.body.appendChild(link);
-        try {
-          link.dispatchEvent(new MouseEvent('click', { view: window, bubbles: true, cancelable: true }));
-        } catch {
-          link.click();
-        }
+        link.click();
         setTimeout(() => {
           if (link.parentNode) document.body.removeChild(link);
         }, 3000);
@@ -3467,67 +3445,65 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       ? 'aspect-[4/3] max-w-[480px]'
       : 'aspect-square max-w-[420px]';
 
-  const renderAspectRatioAndFramesBox = () => (
-    <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-neutral-900 border-2 border-amber-500/60 rounded-2xl p-3 sm:p-5 space-y-3.5 shadow-xl mb-4">
-      {/* Row 1: Mode Switcher (Web only, hidden on Mobile per Section 1) */}
-      {!isMobile && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-800">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            <span className="text-xs font-black uppercase tracking-wider text-amber-300">
-              वीडियो मोड (Editing Mode):
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setIsReadyToUseMode(true);
-                showToast('⚡ क्विक वीडियो मोड (Quick Video Mode) सक्रिय');
-              }}
-              className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                isReadyToUseMode
-                  ? 'bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 shadow-md ring-2 ring-amber-300'
-                  : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
-              }`}
-            >
-              <span>⚡ Quick Video Mode</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIsReadyToUseMode(false);
-                if (isAdminOrMaster) {
-                  showToast('🎬 एडमिन स्टूडियो मोड (Studio Mode) सक्रिय');
-                } else {
-                  showToast('ℹ️ स्टूडियो मोड (Studio Mode) - Coming Soon');
-                }
-              }}
-              className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                !isReadyToUseMode
-                  ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-md ring-2 ring-amber-400/50'
-                  : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
-              }`}
-            >
-              <span>🎬 Studio Mode</span>
-              {!isAdminOrMaster ? (
-                <span className="text-[9px] bg-amber-400/30 text-amber-300 px-1.5 py-0.5 rounded font-black border border-amber-400/40">
-                  Coming Soon
-                </span>
-              ) : (
-                <span className="text-[9px] bg-purple-500/30 text-purple-300 px-1.5 py-0.5 rounded font-black border border-purple-400/40">
-                  Admin
-                </span>
-              )}
-            </button>
-          </div>
+  const renderModeSwitcherBar = () => (
+    <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-neutral-900 border border-amber-500/40 rounded-2xl p-2.5 sm:p-3 shadow-md mb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-amber-400" />
+          <span className="text-xs font-black uppercase tracking-wider text-amber-300">
+            वीडियो मोड (Editing Mode):
+          </span>
         </div>
-      )}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setIsReadyToUseMode(true);
+              showToast('⚡ क्विक वीडियो मोड (Quick Video Mode) सक्रिय');
+            }}
+            className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              isReadyToUseMode
+                ? 'bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 shadow-md ring-2 ring-amber-300'
+                : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
+            }`}
+          >
+            <span>⚡ Quick Video Mode</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsReadyToUseMode(false);
+              if (isAdminOrMaster) {
+                showToast('🎬 एडमिन स्टूडियो मोड (Studio Mode) सक्रिय');
+              } else {
+                showToast('ℹ️ स्टूडियो मोड (Studio Mode) - Coming Soon');
+              }
+            }}
+            className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              !isReadyToUseMode
+                ? 'bg-gradient-to-r from-red-600 to-amber-600 text-white shadow-md ring-2 ring-amber-400/50'
+                : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
+            }`}
+          >
+            <span>🎬 Studio Mode</span>
+            {!isAdminOrMaster ? (
+              <span className="text-[9px] bg-amber-400/30 text-amber-300 px-1.5 py-0.5 rounded font-black border border-amber-400/40">
+                Coming Soon
+              </span>
+            ) : (
+              <span className="text-[9px] bg-purple-500/30 text-purple-300 px-1.5 py-0.5 rounded font-black border border-purple-400/40">
+                Admin
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
-      {/* When a normal user is in Studio Mode (Coming Soon), hide lower frame/ratio controls to keep view pristine */}
-      {(!isReadyToUseMode && !isAdminOrMaster) ? null : (
-        <>
-          {/* Row 2: Aspect Ratio Selector (Section 3: Single horizontal row: 9:16, 1:1, 4:5, 4:3) */}
+  const renderAspectRatioAndFramesContent = () => (
+    <div className="bg-slate-950/70 border border-amber-500/40 rounded-xl p-3 sm:p-4 space-y-3 shadow-inner">
+      {/* Row: Aspect Ratio Selector */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between text-xs">
           <span className="font-bold text-slate-300 flex items-center gap-1.5">
@@ -3542,7 +3518,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         </div>
 
         {isRatioLocked ? (
-          <div className="p-2.5 bg-slate-950 border border-amber-500/40 rounded-xl flex items-center justify-between">
+          <div className="p-2.5 bg-slate-900 border border-amber-500/40 rounded-xl flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-amber-400 font-black text-xs">🔒 9:16 रील्स / शॉर्ट्स (लॉक)</span>
               <span className="text-[10px] text-slate-400 hidden sm:inline">(रील्स वीडियो का रेशियो 9:16 पर सुरक्षित है)</span>
@@ -3578,7 +3554,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 className={`p-2 rounded-xl border text-center transition cursor-pointer ${
                   aspect === r.id
                     ? 'bg-amber-400 text-slate-950 border-amber-300 font-black shadow-md ring-2 ring-amber-300/60'
-                    : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                    : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700'
                 }`}
               >
                 <div className="text-xs font-black">{r.label}</div>
@@ -3589,7 +3565,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         )}
       </div>
 
-      {/* Row 3: Frame Selection (Section 4: Placed immediately after Aspect Ratio selector) */}
+      {/* Row: Frame Selection */}
       <div className="space-y-2 pt-2.5 border-t border-slate-800">
         <div className="flex items-center justify-between text-xs">
           <span className="font-bold text-slate-300 flex items-center gap-1.5">
@@ -3601,8 +3577,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           </span>
         </div>
 
-        {/* Two-Column Horizontal Scrollable Frame Listing (Part 10 Req 20) */}
-        <div className="grid grid-rows-2 grid-flow-col auto-cols-[250px] sm:auto-cols-[280px] gap-2.5 overflow-x-auto pb-3 pt-1 scrollbar-thin scrollbar-thumb-amber-500/40">
+        <div className="grid grid-rows-2 grid-flow-col auto-cols-[250px] sm:auto-cols-[280px] gap-2.5 overflow-x-auto pb-2 pt-1 scrollbar-thin scrollbar-thumb-amber-500/40">
           {compatibleFrames.map((f) => {
             const isSel = selectedFrameId === f.id;
             return (
@@ -3616,10 +3591,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-center gap-2.5 w-full shrink-0 ${
                   isSel
                     ? 'bg-amber-400/20 border-amber-400 text-white ring-2 ring-amber-400/60 shadow-lg'
-                    : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
                 }`}
               >
-                <div className="text-lg p-1.5 bg-slate-900 rounded-lg shrink-0">
+                <div className="text-lg p-1.5 bg-slate-950 rounded-lg shrink-0">
                   {f.canvasRatio === '9:16' ? '📱' : f.canvasRatio === '4:5' ? '📰' : '📺'}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -3638,8 +3613,6 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           })}
         </div>
       </div>
-      </>
-      )}
     </div>
   );
 
@@ -3659,9 +3632,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       )}
 
       <div className="w-full flex flex-col lg:flex-row items-start gap-4 sm:gap-6">
-        {/* Mobile: Aspect Ratio and Frames selection box immediately above Live Canvas (Module N) */}
+        {/* Mobile: Editing Mode Switcher Bar */}
         <div className="w-full block lg:hidden">
-          {renderAspectRatioAndFramesBox()}
+          {renderModeSwitcherBar()}
         </div>
 
         {/* LEFT COLUMN (42%): Live Video Canvas with Sticky Jacket Overlay */}
@@ -3683,17 +3656,6 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 >
                   <RotateCcw className="w-3 h-3 text-neutral-400" />
                   <span className="hidden sm:inline">रीसेट</span>
-                </button>
-
-                {/* Adjacent Draft Button (Section 5) */}
-                <button
-                  type="button"
-                  onClick={handleSaveDraft}
-                  className="px-2 py-0.5 bg-amber-950/80 hover:bg-amber-900/80 text-amber-300 text-[11px] font-bold rounded-lg border border-amber-600/50 flex items-center gap-1 cursor-pointer transition active:scale-95"
-                  title="ड्राफ्ट सेव करें"
-                >
-                  <Save className="w-3 h-3 text-amber-400" />
-                  <span className="hidden sm:inline">ड्राफ्ट</span>
                 </button>
 
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-neutral-900 border border-neutral-700 text-amber-400 flex items-center gap-1 shrink-0">
@@ -4504,7 +4466,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 <span className="truncate">{videoExportError}</span>
                 <button
                   type="button"
-                  onClick={handleDownloadVideo}
+                  onClick={() => handleDownloadVideo(true)}
                   className="px-2 py-1 bg-red-700 hover:bg-red-600 text-white font-bold rounded-lg text-[10px] shrink-0 ml-2 cursor-pointer"
                 >
                   पुनः प्रयास करें
@@ -4540,7 +4502,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   {/* Download Video Button */}
                   <button
                     type="button"
-                    onClick={handleDownloadVideo}
+                    onClick={() => handleDownloadVideo(false)}
                     disabled={isExporting || !quickVideoValidation.isValid}
                     className={`py-2.5 px-2 font-extrabold text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all ${
                       quickVideoValidation.isValid && !isExporting
@@ -4679,9 +4641,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
             onChange={handleCustomAudioUpload}
           />
 
-          {/* Desktop Aspect Ratio and Frames Box (hidden on mobile per Module N) */}
+          {/* Desktop Editing Mode Switcher Bar */}
           <div className="hidden lg:block">
-            {renderAspectRatioAndFramesBox()}
+            {renderModeSwitcherBar()}
           </div>
 
           {/* ============================================================ */}
@@ -4689,7 +4651,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           {/* ============================================================ */}
           {isReadyToUseMode ? (
             /* ============================================================ */
-            /* UNIFIED QUICK VIDEO WORKFLOW (Web & Mobile - 5 Steps + Final) */
+            /* UNIFIED QUICK VIDEO WORKFLOW (Web & Mobile - 7 Steps)        */
             /* ============================================================ */
             <div className="w-full flex flex-col gap-3 sm:gap-4">
               {/* Stepper Header Card */}
@@ -4698,7 +4660,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      <span>त्वरित वीडियो निर्माण (चरण {quickStep}/6)</span>
+                      <span>त्वरित वीडियो निर्माण (चरण {quickStep}/7)</span>
                     </span>
                     <div className="flex items-center gap-2">
                       <span
@@ -4718,15 +4680,16 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   </div>
                 </div>
 
-                {/* Horizontal Compact Step Navigation Pills with Icons & Hindi Text */}
+                {/* Horizontal Compact Step Navigation Pills with Icons & Hindi Text (7 Steps) */}
                 <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto pb-1 scrollbar-none text-[10.5px] sm:text-xs font-bold w-full">
                   {[
-                    { step: 1, label: 'वीडियो', icon: Film, ok: Boolean((videoUrl && videoUrl.trim()) || clips.length > 0) },
-                    { step: 2, label: 'हेडलाइन', icon: Type, ok: Boolean(headline && headline.trim().length > 0) },
-                    { step: 3, label: 'लोकेशन', icon: MapPin, ok: Boolean(location && location.trim().length > 0) },
-                    { step: 4, label: 'लोगो व ब्रांडिंग', icon: Sparkles, ok: Boolean((socialHandle && socialHandle.trim().length > 0) || (channelTag && channelTag.trim().length > 0) || (mobileNumber && mobileNumber.trim().length > 0)) },
-                    { step: 5, label: 'वॉटरमार्क', icon: Shield, ok: Boolean(!showWatermark || watermarkType === 'none' || watermarkCustomText || watermarkText || watermarkImage) },
-                    { step: 6, label: 'डाउनलोड व कैप्शन', icon: Download, ok: quickVideoValidation.isValid },
+                    { step: 1, label: 'वीडियो व फ्रेम्स', icon: Film, ok: Boolean((videoUrl && videoUrl.trim()) || clips.length > 0) },
+                    { step: 2, label: 'संगीत व ऑडियो', icon: Music, ok: Boolean(audioOption === 'original' || audioOption === 'none' || (audioOption === 'bgm' && (bgmTrack || customAudioUrl))) },
+                    { step: 3, label: 'हेडलाइन', icon: Type, ok: Boolean(headline && headline.trim().length > 0) },
+                    { step: 4, label: 'लोकेशन', icon: MapPin, ok: Boolean(location && location.trim().length > 0) },
+                    { step: 5, label: 'लोगो व ब्रांडिंग', icon: Sparkles, ok: Boolean((socialHandle && socialHandle.trim().length > 0) || (channelTag && channelTag.trim().length > 0) || (mobileNumber && mobileNumber.trim().length > 0)) },
+                    { step: 6, label: 'वॉटरमार्क', icon: Shield, ok: Boolean(!showWatermark || watermarkType === 'none' || watermarkCustomText || watermarkText || watermarkImage) },
+                    { step: 7, label: 'डाउनलोड', icon: Download, ok: quickVideoValidation.isValid },
                   ].map((s) => {
                     const isActive = quickStep === s.step;
                     const IconComp = s.icon;
@@ -4758,19 +4721,22 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               </div>
 
               {/* ============================================================ */}
-              {/* STEP 1: VIDEO & COLOR FILTERS (Source-Aware per Part 8)      */}
+              {/* STEP 1: VIDEO & FRAMES (Aspect Ratio + Frames + Video Media) */}
               {/* ============================================================ */}
               {quickStep === 1 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between pb-1 border-b border-slate-800">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Film className="w-4 h-4 text-amber-400" />
-                      {isFromVideoReels ? '1. वीडियो और कलर फ़िल्टर्स' : '1. वीडियो जोड़ें और ट्रिम करें'}
+                      1. वीडियो व फ़्रेम्स डिज़ाइन (Video & Frames)
                     </span>
                     <span className="text-xs font-mono font-bold text-slate-300">
                       {isFromVideoReels ? '🔒 ओरिजिनल वीडियो लॉक' : `क्लिप्स: ${clips.length}/3`}
                     </span>
                   </div>
+
+                  {/* Aspect Ratio and Frames selection rendered directly inside Step 1 */}
+                  {renderAspectRatioAndFramesContent()}
 
                   {/* If entering from Video & Reels: Locked Video status & Color Filters (Part 8.A, 8.B, 8.C, 8.D, 8.E) */}
                   {isFromVideoReels && (
@@ -5049,14 +5015,14 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* MUSIC AND AUDIO (Configurable in Step 1)                      */}
+              {/* STEP 2: MUSIC AND AUDIO                                      */}
               {/* ============================================================ */}
-              {!isFromVideoReels && quickStep === 1 && (
+              {quickStep === 2 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Music className="w-4 h-4 text-amber-400" />
-                      संगीत व ऑडियो विकल्प (Music & Audio)
+                      2. संगीत व ऑडियो विकल्प (Music & Audio)
                     </span>
                     <button
                       type="button"
@@ -5237,14 +5203,14 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* STEP 2: HEADLINES                                            */}
+              {/* STEP 3: HEADLINES                                            */}
               {/* ============================================================ */}
-              {quickStep === 2 && (
+              {quickStep === 3 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between pb-1 border-b border-slate-800">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Type className="w-4 h-4 text-amber-400" />
-                      2. आपकी हेडलाइंस (News Headlines)
+                      3. आपकी हेडलाइंस (News Headlines)
                     </span>
                     <span className="text-[10px] text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20 font-bold">
                       आवश्यक (Required)
@@ -5432,14 +5398,14 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* STEP 3: LOCATION                                             */}
+              {/* STEP 4: LOCATION                                             */}
               {/* ============================================================ */}
-              {quickStep === 3 && (
+              {quickStep === 4 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <MapPin className="w-4 h-4 text-amber-400" />
-                      3. खबर की लोकेशन (News Location)
+                      4. खबर की लोकेशन (News Location)
                     </span>
                     <span className="text-[10px] text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded border border-amber-400/20 font-bold">
                       आवश्यक (Required)
@@ -5480,14 +5446,14 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* STEP 4: LOGO & BRANDING                                      */}
+              {/* STEP 5: LOGO & BRANDING                                      */}
               {/* ============================================================ */}
-              {quickStep === 4 && (
+              {quickStep === 5 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-amber-400" />
-                      4. लोगो व ब्रांडिंग (Logo & Branding)
+                      5. लोगो व ब्रांडिंग (Logo & Branding)
                     </span>
                   </div>
 
@@ -5676,14 +5642,14 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* STEP 5: WATERMARK SETTINGS                                   */}
+              {/* STEP 6: WATERMARK SETTINGS                                   */}
               {/* ============================================================ */}
-              {quickStep === 5 && (
+              {quickStep === 6 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Shield className="w-4 h-4 text-amber-400" />
-                      5. वॉटरमार्क सेटिंग्स (Watermark)
+                      6. वॉटरमार्क सेटिंग्स (Watermark)
                     </span>
                     <button
                       type="button"
@@ -5903,74 +5869,53 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               )}
 
               {/* ============================================================ */}
-              {/* STEP 6: DOWNLOAD & CAPTION                                   */}
+              {/* STEP 7: DOWNLOAD & SHARE                                     */}
               {/* ============================================================ */}
-              {quickStep === 6 && (
+              {quickStep === 7 && (
                 <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between pb-1 border-b border-slate-800">
                     <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
                       <Download className="w-4 h-4 text-amber-400" />
-                      6. वीडियो डाउनलोड व कैप्शन (Download & Caption)
+                      7. डाउनलोड (Download & Export)
                     </span>
                     <span
                       className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
-                        quickVideoValidation.completionPercentage === 100
+                        quickVideoValidation.isValid
                           ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                          : 'bg-red-500/20 text-red-300 border-red-500/30'
+                          : 'bg-amber-400/20 text-amber-300 border-amber-400/30'
                       }`}
                     >
-                      {quickVideoValidation.completionPercentage}% पूर्ण
+                      {quickVideoValidation.isValid ? '✅ तैयार (100%)' : `${quickVideoValidation.missingItems.length} विवरण बाकी`}
                     </span>
                   </div>
 
-                  {/* Part 7: Video-specific generation notice */}
-                  <div className="p-3 bg-gradient-to-r from-amber-950/60 via-slate-900 to-slate-950 border border-amber-500/30 rounded-xl flex items-center gap-2.5 text-xs text-amber-200">
-                    <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                    <span className="font-bold">आपकी चुनी हुई वीडियो को AI द्वारा तैयार किया जा रहा है।</span>
-                  </div>
-
-                  {/* Completion Status Checklist */}
-                  <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-2">
-                    <span className="text-xs font-bold text-slate-300 block">
-                      आवश्यक चेकलिस्ट (Strict 100% Validation):
-                    </span>
-
-                    <div className="space-y-1.5 text-xs">
-                      {[
-                        { key: 'video', label: '1. वीडियो क्लिप जोड़ी गई', ok: Boolean((videoUrl && videoUrl.trim()) || clips.length > 0), step: 1 },
-                        { key: 'aspect', label: '2. आस्पेक्ट रेशियो चयनित', ok: Boolean(aspect), step: 1 },
-                        { key: 'frame', label: '3. कंपैटिबल फ़्रेम चयनित', ok: Boolean(selectedFrameId), step: 1 },
-                        { key: 'audio', label: '4. ऑडियो / म्यूज़िक विकल्प तय', ok: Boolean(audioOption), step: 1 },
-                        { key: 'headline', label: '5. मुख्य हेडलाइन दर्ज (Headline)', ok: Boolean(headline && headline.trim()), step: 2 },
-                        { key: 'location', label: '6. खबर की लोकेशन दर्ज (Location)', ok: Boolean(location && location.trim()), step: 3 },
-                        { key: 'footer', label: '7. लोगो व ब्रांडिंग संपर्क जानकारी', ok: Boolean((socialHandle && socialHandle.trim()) || (channelTag && channelTag.trim()) || (mobileNumber && mobileNumber.trim())), step: 4 },
-                        { key: 'watermark', label: '8. वॉटरमार्क सेटिंग्स', ok: Boolean(!showWatermark || watermarkType === 'none' || watermarkCustomText || watermarkText || watermarkImage), step: 5 },
-                      ].map((item) => (
-                        <div key={item.key} className="flex items-center justify-between py-1 border-b border-slate-800/60 last:border-0">
-                          <span className="flex items-center gap-2">
-                            {item.ok ? (
-                              <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                            ) : (
-                              <AlertCircle className="w-3.5 h-3.5 text-red-400" />
-                            )}
-                            <span className={item.ok ? 'text-slate-300' : 'text-red-300 font-bold'}>
-                              {item.label}
-                            </span>
-                          </span>
-
-                          {!item.ok && (
-                            <button
-                              type="button"
-                              onClick={() => setQuickStep(item.step)}
-                              className="text-[10px] bg-red-950 text-red-300 hover:text-white px-2 py-0.5 rounded border border-red-800 font-bold cursor-pointer"
-                            >
-                              चरण {item.step} पर जाएँ →
-                            </button>
-                          )}
-                        </div>
-                      ))}
+                  {/* Clean Status Banner */}
+                  {quickVideoValidation.isValid ? (
+                    <div className="p-3 bg-emerald-950/50 border border-emerald-500/40 rounded-xl flex items-center gap-2.5 text-xs text-emerald-200">
+                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span className="font-bold">सभी आवश्यक विवरण पूर्ण हैं - आपकी वीडियो फुल HD में डाउनलोड के लिए तैयार है!</span>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="p-3 bg-amber-950/40 border border-amber-500/40 rounded-xl space-y-2">
+                      <div className="flex items-center gap-2 text-xs text-amber-300 font-bold">
+                        <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                        <span>कृपया डाउनलोड से पहले ये विवरण पूर्ण करें:</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {quickVideoValidation.missingItems.map((item) => (
+                          <button
+                            key={item.key}
+                            type="button"
+                            onClick={() => setQuickStep(item.step)}
+                            className="text-[11px] bg-red-950/80 hover:bg-red-900 text-red-200 px-2.5 py-1 rounded-lg border border-red-800/80 font-bold flex items-center gap-1.5 cursor-pointer transition active:scale-95"
+                          >
+                            <span>⚠️ {item.label}</span>
+                            <span className="text-[10px] bg-red-900 px-1 rounded text-red-300">चरण {item.step} →</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Caption Action */}
                   <div className="flex items-center gap-2">
@@ -5995,10 +5940,16 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                       <a
                         href={completedDownloadUrl}
                         download={completedDownloadFilename || 'breaking_news_video.mp4'}
+                        onClick={() => {
+                          if (completedBlobRef.current) {
+                            triggerBrowserDownload(completedBlobRef.current, completedDownloadFilename || 'breaking_news_video.mp4');
+                          }
+                          showToast('✅ वीडियो आपके डिवाइस में सेव हो रहा है!');
+                        }}
                         className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-lg flex items-center justify-center gap-2 shadow cursor-pointer transition active:scale-95"
                       >
                         <Download className="w-4 h-4" />
-                        <span>✅ सीधे वीडियो फाइल सेव करें (Save Video)</span>
+                        <span>✅ सीधे वीडियो फाइल सेव करें (Save Video Now)</span>
                       </a>
                     </div>
                   )}
@@ -6006,7 +5957,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   {/* Download Video Button */}
                   <button
                     type="button"
-                    onClick={handleDownloadVideo}
+                    onClick={() => handleDownloadVideo(false)}
                     disabled={!quickVideoValidation.isValid || isExporting}
                     className={`w-full py-3.5 rounded-xl font-extrabold text-sm shadow-xl flex items-center justify-center gap-2 cursor-pointer transition active:scale-95 ${
                       completedDownloadUrl
@@ -6077,10 +6028,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   <span>पिछला चरण</span>
                 </button>
 
-                {quickStep < 6 ? (
+                {quickStep < 7 ? (
                   <button
                     type="button"
-                    onClick={() => setQuickStep((s) => Math.min(6, s + 1))}
+                    onClick={() => setQuickStep((s) => Math.min(7, s + 1))}
                     className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-amber-500 text-white cursor-pointer shadow hover:from-red-500 hover:to-amber-400 transition flex items-center justify-center gap-1.5 active:scale-95"
                   >
                     <span>अगला चरण (स्टेप {quickStep + 1})</span>
@@ -6089,7 +6040,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 ) : (
                   <button
                     type="button"
-                    onClick={handleDownloadVideo}
+                    onClick={() => handleDownloadVideo(false)}
                     disabled={!quickVideoValidation.isValid || isExporting}
                     className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white cursor-pointer shadow hover:from-emerald-500 hover:to-teal-400 transition flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -7385,6 +7336,39 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 <span>होम पेज पर वापस जाएं</span>
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Reset Confirmation Modal */}
+      {isResetConfirmModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border-2 border-red-500/80 rounded-2xl max-w-md w-full p-6 text-center space-y-4 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 text-2xl">
+              ⚠️
+            </div>
+            <h3 className="text-lg font-black text-white">
+              वीडियो स्टूडियो रीसेट करें?
+            </h3>
+            <p className="text-sm text-slate-300 leading-relaxed">
+              क्या आप वास्तव में वीडियो स्टूडियो रीसेट करना चाहते हैं? आपका वर्तमान संपादन व जोड़ी गई क्लिप्स साफ हो जाएंगी और स्टूडियो प्रारंभिक स्थिति (चरण 1) पर आ जाएगा।
+            </p>
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsResetConfirmModalOpen(false)}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs cursor-pointer border border-slate-700 transition active:scale-95"
+              >
+                रद्द करें
+              </button>
+              <button
+                type="button"
+                onClick={executeReset}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs cursor-pointer shadow-lg shadow-red-600/30 transition active:scale-95"
+              >
+                हाँ, रीसेट करें
+              </button>
+            </div>
           </div>
         </div>
       )}

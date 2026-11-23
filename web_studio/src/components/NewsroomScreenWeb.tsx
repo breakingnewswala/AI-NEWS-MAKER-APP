@@ -36,6 +36,7 @@ import {
   Bookmark,
   FileText,
   Settings,
+  Maximize2,
 } from 'lucide-react';
 import { InstallPwaModal } from './InstallPwaModal';
 const WhatsAppLiveInbox = React.lazy(() => import('./WhatsAppLiveInbox').then((m) => ({ default: m.WhatsAppLiveInbox })));
@@ -146,6 +147,7 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
   const [socialFeedSearch, setSocialFeedSearch] = useState('');
   const [socialFeedFilter, setSocialFeedFilter] = useState<'all' | 'brand' | 'user'>('all');
   const [copiedFeedId, setCopiedFeedId] = useState<string | null>(null);
+  const [selectedSocialPreviewCard, setSelectedSocialPreviewCard] = useState<any | null>(null);
 
   const fetchSocialFeed = async () => {
     setIsSocialFeedLoading(true);
@@ -1591,31 +1593,96 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                         return (
                           <div
                             key={card.id}
-                            className={`rounded-2xl p-4 flex flex-col justify-between gap-3 shadow-lg transition-all ${
+                            className={`rounded-2xl p-3 sm:p-4 flex flex-col justify-between gap-3 shadow-xl transition-all ${
                               isBrandCard
-                                ? 'bg-gradient-to-b from-slate-900 via-slate-900 to-amber-950/20 border-2 border-amber-500/50 hover:border-amber-400'
-                                : 'bg-slate-900/90 border border-slate-800 hover:border-cyan-500/40'
+                                ? 'bg-gradient-to-b from-slate-900 via-slate-900 to-amber-950/30 border-2 border-amber-500/50 hover:border-amber-400'
+                                : 'bg-slate-900/90 border border-slate-800 hover:border-cyan-500/50'
                             }`}
                           >
-                            <div className="space-y-2.5">
-                              {/* Header Meta: Distinct for Brand vs User */}
-                              <div className="flex items-center justify-between text-[11px] gap-2">
-                                {isBrandCard ? (
-                                  <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 font-black flex items-center gap-1 shadow-sm">
-                                    <span>⭐ AI News Maker Official</span>
+                            {/* 4:5 Aspect Ratio Visual Graphic Container */}
+                            <div
+                              onClick={() => setSelectedSocialPreviewCard(card)}
+                              className="relative w-full aspect-[4/5] rounded-xl overflow-hidden shadow-2xl cursor-pointer group border border-slate-800 hover:border-amber-400/60 transition-all duration-300 flex flex-col justify-between p-3 select-none"
+                            >
+                              {/* Background: Image or Editorial Gradient Pattern */}
+                              {card.thumbnailUrl ? (
+                                <img
+                                  src={card.thumbnailUrl}
+                                  alt={card.headline || 'News Graphic'}
+                                  className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                />
+                              ) : (
+                                <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-neutral-900 to-black">
+                                  <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:16px_16px]" />
+                                  <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-800 text-6xl font-black select-none pointer-events-none opacity-20">
+                                    NEWS
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Dark Vignette & Gradient Overlays */}
+                              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-black/70 pointer-events-none" />
+
+                              {/* Graphic Top Bar: Logo, Channel & Category */}
+                              <div className="relative z-10 flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center font-black text-[10px] shrink-0 border ${
+                                    isBrandCard
+                                      ? 'bg-gradient-to-tr from-amber-500 to-red-600 text-slate-950 border-amber-300 shadow'
+                                      : 'bg-cyan-600 text-white border-cyan-400 shadow'
+                                  }`}>
+                                    {isBrandCard ? 'AI' : (card.channelName || 'N').slice(0, 2).toUpperCase()}
+                                  </div>
+                                  <span className="text-[11px] font-black text-white truncate max-w-[120px] drop-shadow">
+                                    {isBrandCard ? 'AI News Maker Official' : card.channelName || 'यूज़र चैनल'}
                                   </span>
-                                ) : (
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <span className="px-2 py-0.5 rounded-md bg-cyan-950/80 text-cyan-300 border border-cyan-500/30 font-bold truncate max-w-[120px]">
-                                      {card.channelName || 'यूज़र चैनल'}
-                                    </span>
-                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 shrink-0">
-                                      🌐 User SEO
-                                    </span>
+                                </div>
+
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-red-600 text-white shadow uppercase tracking-wide">
+                                    {card.category || 'ब्रेकिंग'}
+                                  </span>
+                                  <span className="text-[9px] font-mono text-slate-300 bg-black/60 px-1 py-0.5 rounded border border-white/10">
+                                    4:5
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Graphic Center: Click to zoom hint overlay on hover */}
+                              <div className="relative z-10 self-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/70 text-amber-300 px-3 py-1 rounded-full text-[10px] font-bold border border-amber-400/40 backdrop-blur-sm shadow flex items-center gap-1">
+                                <Maximize2 className="w-3 h-3" />
+                                <span>फुल प्रीव्यू देखें</span>
+                              </div>
+
+                              {/* Graphic Bottom Plate: Headline & Permanent Promo Strip */}
+                              <div className="relative z-10 space-y-2 pt-3">
+                                {/* Reporter Badge if present */}
+                                {card.reporterName && (
+                                  <div className="inline-block text-[9px] font-bold px-1.5 py-0.2 bg-amber-400 text-slate-950 rounded shadow-sm">
+                                    🎤 {card.reporterName}
                                   </div>
                                 )}
 
-                                <div className="flex items-center gap-1.5 text-slate-400 shrink-0">
+                                {/* High-Impact Headline on Gradient Plate */}
+                                <h4 className="text-sm sm:text-base font-black text-white leading-tight font-['Baloo_2',sans-serif] drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] line-clamp-3">
+                                  {card.headline || 'अनाम समाचार'}
+                                </h4>
+
+                                {/* Permanent Official AI News Maker Promo Strip */}
+                                <div className="py-1 px-2 bg-gradient-to-r from-red-600 via-amber-600 to-red-600 rounded-lg text-white font-black text-[9.5px] sm:text-[10px] flex items-center justify-between shadow-md border border-white/20">
+                                  <div className="flex items-center gap-1.5 truncate">
+                                    <span className="w-3.5 h-3.5 rounded bg-white text-slate-950 flex items-center justify-center font-black text-[8px] shrink-0">AI</span>
+                                    <span className="truncate">ऐसी ही खबरों व आकर्षक ग्राफ़िक्स के लिए आज ही AI News Maker डाउनलोड करें!</span>
+                                  </div>
+                                  <span className="shrink-0 text-xs">📲</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Metadata & Actions Area (Below Graphic) */}
+                            <div className="space-y-2 pt-1">
+                              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                                <div className="flex items-center gap-1 text-slate-400">
                                   <Clock className="w-3 h-3" />
                                   <span>
                                     {card.createdAt
@@ -1625,82 +1692,46 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                                         })
                                       : 'अभी'}
                                   </span>
-                                  {isAdmin && (
-                                    <button
-                                      type="button"
-                                      onClick={() => deleteSocialFeedCard(card.id)}
-                                      className="p-1 text-slate-500 hover:text-red-400 rounded transition ml-1"
-                                      title="कार्ड हटाएँ"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
                                 </div>
+
+                                {isAdmin && (
+                                  <button
+                                    type="button"
+                                    onClick={() => deleteSocialFeedCard(card.id)}
+                                    className="p-1 text-slate-500 hover:text-red-400 rounded transition"
+                                    title="कार्ड हटाएँ"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                               </div>
 
-                              {/* Card Headline */}
-                              <h4 className="text-sm font-bold text-white leading-snug line-clamp-3 font-['Baloo_2',sans-serif]">
-                                {card.headline || 'अनाम समाचार'}
-                              </h4>
-
-                              {/* User SEO Specific Badge */}
-                              {!isBrandCard && (
-                                <div className="p-2 rounded-xl bg-cyan-950/30 border border-cyan-500/20 text-[11px] text-cyan-200/90 space-y-1">
-                                  <div className="flex items-center justify-between text-[10px]">
-                                    <span className="font-bold text-cyan-300">🔍 Google Image SEO</span>
+                              {/* Distinct Actions: WhatsApp Share for Brand vs Pure SEO for User */}
+                              {isBrandCard ? (
+                                <div className="space-y-1.5 pt-1 border-t border-slate-800">
+                                  <a
+                                    href={`https://api.whatsapp.com/send?text=${encodeURIComponent(postShareText)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                                    title="WhatsApp पर शेयर करें"
+                                  >
+                                    <Share2 className="w-3.5 h-3.5" />
+                                    <span>📱 WhatsApp पर शेयर करें</span>
+                                  </a>
+                                </div>
+                              ) : (
+                                <div className="p-2 rounded-xl bg-cyan-950/40 border border-cyan-500/30 text-[10px] text-cyan-200 space-y-1 border-t border-slate-800">
+                                  <div className="flex items-center justify-between">
+                                    <span className="font-bold text-cyan-300 flex items-center gap-1">
+                                      <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                                      <span>Google Image SEO Index</span>
+                                    </span>
                                     <span className="text-emerald-400 font-bold">✓ Ready for Indexing</span>
                                   </div>
-                                  <div className="text-[10px] text-slate-400 truncate">
-                                    Brand Anchor: <strong className="text-amber-300">AI News Maker</strong> ({card.channelName || 'Reporter'})
+                                  <div className="text-[10px] text-slate-300 truncate">
+                                    Brand Anchor: <strong className="text-amber-300 font-bold">AI News Maker</strong> ({card.channelName || 'Reporter'})
                                   </div>
-                                </div>
-                              )}
-
-                              {/* SEO Hashtag Pills */}
-                              <div className="flex flex-wrap gap-1">
-                                {(card.seoHashtags || [
-                                  '#AINewsMaker',
-                                  '#BreakingNews',
-                                  '#ताज़ा_समाचार',
-                                ]).slice(0, 4).map((tag: string, tidx: number) => (
-                                  <span
-                                    key={tidx}
-                                    className={`text-[10px] px-1.5 py-0.5 rounded border ${
-                                      isBrandCard
-                                        ? 'text-amber-300/90 bg-amber-950/50 border-amber-500/30'
-                                        : 'text-slate-400 bg-slate-800/80 border-slate-700/60'
-                                    }`}
-                                  >
-                                    {tag}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Actions Footer: Distinct for Brand (WhatsApp Share only) vs User (SEO status only) */}
-                            <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                              {isBrandCard ? (
-                                /* AI NEWS MAKER BRAND CARD: ONLY WHATSAPP SHARE BUTTON */
-                                <a
-                                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent(postShareText)}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                                  title="WhatsApp पर शेयर करें"
-                                >
-                                  <Share2 className="w-3.5 h-3.5" />
-                                  <span>📱 WhatsApp पर शेयर करें</span>
-                                </a>
-                              ) : (
-                                /* REGULAR USER CARD: NO WHATSAPP SHARE, NO CAPTION COPY - PURELY SEO */
-                                <div className="w-full flex items-center justify-between text-[11px] text-slate-400 py-1 px-1">
-                                  <span className="flex items-center gap-1 text-slate-400">
-                                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse inline-block" />
-                                    <span>Google Search Anchor</span>
-                                  </span>
-                                  <span className="text-[10px] font-bold text-amber-300/90 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/20">
-                                    AI News Maker SEO
-                                  </span>
                                 </div>
                               )}
                             </div>
@@ -2842,6 +2873,102 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
                 alt={previewAttachment.name || 'Full preview'}
                 className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-lg border border-slate-800"
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* High-Resolution Full Size 4:5 Social Card Preview Modal */}
+      {selectedSocialPreviewCard && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="relative max-w-sm sm:max-w-md w-full bg-slate-900 border-2 border-amber-500/70 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh]">
+            {/* Modal Close Button */}
+            <button
+              type="button"
+              onClick={() => setSelectedSocialPreviewCard(null)}
+              className="absolute top-3 right-3 z-30 p-2 bg-black/75 hover:bg-black text-white rounded-full border border-white/20 transition cursor-pointer shadow-lg"
+              title="बंद करें"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* 4:5 Preview Canvas Container */}
+            <div className="relative w-full aspect-[4/5] bg-slate-950 overflow-hidden flex flex-col justify-between p-4 sm:p-5 select-none">
+              {selectedSocialPreviewCard.thumbnailUrl ? (
+                <img
+                  src={selectedSocialPreviewCard.thumbnailUrl}
+                  alt={selectedSocialPreviewCard.headline}
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-neutral-900 to-black">
+                  <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:16px_16px]" />
+                  <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 text-slate-800 text-7xl font-black select-none pointer-events-none opacity-20">
+                    NEWS
+                  </div>
+                </div>
+              )}
+              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-black/75 pointer-events-none" />
+
+              {/* Top Bar */}
+              <div className="relative z-10 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-amber-500 text-slate-950 font-black text-xs flex items-center justify-center shadow">
+                    AI
+                  </div>
+                  <span className="text-xs sm:text-sm font-black text-white drop-shadow">
+                    {selectedSocialPreviewCard.cardType === 'brand' || selectedSocialPreviewCard.isOfficialBrand
+                      ? 'AI News Maker Official'
+                      : selectedSocialPreviewCard.channelName || 'यूज़र चैनल'}
+                  </span>
+                </div>
+                <span className="text-[10px] font-black px-2 py-0.5 rounded bg-red-600 text-white shadow uppercase">
+                  {selectedSocialPreviewCard.category || 'ताज़ा समाचार'}
+                </span>
+              </div>
+
+              {/* Bottom Headline & Promo */}
+              <div className="relative z-10 space-y-2.5">
+                {selectedSocialPreviewCard.reporterName && (
+                  <div className="inline-block text-[10px] font-bold px-2 py-0.5 bg-amber-400 text-slate-950 rounded shadow">
+                    🎤 {selectedSocialPreviewCard.reporterName}
+                  </div>
+                )}
+                <h3 className="text-base sm:text-lg font-black text-white leading-tight font-['Baloo_2',sans-serif] drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+                  {selectedSocialPreviewCard.headline}
+                </h3>
+                <div className="py-2 px-3 bg-gradient-to-r from-red-600 via-amber-600 to-red-600 rounded-xl text-white font-black text-xs flex items-center justify-between shadow-lg border border-white/20">
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="w-4 h-4 rounded bg-white text-slate-950 flex items-center justify-center font-black text-[9px] shrink-0">AI</span>
+                    <span className="truncate">ऐसी ही खबरों व आकर्षक ग्राफ़िक्स के लिए आज ही AI News Maker डाउनलोड करें!</span>
+                  </div>
+                  <span className="shrink-0 text-sm">📲</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer Controls */}
+            <div className="p-3.5 bg-slate-900 border-t border-slate-800 space-y-2">
+              {selectedSocialPreviewCard.cardType === 'brand' || selectedSocialPreviewCard.isOfficialBrand ? (
+                <a
+                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+                    `${selectedSocialPreviewCard.headline}\n\n📲 पूरी खबर और लाइव डिजिटल न्यूज़ कार्ड्स देखें: https://www.ainewsmaker.online\n\n#AINewsMaker #BreakingNews #ताज़ा_समाचार`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 text-white font-black text-xs shadow-md flex items-center justify-center gap-2 cursor-pointer transition active:scale-95"
+                >
+                  <Share2 className="w-4 h-4" />
+                  <span>📱 WhatsApp पर शेयर करें</span>
+                </a>
+              ) : (
+                <div className="p-2.5 bg-cyan-950/40 border border-cyan-500/30 rounded-xl text-xs text-cyan-200 space-y-1 text-center">
+                  <div className="font-bold text-cyan-300">🔍 Google Image SEO Indexing Active</div>
+                  <div className="text-[11px] text-slate-400">
+                    यह कार्ड Google Images सर्च पर AI News Maker बैकलिंक और कीवर्ड्स के साथ इंडेक्स किया जाता है।
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
