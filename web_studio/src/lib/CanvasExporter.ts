@@ -1,4 +1,3 @@
-import html2canvas from 'html2canvas';
 import { NewsCardData, TextBreakingBadgeStyle } from '../types';
 import { getActiveFooterPng } from './footerUtils';
 import { getActiveHeaderPng } from './headerUtils';
@@ -8026,6 +8025,7 @@ export async function generateCardCanvas(
     const targetHeight = ratio < 1.1 ? 1080 : ratio > 1.5 ? 1920 : 1350;
     const dynamicScale = targetWidth / elemWidth;
 
+    const html2canvas = (await import('html2canvas')).default;
     const rawCanvas = await html2canvas(htmlElement, {
       scale: dynamicScale,
       useCORS: true,

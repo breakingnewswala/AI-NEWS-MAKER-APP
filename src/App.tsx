@@ -100,13 +100,9 @@ import { AppTopBarWeb } from './components/AppTopBarWeb';
 import { AppBottomBarWeb } from './components/AppBottomBarWeb';
 import { HomeScreenWeb } from './components/HomeScreenWeb';
 const VideosScreenWeb = React.lazy(() => import('./components/VideosScreenWeb').then((m) => ({ default: m.VideosScreenWeb })));
-const EPaperScreenWeb = React.lazy(() => import('./components/EPaperScreenWeb').then((m) => ({ default: m.EPaperScreenWeb })));
 const ProfileScreenWeb = React.lazy(() => import('./components/ProfileScreenWeb').then((m) => ({ default: m.ProfileScreenWeb })));
 const NewsroomScreenWeb = React.lazy(() => import('./components/NewsroomScreenWeb').then((m) => ({ default: m.NewsroomScreenWeb })));
-const DraftsScreenWeb = React.lazy(() => import('./components/DraftsScreenWeb').then((m) => ({ default: m.DraftsScreenWeb })));
 import { addProjectToHistory } from './lib/projectHistoryManager';
-const CategoriesScreenWeb = React.lazy(() => import('./components/CategoriesScreenWeb').then((m) => ({ default: m.CategoriesScreenWeb })));
-const ExportScreenWeb = React.lazy(() => import('./components/ExportScreenWeb').then((m) => ({ default: m.ExportScreenWeb })));
 const TermsPage = React.lazy(() => import('./components/TermsPage').then((m) => ({ default: m.TermsPage })));
 const PrivacyPolicyPage = React.lazy(() => import('./components/PrivacyPolicyPage').then((m) => ({ default: m.PrivacyPolicyPage })));
 const AccountDeletionPage = React.lazy(() => import('./components/AccountDeletionPage').then((m) => ({ default: m.AccountDeletionPage })));
@@ -4063,9 +4059,9 @@ export default function App() {
 
   if (isRemotionPoc) {
     return (
-      <Suspense fallback={<div className="p-12 text-center text-slate-400 font-bold flex items-center justify-center min-h-[400px]">रेमोशन स्टूडियो लोड हो रहा है...</div>}>
+      <React.Suspense fallback={<div className="min-h-screen bg-[#070D1E] flex items-center justify-center text-slate-400 font-bold">लोड हो रहा है...</div>}>
         <RemotionTestStudio />
-      </Suspense>
+      </React.Suspense>
     );
   }
 
