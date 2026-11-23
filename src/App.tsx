@@ -25,7 +25,7 @@ const GoogleSheetsUserSyncModal = React.lazy(() => import('./components/GoogleSh
 const ChannelOnboardingModal = React.lazy(() => import('./components/ChannelOnboardingModal').then((m) => ({ default: m.ChannelOnboardingModal })));
 const InstallPwaModal = React.lazy(() => import('./components/InstallPwaModal').then((m) => ({ default: m.InstallPwaModal })));
 const NotificationPermissionModal = React.lazy(() => import('./components/NotificationPermissionModal').then((m) => ({ default: m.NotificationPermissionModal })));
-import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
+const AuthWelcomeScreen = React.lazy(() => import('./components/AuthWelcomeScreen').then((m) => ({ default: m.AuthWelcomeScreen })));
 import { BrandedNewsLoadingModal, BrandedLoaderMode } from './components/BrandedNewsLoadingModal';
 const NewsDetailModal = React.lazy(() => import('./components/NewsDetailModal').then((m) => ({ default: m.NewsDetailModal })));
 import { AppNotificationModal } from './components/AppNotificationModal';
@@ -95,7 +95,7 @@ import {
 const VideoStudioWeb = React.lazy(() => import('./components/VideoStudioWeb').then((m) => ({ default: m.VideoStudioWeb })));
 const RemotionTestStudio = React.lazy(() => import('./components/RemotionTestStudio').then((m) => ({ default: m.RemotionTestStudio })));
 import { FRAME_OPTIONS } from './lib/HeaderDesigns';
-import { AutoFillNewsData } from './components/InlineAiNewsTools';
+import type { AutoFillNewsData } from './components/InlineAiNewsTools';
 import { AppTopBarWeb } from './components/AppTopBarWeb';
 import { AppBottomBarWeb } from './components/AppBottomBarWeb';
 import { HomeScreenWeb } from './components/HomeScreenWeb';
@@ -4114,6 +4114,7 @@ export default function App() {
             </div>
           </div>
         )}
+        <Suspense fallback={<div className="min-h-screen bg-[#070D1E] flex items-center justify-center text-slate-400 font-bold">लॉगिन स्क्रीन लोड हो रही है...</div>}>
         <AuthWelcomeScreen
           initialStep={currentUser && !isOnboardingCompleted ? 2 : 1}
           currentUser={currentUser}
@@ -4247,6 +4248,7 @@ export default function App() {
             }
           }}
         />
+        </Suspense>
       </div>
     );
   }

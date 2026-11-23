@@ -20,7 +20,7 @@ import {
   VolumeX,
   HelpCircle,
 } from 'lucide-react';
-import { AppGuideModal } from './AppGuideModal';
+const AppGuideModal = React.lazy(() => import('./AppGuideModal').then((m) => ({ default: m.AppGuideModal })));
 import { ReporterUser } from './LoginModal';
 import { ThemeToggle } from './ThemeToggle';
 import {
@@ -698,14 +698,16 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
         </div>
 
         {/* User Guide Modal */}
-        <AppGuideModal
-          isOpen={isGuideOpen}
-          onClose={() => setIsGuideOpen(false)}
-          onSelectStep={() => {
-            setIsGuideOpen(false);
-            onNavigateToTab('studio');
-          }}
-        />
+        <React.Suspense fallback={null}>
+          <AppGuideModal
+            isOpen={isGuideOpen}
+            onClose={() => setIsGuideOpen(false)}
+            onSelectStep={() => {
+              setIsGuideOpen(false);
+              onNavigateToTab('studio');
+            }}
+          />
+        </React.Suspense>
       </header>
     </>
   );

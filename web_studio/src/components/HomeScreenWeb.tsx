@@ -63,11 +63,11 @@ import { scheduleNewsReminder, cancelNewsReminder, getUserRemindersLocal, UserRe
 import { NewsFeedPost, filterActiveNews, isRealHindiNews } from '../data/newsFeedData';
 import type { CardLayout } from '../types';
 import { inferStateFromDistrict } from '../data/indianStatesDistricts';
-import { WhatsAppNotificationCenterModal } from './WhatsAppNotificationCenterModal';
-import { WebNotificationModal } from './WebNotificationModal';
-import { SocialMediaStoryModal } from './SocialMediaStoryModal';
-import { CashfreePaymentModal } from './CashfreePaymentModal';
-import { NewsDetailModal } from './NewsDetailModal';
+const WhatsAppNotificationCenterModal = React.lazy(() => import('./WhatsAppNotificationCenterModal').then((m) => ({ default: m.WhatsAppNotificationCenterModal })));
+const WebNotificationModal = React.lazy(() => import('./WebNotificationModal').then((m) => ({ default: m.WebNotificationModal })));
+const SocialMediaStoryModal = React.lazy(() => import('./SocialMediaStoryModal').then((m) => ({ default: m.SocialMediaStoryModal })));
+const CashfreePaymentModal = React.lazy(() => import('./CashfreePaymentModal').then((m) => ({ default: m.CashfreePaymentModal })));
+const NewsDetailModal = React.lazy(() => import('./NewsDetailModal').then((m) => ({ default: m.NewsDetailModal })));
 import { addNotification } from '../lib/notificationManager';
 import {
   isEffectiveAdmin,
@@ -6273,76 +6273,79 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
         </div>
       )}
 
-      {/* WhatsApp Notification Center Modal for Admins */}
-      {isWhatsAppCampaignOpen && (
-        <WhatsAppNotificationCenterModal
-          isOpen={isWhatsAppCampaignOpen}
-          onClose={() => {
-            setIsWhatsAppCampaignOpen(false);
-            setCampaignArticle(null);
-          }}
-          attachedArticle={campaignArticle}
-          currentUserEmail={currentUser?.email || ''}
-        />
-      )}
+      {/* Modals & Dialogs (Lazy Loaded) */}
+      <React.Suspense fallback={null}>
+        {/* WhatsApp Notification Center Modal for Admins */}
+        {isWhatsAppCampaignOpen && (
+          <WhatsAppNotificationCenterModal
+            isOpen={isWhatsAppCampaignOpen}
+            onClose={() => {
+              setIsWhatsAppCampaignOpen(false);
+              setCampaignArticle(null);
+            }}
+            attachedArticle={campaignArticle}
+            currentUserEmail={currentUser?.email || ''}
+          />
+        )}
 
-      {/* Web Notification Modal for Admins (Phase 1) */}
-      {isWebNotificationOpen && (
-        <WebNotificationModal
-          isOpen={isWebNotificationOpen}
-          onClose={() => {
-            setIsWebNotificationOpen(false);
-            setWebNotificationPost(null);
-          }}
-          post={webNotificationPost}
-          currentUserEmail={currentUser?.email || ''}
-        />
-      )}
+        {/* Web Notification Modal for Admins (Phase 1) */}
+        {isWebNotificationOpen && (
+          <WebNotificationModal
+            isOpen={isWebNotificationOpen}
+            onClose={() => {
+              setIsWebNotificationOpen(false);
+              setWebNotificationPost(null);
+            }}
+            post={webNotificationPost}
+            currentUserEmail={currentUser?.email || ''}
+          />
+        )}
 
-      {/* Social Media Story Modal (9:16 Ultra HD) */}
-      {isStoryModalOpen && (
-        <SocialMediaStoryModal
-          isOpen={isStoryModalOpen}
-          onClose={() => {
-            setIsStoryModalOpen(false);
-            setSelectedStoryPost(null);
-          }}
-          newsPost={selectedStoryPost}
-          currentUser={currentUser}
-          onOpenStudioWithStory={(storyConfig) => {
-            if (selectedStoryPost) {
-              onOpenStudioWithNews(selectedStoryPost);
-            }
-          }}
-          onNavigateToPlans={() => {
-            if (onNavigateToTab) {
-              onNavigateToTab('plans');
-            }
-          }}
-        />
-      )}
+        {/* Social Media Story Modal (9:16 Ultra HD) */}
+        {isStoryModalOpen && (
+          <SocialMediaStoryModal
+            isOpen={isStoryModalOpen}
+            onClose={() => {
+              setIsStoryModalOpen(false);
+              setSelectedStoryPost(null);
+            }}
+            newsPost={selectedStoryPost}
+            currentUser={currentUser}
+            onOpenStudioWithStory={(storyConfig) => {
+              if (selectedStoryPost) {
+                onOpenStudioWithNews(selectedStoryPost);
+              }
+            }}
+            onNavigateToPlans={() => {
+              if (onNavigateToTab) {
+                onNavigateToTab('plans');
+              }
+            }}
+          />
+        )}
 
-      {/* Consolidated News Detail Modal (Requirement 5) */}
-      {detailModalPost && (
-        <NewsDetailModal
-          post={detailModalPost}
-          currentUser={currentUser}
-          canModerate={canModerate}
-          isFavorite={userFavorites.has(detailModalPost.id)}
-          onToggleFavorite={handleToggleFavorite}
-          onSetReminder={handleSetReminder}
-          onClose={() => setDetailModalPost(null)}
-          onOpenStudio={(post) => {
-            setDetailModalPost(null);
-            handleOpenStudioSafe(post);
-          }}
-          onOpenStory={(post) => {
-            setDetailModalPost(null);
-            setSelectedStoryPost(post);
-            setIsStoryModalOpen(true);
-          }}
-        />
-      )}
+        {/* Consolidated News Detail Modal (Requirement 5) */}
+        {detailModalPost && (
+          <NewsDetailModal
+            post={detailModalPost}
+            currentUser={currentUser}
+            canModerate={canModerate}
+            isFavorite={userFavorites.has(detailModalPost.id)}
+            onToggleFavorite={handleToggleFavorite}
+            onSetReminder={handleSetReminder}
+            onClose={() => setDetailModalPost(null)}
+            onOpenStudio={(post) => {
+              setDetailModalPost(null);
+              handleOpenStudioSafe(post);
+            }}
+            onOpenStory={(post) => {
+              setDetailModalPost(null);
+              setSelectedStoryPost(post);
+              setIsStoryModalOpen(true);
+            }}
+          />
+        )}
+      </React.Suspense>
 
       {/* Portal-based Non-Clipped News Card Reminder Dropdown (Priority 2) */}
       {activeReminderPortal && typeof document !== 'undefined' && createPortal(
@@ -6612,17 +6615,19 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
       {/* Cashfree Payment Modal for Graphic Pack (Component 8) */}
       {cashfreeModalPlan && (
-        <CashfreePaymentModal
-          isOpen={Boolean(cashfreeModalPlan)}
-          plan={cashfreeModalPlan}
-          onClose={() => setCashfreeModalPlan(null)}
-          onSuccess={() => {
-            setCashfreeModalPlan(null);
-            fetchDownloadStatus();
-            showAppSuccess('₹99 ग्राफिक पैक सक्रिय हो गया है! आपको 20 अतिरिक्त ग्राफिक डाउनलोड (7 दिन वैध) मिल गए हैं।', 'पैक सक्रिय');
-          }}
-          currentUser={currentUser}
-        />
+        <React.Suspense fallback={null}>
+          <CashfreePaymentModal
+            isOpen={Boolean(cashfreeModalPlan)}
+            plan={cashfreeModalPlan}
+            onClose={() => setCashfreeModalPlan(null)}
+            onSuccess={() => {
+              setCashfreeModalPlan(null);
+              fetchDownloadStatus();
+              showAppSuccess('₹99 ग्राफिक पैक सक्रिय हो गया है! आपको 20 अतिरिक्त ग्राफिक डाउनलोड (7 दिन वैध) मिल गए हैं।', 'पैक सक्रिय');
+            }}
+            currentUser={currentUser}
+          />
+        </React.Suspense>
       )}
 
       {showBackToTop && (
