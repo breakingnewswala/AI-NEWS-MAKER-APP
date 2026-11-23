@@ -43,7 +43,7 @@ import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
 import { AdminVideoTemplateControl } from './AdminVideoTemplateControl';
 import { AdminStoryTemplateControl } from './AdminStoryTemplateControl';
 import { AdminAssetLibrariesManager } from './AdminAssetLibrariesManager';
-import { DynamicFrameGeneratorModal } from './DynamicFrameGeneratorModal';
+const DynamicFrameGeneratorModal = React.lazy(() => import('./DynamicFrameGeneratorModal').then((m) => ({ default: m.DynamicFrameGeneratorModal })));
 import { ErrorBoundary } from './ErrorBoundary';
 import { DynamicFrameTemplate } from '../types/dynamicFrame';
 import {
@@ -2371,24 +2371,26 @@ export const UserTemplateManager: React.FC<UserTemplateManagerProps> = ({
       {/* Master Admin Dynamic Frame Generator Wizard Modal */}
       {isDynamicFrameModalOpen && (
         <ErrorBoundary fallbackTitle="फ़ोटो फ़्रेम जनरेटर में समस्या आई">
-          <DynamicFrameGeneratorModal
-            isOpen={isDynamicFrameModalOpen}
-            initialMode={selectedGeneratorMode}
-            onClose={() => {
-              setIsDynamicFrameModalOpen(false);
-              setSelectedEditFrame(null);
-            }}
-            initialFrame={selectedEditFrame}
-            currentUser={currentUser}
-            onFramePublished={(newFrame) => {
-              setIsDynamicFrameModalOpen(false);
-              setSelectedEditFrame(null);
-              refreshDynamicFrames();
-              window.dispatchEvent(new CustomEvent('template_plans_updated'));
-              window.dispatchEvent(new CustomEvent('dynamic_frames_updated'));
-              showToast(`✅ नया AI फ्रेम "${newFrame.name}" सफलतापूर्वक पब्लिश किया गया!`);
-            }}
-          />
+          <React.Suspense fallback={null}>
+            <DynamicFrameGeneratorModal
+              isOpen={isDynamicFrameModalOpen}
+              initialMode={selectedGeneratorMode}
+              onClose={() => {
+                setIsDynamicFrameModalOpen(false);
+                setSelectedEditFrame(null);
+              }}
+              initialFrame={selectedEditFrame}
+              currentUser={currentUser}
+              onFramePublished={(newFrame) => {
+                setIsDynamicFrameModalOpen(false);
+                setSelectedEditFrame(null);
+                refreshDynamicFrames();
+                window.dispatchEvent(new CustomEvent('template_plans_updated'));
+                window.dispatchEvent(new CustomEvent('dynamic_frames_updated'));
+                showToast(`✅ नया AI फ्रेम "${newFrame.name}" सफलतापूर्वक पब्लिश किया गया!`);
+              }}
+            />
+          </React.Suspense>
         </ErrorBoundary>
       )}
     </div>

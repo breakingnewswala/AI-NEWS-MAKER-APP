@@ -82,7 +82,7 @@ import {
   getDefaultAssetLibrariesFallback,
   getAssetLibraryItemById,
 } from '../lib/dynamicFramesManager';
-import { DynamicFrameGeneratorModal } from './DynamicFrameGeneratorModal';
+const DynamicFrameGeneratorModal = React.lazy(() => import('./DynamicFrameGeneratorModal').then((m) => ({ default: m.DynamicFrameGeneratorModal })));
 import { ErrorBoundary } from './ErrorBoundary';
 import { DynamicFrameTemplate } from '../types/dynamicFrame';
 import { normalizeToCanonicalCategory } from './AdminTemplatePlanManager';
@@ -6792,15 +6792,17 @@ export const CardEditor: React.FC<CardEditorProps> = ({
 
       {editingTestFrame && (
         <ErrorBoundary fallbackTitle="फ़ोटो फ़्रेम जनरेटर में समस्या आई">
-          <DynamicFrameGeneratorModal
-            isOpen={true}
-            initialFrame={editingTestFrame}
-            onClose={() => setEditingTestFrame(null)}
-            onSaveSuccess={() => {
-              setEditingTestFrame(null);
-              window.dispatchEvent(new Event('template_plans_updated'));
-            }}
-          />
+          <React.Suspense fallback={null}>
+            <DynamicFrameGeneratorModal
+              isOpen={true}
+              initialFrame={editingTestFrame}
+              onClose={() => setEditingTestFrame(null)}
+              onSaveSuccess={() => {
+                setEditingTestFrame(null);
+                window.dispatchEvent(new Event('template_plans_updated'));
+              }}
+            />
+          </React.Suspense>
         </ErrorBoundary>
       )}
     </div>

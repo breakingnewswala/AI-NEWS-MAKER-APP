@@ -38,7 +38,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { InstallPwaModal } from './InstallPwaModal';
-import { WhatsAppLiveInbox } from './WhatsAppLiveInbox';
+const WhatsAppLiveInbox = React.lazy(() => import('./WhatsAppLiveInbox').then((m) => ({ default: m.WhatsAppLiveInbox })));
 import { VoiceInputButton } from './VoiceInputButton';
 import { NewsDraft } from '../types';
 import { getSavedDrafts, deleteDraft, saveDraft } from '../lib/draftsManager';
@@ -1441,7 +1441,9 @@ export const NewsroomScreenWeb: React.FC<NewsroomScreenWebProps> = ({
 
             {expandedSections.whatsapp && (
               <div className="p-2 sm:p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-950">
-                <WhatsAppLiveInbox currentUser={currentUser} />
+                <React.Suspense fallback={<div className="p-8 text-center text-slate-400">WhatsApp लाइव इनबॉक्स लोड हो रहा है...</div>}>
+                  <WhatsAppLiveInbox currentUser={currentUser} />
+                </React.Suspense>
               </div>
             )}
           </div>

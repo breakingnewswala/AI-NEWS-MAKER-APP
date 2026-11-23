@@ -1,30 +1,33 @@
 import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react';
 import { NewsCardData, AIAnalysisResult, ChannelProfile, FrameDesign } from './types';
 import { INITIAL_PRESETS, PLACEHOLDER_NEWS_IMG } from './data/presets';
-import { CardPreview } from './components/CardPreview';
-import { CardEditor } from './components/CardEditor';
-import { AIGenerateImageModal } from './components/AIGenerateImageModal';
-import { NewsCommandModal } from './components/NewsCommandModal';
-import { CaptionModal, buildHashtags } from './components/CaptionModal';
-import { LoginModal, ReporterUser } from './components/LoginModal';
+const CardPreview = React.lazy(() => import('./components/CardPreview').then((m) => ({ default: m.CardPreview })));
+const CardEditor = React.lazy(() => import('./components/CardEditor').then((m) => ({ default: m.CardEditor })));
+const AIGenerateImageModal = React.lazy(() => import('./components/AIGenerateImageModal').then((m) => ({ default: m.AIGenerateImageModal })));
+const NewsCommandModal = React.lazy(() => import('./components/NewsCommandModal').then((m) => ({ default: m.NewsCommandModal })));
+import { buildHashtags } from './components/CaptionModal';
+const CaptionModal = React.lazy(() => import('./components/CaptionModal').then((m) => ({ default: m.CaptionModal })));
+import type { ReporterUser } from './components/LoginModal';
+const LoginModal = React.lazy(() => import('./components/LoginModal').then((m) => ({ default: m.LoginModal })));
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { AppGuideModal } from './components/AppGuideModal';
-import { DraftsModal } from './components/DraftsModal';
+const AppGuideModal = React.lazy(() => import('./components/AppGuideModal').then((m) => ({ default: m.AppGuideModal })));
+const DraftsModal = React.lazy(() => import('./components/DraftsModal').then((m) => ({ default: m.DraftsModal })));
 import {
   saveOrUpdateDraft,
   getActiveDraftId,
   setActiveDraftId,
   SavedDraftRecord,
 } from './lib/draftManager';
-import { AppUpdateModal, AppVersionInfo, APP_CURRENT_VERSION } from './components/AppUpdateModal';
-import { CloudSettingsModal } from './components/CloudSettingsModal';
-import { GoogleSheetsUserSyncModal } from './components/GoogleSheetsUserSyncModal';
-import { ChannelOnboardingModal } from './components/ChannelOnboardingModal';
-import { InstallPwaModal } from './components/InstallPwaModal';
-import { NotificationPermissionModal } from './components/NotificationPermissionModal';
+import { APP_CURRENT_VERSION, type AppVersionInfo } from './components/AppUpdateModal';
+const AppUpdateModal = React.lazy(() => import('./components/AppUpdateModal').then((m) => ({ default: m.AppUpdateModal })));
+const CloudSettingsModal = React.lazy(() => import('./components/CloudSettingsModal').then((m) => ({ default: m.CloudSettingsModal })));
+const GoogleSheetsUserSyncModal = React.lazy(() => import('./components/GoogleSheetsUserSyncModal').then((m) => ({ default: m.GoogleSheetsUserSyncModal })));
+const ChannelOnboardingModal = React.lazy(() => import('./components/ChannelOnboardingModal').then((m) => ({ default: m.ChannelOnboardingModal })));
+const InstallPwaModal = React.lazy(() => import('./components/InstallPwaModal').then((m) => ({ default: m.InstallPwaModal })));
+const NotificationPermissionModal = React.lazy(() => import('./components/NotificationPermissionModal').then((m) => ({ default: m.NotificationPermissionModal })));
 import { AuthWelcomeScreen } from './components/AuthWelcomeScreen';
 import { BrandedNewsLoadingModal, BrandedLoaderMode } from './components/BrandedNewsLoadingModal';
-import { NewsDetailModal } from './components/NewsDetailModal';
+const NewsDetailModal = React.lazy(() => import('./components/NewsDetailModal').then((m) => ({ default: m.NewsDetailModal })));
 import { AppNotificationModal } from './components/AppNotificationModal';
 import { showAppSuccess, showAppConfirm } from './lib/notificationService';
 import { getApiUrl, getApiBaseUrl, ensureAuthToken, setAuthToken, getAuthHeaders, getAuthToken, isTokenExpired, clearAuthTokens, reauthenticateAdmin } from './lib/apiConfig';
@@ -96,22 +99,22 @@ import { AutoFillNewsData } from './components/InlineAiNewsTools';
 import { AppTopBarWeb } from './components/AppTopBarWeb';
 import { AppBottomBarWeb } from './components/AppBottomBarWeb';
 import { HomeScreenWeb } from './components/HomeScreenWeb';
-import { VideosScreenWeb } from './components/VideosScreenWeb';
-import { EPaperScreenWeb } from './components/EPaperScreenWeb';
-import { ProfileScreenWeb } from './components/ProfileScreenWeb';
-import { NewsroomScreenWeb } from './components/NewsroomScreenWeb';
-import { DraftsScreenWeb } from './components/DraftsScreenWeb';
+const VideosScreenWeb = React.lazy(() => import('./components/VideosScreenWeb').then((m) => ({ default: m.VideosScreenWeb })));
+const EPaperScreenWeb = React.lazy(() => import('./components/EPaperScreenWeb').then((m) => ({ default: m.EPaperScreenWeb })));
+const ProfileScreenWeb = React.lazy(() => import('./components/ProfileScreenWeb').then((m) => ({ default: m.ProfileScreenWeb })));
+const NewsroomScreenWeb = React.lazy(() => import('./components/NewsroomScreenWeb').then((m) => ({ default: m.NewsroomScreenWeb })));
+const DraftsScreenWeb = React.lazy(() => import('./components/DraftsScreenWeb').then((m) => ({ default: m.DraftsScreenWeb })));
 import { addProjectToHistory } from './lib/projectHistoryManager';
-import { CategoriesScreenWeb } from './components/CategoriesScreenWeb';
-import { ExportScreenWeb } from './components/ExportScreenWeb';
+const CategoriesScreenWeb = React.lazy(() => import('./components/CategoriesScreenWeb').then((m) => ({ default: m.CategoriesScreenWeb })));
+const ExportScreenWeb = React.lazy(() => import('./components/ExportScreenWeb').then((m) => ({ default: m.ExportScreenWeb })));
 const TermsPage = React.lazy(() => import('./components/TermsPage').then((m) => ({ default: m.TermsPage })));
 const PrivacyPolicyPage = React.lazy(() => import('./components/PrivacyPolicyPage').then((m) => ({ default: m.PrivacyPolicyPage })));
 const AccountDeletionPage = React.lazy(() => import('./components/AccountDeletionPage').then((m) => ({ default: m.AccountDeletionPage })));
 const SupportContactPage = React.lazy(() => import('./components/SupportContactPage').then((m) => ({ default: m.SupportContactPage })));
 const RefundCancellationPolicyPage = React.lazy(() => import('./components/RefundCancellationPolicyPage').then((m) => ({ default: m.RefundCancellationPolicyPage })));
 import { AppFooterWeb } from './components/AppFooterWeb';
-import { GraphicStudioGuideModal } from './components/GraphicStudioGuideModal';
-import { PackagePurchaseModal } from './components/PackagePurchaseModal';
+const GraphicStudioGuideModal = React.lazy(() => import('./components/GraphicStudioGuideModal').then((m) => ({ default: m.GraphicStudioGuideModal })));
+const PackagePurchaseModal = React.lazy(() => import('./components/PackagePurchaseModal').then((m) => ({ default: m.PackagePurchaseModal })));
 import {
   triggerBreakingNewsAlert,
   addNotification,
@@ -4951,7 +4954,8 @@ export default function App() {
 
       {/* 2. News Generator / Studio Tab */}
       {(currentTab === 'generator' || currentTab === 'studio') && (
-        <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900 dark:text-slate-100 transition-colors">
+        <Suspense fallback={<div className="p-12 text-center text-slate-400 font-bold flex items-center justify-center min-h-[400px]"><Loader2 className="w-8 h-8 animate-spin text-amber-500 mr-3" /> स्टूडियो लोड हो रहा है...</div>}>
+          <main className="flex-1 max-w-[1600px] w-full mx-auto p-1.5 sm:p-4 pb-24 text-slate-900 dark:text-slate-100 transition-colors">
           {/* Studio Type Selector: On desktop shows both Graphic & Video; on mobile it is integrated into the sticky header */}
           <div className={`hidden lg:block w-full transition-all duration-300 ease-in-out overflow-hidden ${
             isStudioSelectorVisible && (!studioInitialItem ? 'max-h-20 opacity-100 mb-3' : 'max-h-20 opacity-100 mb-3')
@@ -5693,11 +5697,13 @@ export default function App() {
             </ErrorBoundary>
           )}
         </main>
+        </Suspense>
       )}
 
       {/* 2. Videos Tab (Rich Video News Feed) */}
       {currentTab === 'videos' && (
-        <VideosScreenWeb
+        <Suspense fallback={<div className="p-12 text-center text-slate-400 font-bold flex items-center justify-center min-h-[400px]"><Loader2 className="w-8 h-8 animate-spin text-amber-500 mr-3" /> वीडियो फ़ीड लोड हो रही है...</div>}>
+          <VideosScreenWeb
           videos={videos}
           currentUser={currentUser}
           onOpenStudioWithVideo={(video) => {
@@ -5767,11 +5773,13 @@ export default function App() {
           }}
           onNavigateToTab={navigateToTab}
         />
+        </Suspense>
       )}
 
       {/* 4. Newsroom Tab (Drafts & Saved Projects Workspace) */}
       {(currentTab === 'newsroom' || currentTab === 'drafts') && (
-        <NewsroomScreenWeb
+        <Suspense fallback={<div className="p-12 text-center text-slate-400 font-bold flex items-center justify-center min-h-[400px]"><Loader2 className="w-8 h-8 animate-spin text-amber-500 mr-3" /> न्यूज़रूम लोड हो रहा है...</div>}>
+          <NewsroomScreenWeb
           currentUser={currentUser}
           onOpenStudioWithDraft={handleOpenDraftInStudio}
           onNavigateToStudio={() => {
@@ -5784,11 +5792,13 @@ export default function App() {
             navigateToTab(isUserAdmin(currentUser) ? 'admin' : 'profile');
           }}
         />
+        </Suspense>
       )}
 
       {/* 5. Profile & Control Panel Tab (10 Options + Channel Branding + Plans + APK Download) */}
       {(currentTab === 'admin' || currentTab === 'profile' || currentTab === 'export') && (
-        <ErrorBoundary fallbackTitle="कंट्रोल रूम लोड करने में समस्या आई">
+        <Suspense fallback={<div className="p-12 text-center text-slate-400 font-bold flex items-center justify-center min-h-[400px]"><Loader2 className="w-8 h-8 animate-spin text-amber-500 mr-3" /> प्रोफाइल लोड हो रही है...</div>}>
+          <ErrorBoundary fallbackTitle="कंट्रोल रूम लोड करने में समस्या आई">
           <ProfileScreenWeb
             currentUser={currentUser}
             onLogout={handleLogout}
@@ -5837,6 +5847,7 @@ export default function App() {
             onDeleteCategory={handleDeleteCategory}
           />
         </ErrorBoundary>
+        </Suspense>
       )}
 
       {/* 6. Terms & Conditions */}
@@ -5902,8 +5913,10 @@ export default function App() {
         }}
       />
 
-      {/* Channel Profile Setup & Branding Modal - Mandatory for new signups */}
-      <ChannelOnboardingModal
+      {/* Modals & Dialogs (Code Split & Lazy Loaded) */}
+      <Suspense fallback={null}>
+        {/* Channel Profile Setup & Branding Modal - Mandatory for new signups */}
+        <ChannelOnboardingModal
         isOpen={isOnboardingOpen}
         initialProfile={getSavedChannelProfile() || undefined}
         userName={currentUser?.name}
@@ -6175,6 +6188,7 @@ export default function App() {
           } catch {}
         }}
       />
+      </Suspense>
     </div>
   );
 }

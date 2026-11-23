@@ -91,7 +91,7 @@ import {
 import { ChannelProfile } from '../types';
 import { AdminTemplatePlanManager } from './AdminTemplatePlanManager';
 import { UserTemplateManager } from './UserTemplateManager';
-import { AdminPlansAndPackagesManager } from './AdminPlansAndPackagesManager';
+const AdminPlansAndPackagesManager = React.lazy(() => import('./AdminPlansAndPackagesManager').then((m) => ({ default: m.AdminPlansAndPackagesManager })));
 import { HelpAndPoliciesView } from './HelpAndPoliciesView';
 import {
   getCustomFrames,
@@ -3990,15 +3990,17 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
 
         {/* ADMIN vs NORMAL USER RENDER */}
         {isAdmin ? (
-          <AdminPlansAndPackagesManager
-            currentUser={currentUser}
-            onPlanChanged={() => setTimeout(() => setSubscription(getUserSubscription()), 0)}
-            onOpenStudio={onOpenStudio}
-            renderProfileContent={renderProfileOnlyContent}
-            categories={categories}
-            onAddCategory={onAddCategory}
-            onDeleteCategory={onDeleteCategory}
-          />
+          <React.Suspense fallback={<div className="p-8 text-center text-slate-400">एडमिन प्लान मैनेजर लोड हो रहा है...</div>}>
+            <AdminPlansAndPackagesManager
+              currentUser={currentUser}
+              onPlanChanged={() => setTimeout(() => setSubscription(getUserSubscription()), 0)}
+              onOpenStudio={onOpenStudio}
+              renderProfileContent={renderProfileOnlyContent}
+              categories={categories}
+              onAddCategory={onAddCategory}
+              onDeleteCategory={onDeleteCategory}
+            />
+          </React.Suspense>
         ) : (
           <div className="space-y-3.5">
             {/* OPTION 1: प्रोफाइल व चैनल विवरण */}
