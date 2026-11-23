@@ -23997,7 +23997,11 @@ app.all("/api/user-data/delete-account", requireAuthMiddleware, (req, res) => {
 app.get("/api/account-deletion-requests", requireAdminMiddleware, (_req, res) => {
   return res.json({ success: true, requests: loadAccountDeletionRequests() });
 });
-app.use("/uploads", import_express.default.static(import_path2.default.join(process.cwd(), "public", "uploads")));
+app.use("/uploads", import_express.default.static(import_path2.default.join(process.cwd(), "public", "uploads"), {
+  setHeaders: (res) => {
+    res.setHeader("Cache-Control", "public, max-age=2592000, immutable");
+  }
+}));
 function loadProfilesDatabase() {
   const dict = {};
   try {
