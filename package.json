@@ -16,7 +16,8 @@
     "studio:build": "npm --prefix web_studio run build",
     "lint": "npm --prefix web_studio run lint",
     "test": "node tests/test_safety_invariants.cjs && node tests/test_master_engineering_repair.cjs && node tests/test_master_product_engineering_repair.cjs && node tests/test_authentication_signup_integration.cjs && node tests/test_rss_workflow_and_navigation.cjs && node tests/test_production_bug_fixes.cjs && node tests/test_security_audit_remediation.cjs && node tests/test_headline_validation.cjs && node tests/test_master_production_fix.cjs && node tests/test_master_production_bug_fix_and_frame_audit.cjs && node tests/test_studio_restoration_and_branding.cjs && node tests/test_master_db_cleanup_and_photo_frame_fix.cjs && node tests/test_master_production_remediation.cjs && node tests/test_master_production_upgrade_and_remediation.cjs && node tests/test_master_production_mastery_review.cjs && node tests/test_master_admin_auth_and_rss_remediation.cjs && node tests/test_master_photo_news_studio_correction.cjs && node tests/test_photo_studio_parity_and_badge_correction.cjs && node tests/test_subscription_feed_and_layout_enhancements.cjs && node tests/test_signup_wizard_logo_lock_and_photo_slots.cjs && node tests/test_frame_switching_location_badge_and_headline_safe_zone.cjs && node tests/test_rss_approval_published_feed_fix.cjs && node tests/test_wallet_stepper_and_social_feed_enhancements.cjs && node tests/test_trial_quota_and_ai_core_rules.cjs",
-    "sync-apk": "node web_studio/build_and_sync.js"
+    "sync-apk": "node web_studio/build_and_sync.js",
+    "promote:main": "node scripts/promote_staging_to_main.cjs"
   },
   "dependencies": {
     "@google-cloud/tasks": "^6.2.1",
