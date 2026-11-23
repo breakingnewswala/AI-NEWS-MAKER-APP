@@ -170,14 +170,20 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
                 }}
                 className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-amber-400 via-red-500 to-amber-300 p-[2px] shadow-xl shadow-red-900/40 flex items-center justify-center shrink-0 cursor-pointer hover:scale-105 transition-transform"
               >
-                <img
-                  src="/assets/ai_news_maker_logo.png"
-                  alt="AI News Maker Logo"
-                  className="w-full h-full object-cover rounded-full bg-slate-950"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLElement).style.display = 'none';
-                  }}
-                />
+                <picture>
+                  <source srcSet="/assets/ai_news_maker_logo.webp" type="image/webp" />
+                  <img
+                    src="/assets/ai_news_maker_logo.png"
+                    alt="AI News Maker Logo"
+                    width="80"
+                    height="80"
+                    loading="lazy"
+                    className="w-full h-full object-cover rounded-full bg-slate-950"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                </picture>
               </div>
 
               {/* Brand Text & Ownership */}

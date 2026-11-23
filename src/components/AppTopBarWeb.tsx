@@ -252,14 +252,20 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               className={`items-center gap-2.5 cursor-pointer select-none group shrink-0 ${isStudio ? 'hidden md:flex' : 'flex'}`}
             >
               <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-tr from-amber-400 via-red-500 to-amber-400 p-[1.5px] shadow-md shadow-red-950/20 group-hover:scale-105 transition-transform flex items-center justify-center overflow-hidden ring-2 ring-amber-400/30">
-                <img
-                  src="/assets/ai_news_maker_logo.png"
-                  alt="AI NEWS MAKER Logo"
-                  className="w-full h-full object-cover rounded-full"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLElement).style.display = 'none';
-                  }}
-                />
+                <picture>
+                  <source srcSet="/assets/ai_news_maker_logo.webp" type="image/webp" />
+                  <img
+                    src="/assets/ai_news_maker_logo.png"
+                    alt="AI NEWS MAKER Logo"
+                    width="40"
+                    height="40"
+                    fetchPriority="high"
+                    className="w-full h-full object-cover rounded-full"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                </picture>
               </div>
 
               <div>
