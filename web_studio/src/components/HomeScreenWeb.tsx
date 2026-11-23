@@ -2923,7 +2923,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
 
             {/* Grid of Highlight Cards: 3 on desktop, 2 on tablet, 1 on mobile (Proper 16:9 Thumbnail preview) */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {visibleHighlightPosts.map((post) => {
+              {visibleHighlightPosts.map((post, idx) => {
                 const effectiveCoinCost = Number(post.coinCost ?? post.coinValue ?? (post as any).coinPrice ?? 0);
                 const isPaid = effectiveCoinCost > 0;
                 const isBonus = Boolean(post.isBonus === true || (post as any).bonusNews === true);
@@ -2956,7 +2956,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                         src={getPostThumbnail(post)}
                         alt={post.title}
                         className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-500"
-                        loading="lazy"
+                        loading={idx === 0 ? undefined : 'lazy'}
+                        fetchPriority={idx === 0 ? 'high' : undefined}
                         referrerPolicy="no-referrer"
                         onError={(e) => {
                           const currentSrc = (e.target as HTMLImageElement).src || '';

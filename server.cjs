@@ -6565,6 +6565,7 @@ __export(server_exports, {
 });
 module.exports = __toCommonJS(server_exports);
 var import_express = __toESM(require("express"), 1);
+var import_compression = __toESM(require("compression"), 1);
 var import_path2 = __toESM(require("path"), 1);
 var import_fs2 = __toESM(require("fs"), 1);
 var import_genai2 = require("@google/genai");
@@ -13162,6 +13163,7 @@ try {
   }
 }
 var app = (0, import_express.default)();
+app.use((0, import_compression.default)());
 app.set("trust proxy", true);
 var PORT = parseInt(process.env.PORT || "8080", 10);
 app.use((req, res, next) => {
@@ -38969,10 +38971,10 @@ async function startServer() {
             index: false,
             setHeaders: (res, filePath) => {
               if (filePath.endsWith(".html") || filePath.endsWith("sw.js") || filePath.endsWith("manifest.json")) {
-                res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+                res.setHeader("Cache-Control", "no-cache, must-revalidate");
                 res.setHeader("Pragma", "no-cache");
                 res.setHeader("Expires", "0");
-              } else if (filePath.includes("/assets/")) {
+              } else if (filePath.includes("/assets/") || filePath.includes("\\assets\\")) {
                 res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
               }
             }
@@ -38980,7 +38982,11 @@ async function startServer() {
         );
         const assetsSubdir = import_path2.default.join(staticDir, "assets");
         if (import_fs2.default.existsSync(assetsSubdir)) {
-          app.use(["/studio/assets", "/admin/assets"], import_express.default.static(assetsSubdir));
+          app.use(["/studio/assets", "/admin/assets"], import_express.default.static(assetsSubdir, {
+            setHeaders: (res) => {
+              res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+            }
+          }));
         }
       }
       app.get(["/lite", "/lite/*"], (_req, res) => {

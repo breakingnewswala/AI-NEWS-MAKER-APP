@@ -1,4 +1,5 @@
 import express from "express";
+import compression from "compression";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
@@ -103,6 +104,7 @@ try {
 }
 
 export const app = express();
+app.use(compression());
 app.set("trust proxy", true);
 const PORT = parseInt(process.env.PORT || "8080", 10);
 
@@ -32002,10 +32004,10 @@ async function startServer() {
             index: false,
             setHeaders: (res, filePath) => {
               if (filePath.endsWith(".html") || filePath.endsWith("sw.js") || filePath.endsWith("manifest.json")) {
-                res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+                res.setHeader("Cache-Control", "no-cache, must-revalidate");
                 res.setHeader("Pragma", "no-cache");
                 res.setHeader("Expires", "0");
-              } else if (filePath.includes("/assets/")) {
+              } else if (filePath.includes("/assets/") || filePath.includes("\\assets\\")) {
                 res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
               }
             },
@@ -32013,7 +32015,11 @@ async function startServer() {
         );
         const assetsSubdir = path.join(staticDir, "assets");
         if (fs.existsSync(assetsSubdir)) {
-          app.use(["/studio/assets", "/admin/assets"], express.static(assetsSubdir));
+          app.use(["/studio/assets", "/admin/assets"], express.static(assetsSubdir, {
+            setHeaders: (res) => {
+              res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+            }
+          }));
         }
       }
 
@@ -32254,7 +32260,7 @@ async function startServer() {
       };
 
       const renderSpaIndexHtml = (req: any, res: any) => {
-        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.setHeader("Cache-Control", "no-cache, must-revalidate");
         res.setHeader("Pragma", "no-cache");
         res.setHeader("Expires", "0");
         const indexHtmlPath = path.join(distPath, "index.html");
@@ -32308,7 +32314,7 @@ async function startServer() {
         if (ext && ext !== ".html") {
           return res.status(404).json({ success: false, error: "Not Found" });
         }
-        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.setHeader("Cache-Control", "no-cache, must-revalidate");
         res.setHeader("Pragma", "no-cache");
         res.setHeader("Expires", "0");
 
