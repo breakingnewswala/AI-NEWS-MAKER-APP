@@ -13285,7 +13285,11 @@ if (!import_fs2.default.existsSync(logosDir)) {
 if (cloudStorage) {
   app.use("/uploads", cloudStorage.createUploadsMiddleware());
 }
-app.use("/uploads", import_express.default.static(publicUploadsDir));
+app.use("/uploads", import_express.default.static(publicUploadsDir, {
+  setHeaders: (res) => {
+    res.setHeader("Cache-Control", "public, max-age=2592000, immutable");
+  }
+}));
 function initializeAuthSecret() {
   const secret = process.env.SESSION_SECRET || process.env.JWT_SECRET;
   if (secret && typeof secret === "string" && secret.trim().length >= 32) {
@@ -38970,12 +38974,15 @@ async function startServer() {
           import_express.default.static(staticDir, {
             index: false,
             setHeaders: (res, filePath) => {
-              if (filePath.endsWith(".html") || filePath.endsWith("sw.js") || filePath.endsWith("manifest.json")) {
+              const normalizedPath = filePath.replace(/\\/g, "/");
+              if (normalizedPath.endsWith(".html") || normalizedPath.endsWith("sw.js") || normalizedPath.endsWith("manifest.json")) {
                 res.setHeader("Cache-Control", "no-cache, must-revalidate");
                 res.setHeader("Pragma", "no-cache");
                 res.setHeader("Expires", "0");
-              } else if (filePath.includes("/assets/") || filePath.includes("\\assets\\")) {
+              } else if (normalizedPath.includes("/assets/")) {
                 res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+              } else if (/\.(png|webp|jpe?g|svg|ico|woff2?|ttf|eot)$/i.test(normalizedPath)) {
+                res.setHeader("Cache-Control", "public, max-age=2592000, immutable");
               }
             }
           })

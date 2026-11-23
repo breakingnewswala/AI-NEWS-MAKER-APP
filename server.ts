@@ -254,7 +254,11 @@ if (!fs.existsSync(logosDir)) {
 if (cloudStorage) {
   app.use("/uploads", cloudStorage.createUploadsMiddleware());
 }
-app.use("/uploads", express.static(publicUploadsDir));
+app.use("/uploads", express.static(publicUploadsDir, {
+  setHeaders: (res) => {
+    res.setHeader("Cache-Control", "public, max-age=2592000, immutable");
+  }
+}));
 
 // ============================================================================
 // CRYPTOGRAPHIC SESSION TOKEN & AUTHENTICATION ENGINE (HMAC-SHA256 JWT)
@@ -13354,7 +13358,11 @@ app.get("/api/account-deletion-requests", requireAdminMiddleware, (_req, res) =>
 // ==========================================
 
 
-app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads")));
+app.use("/uploads", express.static(path.join(process.cwd(), "public", "uploads"), {
+  setHeaders: (res) => {
+    res.setHeader("Cache-Control", "public, max-age=2592000, immutable");
+  }
+}));
 
 interface StoredUserProfile {
   username: string;
@@ -32003,12 +32011,15 @@ async function startServer() {
           express.static(staticDir, {
             index: false,
             setHeaders: (res, filePath) => {
-              if (filePath.endsWith(".html") || filePath.endsWith("sw.js") || filePath.endsWith("manifest.json")) {
+              const normalizedPath = filePath.replace(/\\/g, "/");
+              if (normalizedPath.endsWith(".html") || normalizedPath.endsWith("sw.js") || normalizedPath.endsWith("manifest.json")) {
                 res.setHeader("Cache-Control", "no-cache, must-revalidate");
                 res.setHeader("Pragma", "no-cache");
                 res.setHeader("Expires", "0");
-              } else if (filePath.includes("/assets/") || filePath.includes("\\assets\\")) {
+              } else if (normalizedPath.includes("/assets/")) {
                 res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+              } else if (/\.(png|webp|jpe?g|svg|ico|woff2?|ttf|eot)$/i.test(normalizedPath)) {
+                res.setHeader("Cache-Control", "public, max-age=2592000, immutable");
               }
             },
           })
