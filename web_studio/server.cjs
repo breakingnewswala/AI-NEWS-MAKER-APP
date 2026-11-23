@@ -39203,7 +39203,7 @@ async function startServer() {
         }
       };
       const renderSpaIndexHtml = (req, res) => {
-        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.setHeader("Cache-Control", "no-cache, must-revalidate");
         res.setHeader("Pragma", "no-cache");
         res.setHeader("Expires", "0");
         const indexHtmlPath = import_path2.default.join(distPath, "index.html");
@@ -39252,7 +39252,7 @@ async function startServer() {
         if (ext && ext !== ".html") {
           return res.status(404).json({ success: false, error: "Not Found" });
         }
-        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        res.setHeader("Cache-Control", "no-cache, must-revalidate");
         res.setHeader("Pragma", "no-cache");
         res.setHeader("Expires", "0");
         const indexHtmlPath = import_path2.default.join(distPath, "index.html");
