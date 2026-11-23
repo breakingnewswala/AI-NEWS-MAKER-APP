@@ -26,6 +26,7 @@ import { ReporterUser } from './LoginModal';
 import { ThemeToggle } from './ThemeToggle';
 import {
   getUserSubscription, getCachedUserDailyDownloadStatus,
+  fetchUserDailyDownloadStatus,
   isUserAdmin,
   getAdminSystemMode,
   setAdminSystemMode,
