@@ -164,6 +164,19 @@ runTest("100% SHA256 mirror parity between root and web_studio/", () => {
   });
 });
 
+// TC 7: Import validation to prevent runtime ReferenceErrors
+runTest("AppTopBarWeb.tsx and consumer components import fetchUserDailyDownloadStatus", () => {
+  const topBarContent = fs.readFileSync(path.join(__dirname, "..", "src/components/AppTopBarWeb.tsx"), "utf8");
+  assert.ok(
+    topBarContent.includes("fetchUserDailyDownloadStatus"),
+    "AppTopBarWeb.tsx must import fetchUserDailyDownloadStatus from userPlanManager"
+  );
+  assert.ok(
+    /import\s*\{[^}]*fetchUserDailyDownloadStatus[^}]*\}\s*from\s*['"]\.\.\/lib\/userPlanManager['"]/.test(topBarContent),
+    "AppTopBarWeb.tsx must have fetchUserDailyDownloadStatus in import statement"
+  );
+});
+
 console.log("==================================================================");
 console.log(`🎉 ALL ${passedCount} / ${totalCount} TESTS IN TEST_TRIAL_QUOTA_AND_AI_CORE_RULES PASSED!`);
 console.log("==================================================================");
