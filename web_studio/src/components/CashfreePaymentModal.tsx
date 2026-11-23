@@ -22,16 +22,58 @@ export const CashfreePaymentModal: React.FC<CashfreePaymentModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<boolean>(false);
 
-  // Customer contact details
-  const [customerName, setCustomerName] = useState<string>(
-    currentUser?.name || currentUser?.fullName || 'मान्य पत्रकार / संवाददाता'
-  );
-  const [customerEmail, setCustomerEmail] = useState<string>(
-    currentUser?.email || 'reporter@ainewsmaker.online'
-  );
-  const [customerPhone, setCustomerPhone] = useState<string>(
-    currentUser?.mobileNumber || currentUser?.mobile || '9876543210'
-  );
+  // Customer contact details - Strictly load Reporter Real Full Name (NOT channel name) & registered mobile
+  const [customerName, setCustomerName] = useState<string>(() => {
+    try {
+      const savedProfile = typeof window !== 'undefined' ? localStorage.getItem('user_channel_profile') : null;
+      if (savedProfile) {
+        const p = JSON.parse(savedProfile);
+        if (p.fullName && p.fullName.trim() && p.fullName !== p.channelNameHi && p.fullName !== p.channelNameEn) {
+          return p.fullName.trim();
+        }
+        if (p.reporterName && p.reporterName.trim()) {
+          return p.reporterName.trim();
+        }
+      }
+      const sessStr = typeof window !== 'undefined' ? localStorage.getItem('reporter_auth_session') : null;
+      if (sessStr) {
+        const s = JSON.parse(sessStr);
+        if (s.fullName && s.fullName.trim() && s.fullName !== s.channelNameHi) {
+          return s.fullName.trim();
+        }
+        if (s.reporterName && s.reporterName.trim()) {
+          return s.reporterName.trim();
+        }
+      }
+    } catch {}
+    if (currentUser?.fullName && currentUser.fullName.trim()) return currentUser.fullName.trim();
+    if (currentUser?.reporterName && currentUser.reporterName.trim()) return currentUser.reporterName.trim();
+    return currentUser?.name || currentUser?.displayName || 'मान्य पत्रकार / संवाददाता';
+  });
+
+  const [customerEmail, setCustomerEmail] = useState<string>(() => {
+    return (currentUser?.email || (typeof window !== 'undefined' ? localStorage.getItem('reporter_email') || localStorage.getItem('user_email') : '') || 'reporter@ainewsmaker.online').toLowerCase().trim();
+  });
+
+  const [customerPhone, setCustomerPhone] = useState<string>(() => {
+    try {
+      const savedProfile = typeof window !== 'undefined' ? localStorage.getItem('user_channel_profile') : null;
+      if (savedProfile) {
+        const p = JSON.parse(savedProfile);
+        const num = (p.whatsappNumber || p.mobileNumber || p.phone || '').toString().replace(/[^0-9]/g, '').slice(-10);
+        if (num.length === 10 && num !== '9876543210') return num;
+      }
+      const sessStr = typeof window !== 'undefined' ? localStorage.getItem('reporter_auth_session') : null;
+      if (sessStr) {
+        const s = JSON.parse(sessStr);
+        const num = (s.whatsappNumber || s.mobileNumber || s.phone || '').toString().replace(/[^0-9]/g, '').slice(-10);
+        if (num.length === 10 && num !== '9876543210') return num;
+      }
+    } catch {}
+    const raw = currentUser?.whatsappNumber || currentUser?.mobileNumber || currentUser?.mobile || currentUser?.phone || currentUser?.phoneNumber || '';
+    const clean = String(raw).replace(/[^0-9]/g, '').slice(-10);
+    return (clean.length === 10 && clean !== '9876543210') ? clean : '';
+  });
 
   // Package Coupon states
   const [couponCodeInput, setCouponCodeInput] = useState<string>('');
@@ -71,6 +113,28 @@ export const CashfreePaymentModal: React.FC<CashfreePaymentModalProps> = ({
       .catch(() => {});
     loadCashfreeSdk().catch(() => {});
   }, []);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const email = (currentUser?.email || (typeof window !== 'undefined' ? localStorage.getItem('reporter_email') || localStorage.getItem('user_email') : '') || '').toLowerCase().trim();
+    if (!email) return;
+
+    fetch(`/api/user/profile?email=${encodeURIComponent(email)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.profile) {
+          const p = data.profile;
+          if (p.fullName && p.fullName.trim() && p.fullName !== p.channelNameHi) {
+            setCustomerName(p.fullName.trim());
+          }
+          const mob = (p.whatsappNumber || p.mobileNumber || '').toString().replace(/[^0-9]/g, '').slice(-10);
+          if (mob.length === 10 && mob !== '9876543210') {
+            setCustomerPhone(mob);
+          }
+        }
+      })
+      .catch(() => {});
+  }, [isOpen, currentUser?.email]);
 
   if (!isOpen || !plan) return null;
 

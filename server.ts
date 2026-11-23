@@ -13873,6 +13873,28 @@ app.get(["/api/user-profile", "/api/user/profile"], (req, res) => {
     // Module 2 Privacy Requirement:
     // city is strictly private data! Only return city if caller is Master Admin or the profile owner.
     const safeProfile = { ...match };
+
+    // Anchor trial timestamps permanently so expiration never drifts forward across reloads
+    const cleanProfileEmail = (match.email || '').toLowerCase().trim();
+    const cleanProfilePhone = (match.whatsappNumber || match.mobileNumber || match.mobile || '').toString().replace(/\D/g, '').slice(-10);
+    const trialLedgerData = loadTrialLedger();
+    const ledgerMatch = (cleanProfileEmail && trialLedgerData[cleanProfileEmail]) || (cleanProfilePhone && trialLedgerData[`phone_${cleanProfilePhone}`]);
+    if (ledgerMatch && ledgerMatch.trialStartedAt) {
+      if (!match.trialStartedAt) match.trialStartedAt = ledgerMatch.trialStartedAt;
+      if (!match.trialEndsAt) match.trialEndsAt = ledgerMatch.trialEndsAt;
+    } else {
+      if (!match.trialStartedAt) {
+        match.trialStartedAt = match.createdAt || (mMatch && mMatch.createdAt) || Date.now();
+      }
+      if (!match.trialEndsAt) {
+        match.trialEndsAt = match.trialStartedAt + 7 * 86400000;
+      }
+      if (cleanProfileEmail || cleanProfilePhone) {
+        recordTrialLedger(cleanProfileEmail, cleanProfilePhone, match.trialStartedAt, match.trialEndsAt);
+      }
+    }
+    safeProfile.trialStartedAt = match.trialStartedAt;
+    safeProfile.trialEndsAt = match.trialEndsAt;
     const caller = (req as any).user || getAuthenticatedUser(req);
     const callerEmail = (caller?.email || '').toLowerCase().trim();
     const callerUid = (caller?.userId || caller?.uid || '').toLowerCase().trim();
@@ -14197,6 +14219,9 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       customFooterPng: isProOrVipUser
         ? (profile.customFooterPng !== undefined ? profile.customFooterPng : existing.customFooterPng)
         : undefined,
+      createdAt: existing.createdAt || profile.createdAt || Date.now(),
+      trialStartedAt: existing.trialStartedAt || profile.trialStartedAt || existing.createdAt || profile.createdAt || Date.now(),
+      trialEndsAt: existing.trialEndsAt || profile.trialEndsAt || ((existing.trialStartedAt || profile.trialStartedAt || existing.createdAt || profile.createdAt || Date.now()) + 7 * 86400000),
       updatedAt: Date.now(),
     };
 
@@ -14212,6 +14237,13 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     // Store only canonical key to avoid duplicate ghost profiles
     const canonicalKey = updated.email ? updated.email.toLowerCase().trim() : cleanId;
     allProfiles[canonicalKey] = updated;
+
+    // Anchor trial permanently in ledger
+    const userEm = (updated.email || '').toLowerCase().trim();
+    const userPh = (updated.whatsappNumber || updated.mobileNumber || '').toString().replace(/\D/g, '').slice(-10);
+    if (userEm || userPh) {
+      recordTrialLedger(userEm, userPh, updated.trialStartedAt, updated.trialEndsAt);
+    }
     if (isMasterAdminEmail) {
       allProfiles['breakingnewswala.com@gmail.com'] = updated;
       allProfiles['usr_627265616b69'] = { ...updated, userId: 'usr_627265616b69', uid: 'usr_627265616b69' };
@@ -28893,6 +28925,18 @@ app.post("/api/wallet/recharge", (req, res) => {
       return res.status(400).json({ error: "उपयोगकर्ता ईमेल अथवा ID आवश्यक है" });
     }
 
+    const isAdmin = isAuthorizedAdmin(req) || isAuthorizedMasterAdmin(req);
+    if (!isAdmin) {
+      if (!orderId) {
+        return res.status(403).json({ error: "सत्यापित भुगतान आवश्यक है। कृपया कैशफ्री पेमेंट गेटवे द्वारा रिचार्ज करें।" });
+      }
+      const allPayments = loadPaymentsDatabase();
+      const verifiedPayment = allPayments.find(p => p.orderId === orderId && (p.orderStatus === 'PAID' || p.paymentStatus === 'SUCCESS'));
+      if (!verifiedPayment) {
+        return res.status(403).json({ error: "अमान्य या अधूरा भुगतान। कैशफ्री से सत्यापित होने पर ही कॉइन जोड़े जाएंगे।" });
+      }
+    }
+
     const walletKey = cleanEmail || cleanUserId;
     const rDb = loadRewardsDatabase();
     if (!rDb.wallets[walletKey]) {
@@ -29920,16 +29964,32 @@ app.post("/api/cashfree/create-order", async (req, res) => {
     }
 
     const isGraphicPack = planId === 'GRAPHIC_PACK_20_7D' || planKey === 'GRAPHIC_PACK_20_7D';
+    const rawTargetKey = String(planKey || planId || '').toLowerCase().trim();
+    const isCoinPack = ['starter', 'supersaver', 'megapro', 'coin_starter', 'coin_supersaver', 'coin_megapro', 'coin_pack_starter', 'coin_pack_supersaver', 'coin_pack_megapro'].includes(rawTargetKey);
+
     const catalog = loadPlansCatalogDatabase();
     const targetPlan = catalog.find((p) => p.id === planId || p.planKey === planKey);
     // SEC-10: Price MUST strictly derive from authoritative server catalog, never trusted from client-supplied amount
     let orderAmount = isGraphicPack ? 99 : (targetPlan?.priceNum || 999);
-    const planName = isGraphicPack ? '₹99 में 20 अतिरिक्त ग्राफिक (7 दिन)' : (targetPlan?.nameHi || planKey || planId);
+    let planName = isGraphicPack ? '₹99 में 20 अतिरिक्त ग्राफिक (7 दिन)' : (targetPlan?.nameHi || planKey || planId);
+
+    if (isCoinPack) {
+      if (rawTargetKey.includes('starter')) {
+        orderAmount = 99;
+        planName = 'स्टार्टर कॉइन पैक (1,000 कॉइन्स)';
+      } else if (rawTargetKey.includes('supersaver')) {
+        orderAmount = 299;
+        planName = 'सुपर सेवर कॉइन पैक (5,000 कॉइन्स)';
+      } else if (rawTargetKey.includes('megapro')) {
+        orderAmount = 499;
+        planName = 'मेगा प्रो कॉइन पैक (10,000 कॉइन्स)';
+      }
+    }
 
     let appliedCouponCode: string | null = null;
     let discountAmount = 0;
 
-    if (!isGraphicPack && couponCode && String(couponCode).trim()) {
+    if (!isGraphicPack && !isCoinPack && couponCode && String(couponCode).trim()) {
       const cleanCode = String(couponCode).trim().toUpperCase();
       const allCoupons = loadPackageCouponsDatabase();
       const cp = allCoupons.find((c: any) => c.code.toUpperCase() === cleanCode && c.isActive);
@@ -29948,8 +30008,8 @@ app.post("/api/cashfree/create-order", async (req, res) => {
       }
     }
 
-    // Enforce downgrade prevention and server-side proration on plan upgrade (skip for one-time graphic packs)
-    if (customerEmail && !isGraphicPack) {
+    // Enforce downgrade prevention and server-side proration on plan upgrade (skip for one-time graphic packs & coin packs)
+    if (customerEmail && !isGraphicPack && !isCoinPack) {
       const cleanCustomerEmail = customerEmail.toLowerCase().trim();
       const masterUsers = loadUsersMasterDatabase();
       const existingUser = masterUsers.find(u => u.email && u.email.toLowerCase().trim() === cleanCustomerEmail);
@@ -30203,6 +30263,72 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
           planId: "GRAPHIC_PACK_20_7D",
           amount: 99,
           message: "₹99 ग्राफिक पैक (20 अतिरिक्त ग्राफिक, 7 दिन वैधता) सफलतापूर्वक अनलॉक हो गया!",
+        });
+      }
+
+      const isCoinPack = ['starter', 'supersaver', 'megapro', 'coin_starter', 'coin_supersaver', 'coin_megapro', 'coin_pack_starter', 'coin_pack_supersaver', 'coin_pack_megapro'].includes(rawPlanKey);
+      if (isCoinPack) {
+        let coinAmount = 1000;
+        let inrAmount = 99;
+        let packName = 'स्टार्टर पैक';
+        if (rawPlanKey.includes('supersaver')) {
+          coinAmount = 5000;
+          inrAmount = 299;
+          packName = 'सुपर सेवर पैक';
+        } else if (rawPlanKey.includes('megapro')) {
+          coinAmount = 10000;
+          inrAmount = 499;
+          packName = 'मेगा प्रो पैक';
+        }
+
+        const targetEmail = (userEmail || existingOrder?.customerEmail || "").trim().toLowerCase();
+        let currentBalance = 0;
+        if (targetEmail) {
+          const rDb = loadRewardsDatabase();
+          if (!rDb.wallets[targetEmail]) {
+            rDb.wallets[targetEmail] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+          }
+          if (existingOrder?.orderStatus !== 'PAID') {
+            rDb.wallets[targetEmail].coinBalance += coinAmount;
+            rDb.wallets[targetEmail].totalEarnedCoins += coinAmount;
+
+            const txId = `tx-cf-${orderId}`;
+            const tx: ServerWalletTransaction = {
+              id: txId,
+              transactionId: txId,
+              userId: targetEmail,
+              userEmail: targetEmail,
+              description: `कॉइन रिचार्ज (${packName}: ₹${inrAmount} में ${coinAmount} कॉइन्स)`,
+              transactionType: "credit",
+              type: "credit",
+              coinAmount,
+              amount: coinAmount,
+              balanceAfter: rDb.wallets[targetEmail].coinBalance,
+              status: "completed",
+              createdAt: Date.now(),
+              createdBy: "cashfree",
+            };
+            rDb.transactions.unshift(tx);
+            saveRewardsDatabase(rDb);
+          }
+          currentBalance = rDb.wallets[targetEmail].coinBalance;
+        }
+
+        if (existingOrder) {
+          existingOrder.orderStatus = "PAID";
+          existingOrder.paidAt = Date.now();
+          savePaymentsDatabase(allPayments);
+        }
+
+        return res.json({
+          success: true,
+          status: "PAID",
+          orderId,
+          planId: rawPlanKey,
+          amount: inrAmount,
+          coinsAdded: coinAmount,
+          newBalance: currentBalance,
+          message: `🎉 बधाई हो! ₹${inrAmount} में ${coinAmount.toLocaleString('en-IN')} कॉइन आपके वॉलेट में जुड़ गए!`,
         });
       }
 

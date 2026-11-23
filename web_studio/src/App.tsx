@@ -656,8 +656,21 @@ export default function App() {
   }, []);
   const isStudio = currentTab === 'studio' || currentTab === 'generator';
 
+  const isGraphicDownloadedRef = useRef<boolean>(true);
+  const studioModeRef = useRef<'graphic' | 'video'>('graphic');
+  const hasUnsavedGraphicRef = useRef<boolean>(false);
+  const [isUnsavedDraftExitModalOpen, setIsUnsavedDraftExitModalOpen] = useState(false);
+  const [pendingNavigationTab, setPendingNavigationTab] = useState<AppTab | null>(null);
+
   // Navigate to tab cleanly using HTML5 history without visible hashtags or ?fresh= accumulation
   const navigateToTab = useCallback((tab: AppTab) => {
+    // Prompt confirmation if exiting graphic studio with undownloaded work
+    if (currentTab === 'studio' && studioModeRef.current === 'graphic' && tab !== 'studio' && hasUnsavedGraphicRef.current && !isGraphicDownloadedRef.current) {
+      setPendingNavigationTab(tab);
+      setIsUnsavedDraftExitModalOpen(true);
+      return;
+    }
+
     // 0. Profile Completion Gate: Photo & Video Studio require complete channel profile for non-admin reporters
     if (tab === 'studio' || tab === 'generator') {
       try {
@@ -2706,6 +2719,9 @@ export default function App() {
       testLogoUrl: undefined,
     }));
 
+    isGraphicDownloadedRef.current = true;
+    hasUnsavedGraphicRef.current = false;
+
     try {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem('caption_draft');
@@ -2839,6 +2855,40 @@ export default function App() {
     showToast(`📂 ड्राफ्ट रीस्टोर हुआ: ${draft.name}`);
   };
 
+  const handleSaveDraftAndExit = () => {
+    try {
+      const { draft } = saveOrUpdateDraft(card, activeStep, currentDraftId, false);
+      setCurrentDraftId(draft.id);
+      showToast('💾 ड्राफ्ट सफलतापूर्वक सुरक्षित किया गया!');
+    } catch (e) {
+      console.warn('Draft save on exit warning:', e);
+    }
+    isGraphicDownloadedRef.current = true;
+    hasUnsavedGraphicRef.current = false;
+    setIsUnsavedDraftExitModalOpen(false);
+    if (pendingNavigationTab) {
+      const target = pendingNavigationTab;
+      setPendingNavigationTab(null);
+      navigateToTab(target);
+    }
+  };
+
+  const handleDiscardAndExit = () => {
+    isGraphicDownloadedRef.current = true;
+    hasUnsavedGraphicRef.current = false;
+    setIsUnsavedDraftExitModalOpen(false);
+    if (pendingNavigationTab) {
+      const target = pendingNavigationTab;
+      setPendingNavigationTab(null);
+      navigateToTab(target);
+    }
+  };
+
+  const handleCancelExit = () => {
+    setIsUnsavedDraftExitModalOpen(false);
+    setPendingNavigationTab(null);
+  };
+
   // 8. AUTO-DRAFT: Debounced auto-save so user's ongoing work is never lost
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -2933,6 +2983,8 @@ export default function App() {
   };
 
   const handleUpdateCard = (updates: Partial<NewsCardData>) => {
+    isGraphicDownloadedRef.current = false;
+    hasUnsavedGraphicRef.current = true;
     setCard((prev) => {
       // 1. Defensively merge images to NEVER accidentally wipe out existing photos
       let mergedImages = prev.images;
@@ -3279,6 +3331,9 @@ export default function App() {
         console.warn('Could not report download export completion:', completeErr);
       }
 
+      isGraphicDownloadedRef.current = true;
+      hasUnsavedGraphicRef.current = false;
+
       // Automatically record in Local-Only Project History (Module 2)
       try {
         await addProjectToHistory(currentUser?.uid || currentUser?.email, {
@@ -3459,6 +3514,8 @@ export default function App() {
   }, []);
 
   const handleOpenStudioWithNews = async (post: NewsFeedPost) => {
+    isGraphicDownloadedRef.current = false;
+    hasUnsavedGraphicRef.current = true;
     // Priority 4: Prevent accidental credit/quota consumption upon simple navigation. Quota is consumed on export.
     try {
       fetch(getApiUrl('/api/analytics/track'), {
@@ -6136,6 +6193,48 @@ export default function App() {
         onRestoreDraft={handleRestoreDraft}
         currentDraftId={currentDraftId}
       />
+
+      {/* 9.1 UNSAVED GRAPHIC EXIT CONFIRMATION MODAL */}
+      {isUnsavedDraftExitModalOpen && (
+        <div className="fixed inset-0 z-[99999] bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-amber-500/60 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/40 text-amber-400 mx-auto flex items-center justify-center text-2xl shadow-md">
+              💾
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-base sm:text-lg font-black text-white">
+                असुरक्षित ग्राफ़िक (Unsaved Graphic)
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed font-medium">
+                यह ग्राफ़िक अभी डाउनलोड नहीं हुआ है, क्या आप इसे ड्राफ्ट में सेव करना चाहते हैं?
+              </p>
+            </div>
+            <div className="pt-2 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={handleSaveDraftAndExit}
+                className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-lg transition active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>💾 ड्राफ्ट में सेव करें</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDiscardAndExit}
+                className="w-full py-2.5 px-4 bg-slate-800 hover:bg-red-950/80 hover:text-red-300 border border-slate-700 hover:border-red-600 text-slate-300 font-bold text-xs sm:text-sm rounded-xl transition active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>बिना सेव किए जाएं</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelExit}
+                className="w-full py-2 px-4 text-slate-400 hover:text-white font-bold text-xs transition cursor-pointer"
+              >
+                रद्द करें (यहीं रहें)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 10. GOOGLE SHEETS USER DATABASE AUTO-SYNC MODAL */}
       <GoogleSheetsUserSyncModal

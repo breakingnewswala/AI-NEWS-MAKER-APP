@@ -1756,6 +1756,13 @@ export function fitHeadlinesTo5TierRanges(
 
     // Clean formatting and state spaces
     cand = removeRedundantClauses(cleanCandidateClause(cand));
+
+    // Guarantee that cand is strictly distinct from anything already in result
+    if (!cand || result.includes(cand) || result.some((ex) => checkHeadlineSimilarity(ex, cand) >= 0.85)) {
+      cand = diversifyHeadlineToTier(baseText, i, tier, location, result);
+      cand = removeRedundantClauses(cleanCandidateClause(cand));
+    }
+
     result.push(cand);
   }
 
@@ -1819,20 +1826,25 @@ export function generate5BalancedHeadlineOptions(
     }
   }
 
-  // Context prefixes when uniqueOptions.length < 5:
+  // Diverse journalistic angles when uniqueOptions.length < 5:
   if (uniqueOptions.length < 5) {
-    const contextPrefixes = ['बड़ा अपडेट: ', 'विस्तृत रिपोर्ट: ', 'अहम जानकारी: ', 'अपडेट: '];
-    for (const p of contextPrefixes) {
+    const journalisticAngles = [
+      loc ? `${loc} में प्रशासन अलर्ट, ${cleanBase}` : `प्रशासनिक अपडेट: ${cleanBase}`,
+      loc ? `विशेष ग्राउंड रिपोर्ट: ${loc} में ${cleanBase}` : `विशेष पड़ताल: ${cleanBase}`,
+      loc ? `${loc} से बड़ा अपडेट: ${cleanBase}` : `अहम जानकारी: ${cleanBase}`,
+      `पूरे मामले पर नजर: ${cleanBase}`,
+    ];
+    for (const angle of journalisticAngles) {
       if (uniqueOptions.length >= 5) break;
-      addOptionIfDistinct(`${p}${cleanBase}`, 0.95);
+      addOptionIfDistinct(angle, 0.88);
     }
   }
 
-  // Option 5: प्रभावशाली समाचार हेडलाइन (Reframed complete headline)
+  // Fallback: If still under 5, add framed variations
   if (uniqueOptions.length < 5) {
-    const shortBase = cleanBase.replace(/^(?:बड़ा फैसला|बड़ी खबर|ताज़ा खबर|विशेष):\s*/, '');
+    const shortBase = cleanBase.replace(/^(?:बड़ा फैसला|बड़ी खबर|ताज़ा खबर|विशेष|बड़ा अपडेट|अपडेट):\s*/, '');
     if (shortBase !== cleanBase) {
-      addOptionIfDistinct(shortBase);
+      addOptionIfDistinct(shortBase, 0.88);
     }
   }
 

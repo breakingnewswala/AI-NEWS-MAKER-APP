@@ -70,6 +70,7 @@ import {
   redeemPromoCode,
   RedeemResult,
   PLAN_DETAILS,
+  PlanFeatureDetail,
   getPlansCatalog,
   sortPlansByCanonicalOrder,
   PLAN_KEY_MAP,
@@ -369,7 +370,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
     });
 
     const handlePlanUpdate = () => {
-      setSubscription(getUserSubscription());
+      setSubscription(getUserSubscription(cleanEmail));
     };
     window.addEventListener('ai_news_user_plan_updated', handlePlanUpdate);
     return () => window.removeEventListener('ai_news_user_plan_updated', handlePlanUpdate);
@@ -755,48 +756,36 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const [walletRechargeProcessingId, setWalletRechargeProcessingId] = useState<string | null>(null);
   const [walletRechargeFeedback, setWalletRechargeFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const handleExecuteWalletRecharge = async (pack: CoinPackage) => {
-    setWalletRechargeProcessingId(pack.id);
+  const [activeCoinPack, setActiveCoinPack] = useState<CoinPackage | null>(null);
+
+  const handleExecuteWalletRecharge = (pack: CoinPackage) => {
+    setActiveCoinPack(pack);
     setWalletRechargeFeedback(null);
-    try {
-      const email = (currentUser?.email || channelProfile?.email || '').toLowerCase().trim();
-      const uid = currentUser?.userId || currentUser?.uid || email;
-      const res = await fetch('/api/wallet/recharge', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          userId: uid,
-          packId: pack.id,
-          amount: pack.price,
-          coins: pack.coins,
-          paymentMethod: 'cashfree',
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setWalletRechargeFeedback({
-          type: 'success',
-          text: `🎉 बधाई हो! ₹${pack.price} में ${pack.coins.toLocaleString('en-IN')} कॉइन्स आपके वॉलेट में तुरंत जुड़ गए!`,
-        });
-        fetchUserWallet();
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('wallet_balance_updated', { detail: { balance: data.wallet?.coinBalance } }));
-        }
-      } else {
-        setWalletRechargeFeedback({
-          type: 'error',
-          text: data.error || 'रिचार्ज असफल रहा। कृपया पुनः प्रयास करें।',
-        });
-      }
-    } catch (e: any) {
-      setWalletRechargeFeedback({
-        type: 'error',
-        text: e.message || 'नेटवर्क समस्या के कारण रिचार्ज प्रक्रिया पूरी नहीं हो सकी।',
-      });
-    } finally {
-      setWalletRechargeProcessingId(null);
-    }
+    const coinPlan: PlanFeatureDetail = {
+      id: pack.id as any,
+      planKey: `COIN_PACK_${pack.id.toUpperCase()}` as any,
+      nameHi: `${pack.nameHi} (${pack.coins.toLocaleString('en-IN')} कॉइन्स)`,
+      nameEn: `${pack.name} (${pack.coins} Coins)`,
+      priceDisplay: `₹${pack.price}`,
+      priceNum: pack.price,
+      durationDays: 365,
+      validityLabel: 'लाइफटाइम कॉइन्स',
+      period: 'इन्स्टैंट वॉलेट क्रेडिट',
+      tagline: `₹${pack.price} में ${pack.coins.toLocaleString('en-IN')} कॉइन्स तुरंत प्राप्त करें`,
+      hasWatermark: false,
+      features: [
+        `${pack.coins.toLocaleString('en-IN')} कॉइन्स सीधे वॉलेट में`,
+        'दैनिक डाउनलोड सीमा समाप्त होने पर उपयोग योग्य',
+        'अतिरिक्त फ्रेम व ग्राफिक एक्सपोर्ट सुविधा',
+      ],
+      graphicExportResolution: '1080p',
+      maxGraphicsPerDay: 99999,
+      hasVideoStudio: true,
+      hasAiTools: true,
+      hasVipDeskFrames: true,
+      isActive: true,
+    };
+    setCashfreeModalPlan(coinPlan);
   };
 
   const fetchUserWallet = () => {
@@ -1059,7 +1048,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   }, [isAdmin]);
 
   // Subscription & User Tier State
-  const [subscription, setSubscription] = useState<UserSubscriptionInfo>(() => getUserSubscription());
+  const [subscription, setSubscription] = useState<UserSubscriptionInfo>(() => getUserSubscription(currentUser?.email || (typeof window !== 'undefined' ? localStorage.getItem('reporter_email') || localStorage.getItem('user_email') || '' : '')));
 
   // Part 10: VIP & Pro VIP Dashboard Permission Check - Restricted from Trial, Basic & Advanced
   const isVipOrProDashboardUser =
@@ -3787,11 +3776,42 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         {/* User Identity & Active Plan Header Card */}
         {(() => {
           const formatTrialExpiryDate = (timestamp?: number): string => {
+            const cleanEmail = (currentUser?.email || channelProfile?.email || effectiveUser?.email || '').toLowerCase().trim();
+            const storedEnd = cleanEmail ? localStorage.getItem(`user_trial_ends_${cleanEmail}`) : (typeof window !== 'undefined' ? localStorage.getItem('ai_news_maker_plan_expires_at') : null);
+            const storedStart = cleanEmail ? localStorage.getItem(`user_trial_start_${cleanEmail}`) : (typeof window !== 'undefined' ? localStorage.getItem('ai_news_maker_trial_start') : null);
+
             let targetMs = timestamp && !isNaN(timestamp) && timestamp > 0 ? timestamp : 0;
+            if (!targetMs && storedEnd && !isNaN(Number(storedEnd)) && Number(storedEnd) > 0) {
+              targetMs = Number(storedEnd);
+            }
+            if (!targetMs && (subscription.trialEndsAt || subscription.expiresAt)) {
+              targetMs = Number(subscription.trialEndsAt || subscription.expiresAt);
+            }
+            if (!targetMs && channelProfile?.trialEndsAt) {
+              targetMs = Number(channelProfile.trialEndsAt);
+            }
             if (!targetMs) {
-              const startMs = subscription.trialStartedAt || (channelProfile as any)?.createdAt || currentUser?.createdAt || (Date.now() - (7 - (subscription.daysRemaining || 7)) * 86400000);
-              const validStart = startMs && !isNaN(Number(startMs)) ? Number(startMs) : Date.now();
+              let startMs = 0;
+              if (storedStart && !isNaN(Number(storedStart)) && Number(storedStart) > 0) {
+                startMs = Number(storedStart);
+              } else if (subscription.trialStartedAt) {
+                startMs = Number(subscription.trialStartedAt);
+              } else if (channelProfile?.trialStartedAt) {
+                startMs = Number(channelProfile.trialStartedAt);
+              } else if ((channelProfile as any)?.createdAt) {
+                startMs = Number((channelProfile as any).createdAt);
+              } else if (currentUser?.createdAt) {
+                startMs = Number(currentUser.createdAt);
+              } else {
+                startMs = Date.now();
+              }
+              const validStart = startMs;
               targetMs = validStart + 7 * 86400000;
+            }
+            if (cleanEmail && typeof window !== 'undefined') {
+              if (!localStorage.getItem(`user_trial_ends_${cleanEmail}`)) {
+                localStorage.setItem(`user_trial_ends_${cleanEmail}`, String(targetMs));
+              }
             }
             try {
               const d = new Date(targetMs);
@@ -3809,7 +3829,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 })
               );
             } catch {
-              const d = new Date(Date.now() + 7 * 86400000);
+              const d = new Date(targetMs);
               return d.toLocaleDateString('hi-IN', { day: '2-digit', month: 'short', year: 'numeric' });
             }
           };
@@ -4857,14 +4877,32 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
         isOpen={Boolean(cashfreeModalPlan)}
         plan={cashfreeModalPlan}
         currentUser={currentUser || effectiveUser}
-        onClose={() => setCashfreeModalPlan(null)}
+        onClose={() => {
+          setCashfreeModalPlan(null);
+          setActiveCoinPack(null);
+        }}
         onSuccess={(planId) => {
           setCashfreeModalPlan(null);
-          setUserPlanTier(planId as any);
-          const updatedSub = getUserSubscription();
-          setSubscription(updatedSub);
-          setPlanSuccessMsg(`🎉 ${planId.toUpperCase()} प्लान सफलतापूर्वक सक्रिय हो गया है!`);
-          setTimeout(() => setPlanSuccessMsg(''), 6000);
+          const isCoinPlan = ['starter', 'supersaver', 'megapro'].includes(String(planId).toLowerCase());
+          if (isCoinPlan) {
+            const pack = activeCoinPack || COIN_PACKAGES.find((p) => p.id === planId);
+            setWalletRechargeFeedback({
+              type: 'success',
+              text: `🎉 बधाई हो! ₹${pack?.price || ''} में ${pack?.coins?.toLocaleString('en-IN') || ''} कॉइन्स आपके वॉलेट में तुरंत जुड़ गए!`,
+            });
+            fetchUserWallet();
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('wallet_balance_updated'));
+            }
+            setActiveCoinPack(null);
+          } else {
+            setUserPlanTier(planId as any);
+            const userEmail = (currentUser?.email || effectiveUser?.email || channelProfile?.email || '').toLowerCase().trim();
+            const updatedSub = getUserSubscription(userEmail);
+            setSubscription(updatedSub);
+            setPlanSuccessMsg(`🎉 ${planId.toUpperCase()} प्लान सफलतापूर्वक सक्रिय हो गया है!`);
+            setTimeout(() => setPlanSuccessMsg(''), 6000);
+          }
         }}
       />
 

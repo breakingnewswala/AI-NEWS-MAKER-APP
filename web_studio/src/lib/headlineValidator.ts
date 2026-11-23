@@ -639,22 +639,49 @@ export function regenerateHeadlineOptionFromFacts(
     return validCandidates[0].text;
   }
 
-  // Fallback: If no candidate met exact range without duplication, create a clean synthesized variant
-  let fallback = cleanBase;
-  if (loc && !fallback.includes(loc)) {
-    fallback = `${loc}: ${fallback}`;
-  }
-  fallback = cleanCandidateClause(fallback);
+  // 5. Fallback: If no candidate met exact range without duplication, create a clean synthesized variant
+  const angleVariants: string[] = [
+    cleanBase,
+    loc ? `${loc} में प्रशासन अलर्ट, ${cleanBase}` : `मामले में अधिकारियों के निर्देश जारी, ${cleanBase}`,
+    loc ? `${loc} से बड़ा अपडेट: ${cleanBase}, क्षेत्र में चर्चा तेज` : `बड़ा असर: ${cleanBase}, लोगों का ध्यान आकर्षित`,
+    loc ? `विशेष ग्राउंड रिपोर्ट: ${loc} में ${cleanBase}` : `विशेष पड़ताल: ${cleanBase}, जानिए पूरे मामले से जुड़े तथ्य`,
+    loc ? `मुख्य समाचार (${loc}): ${cleanBase}` : `अहम जानकारी: ${cleanBase}, पूरा घटनाक्रम एक नजर में`,
+  ];
 
-  if (countCharacters(fallback) > target.max) {
-    const sliced = fallback.substring(0, target.max);
-    const lastSpace = sliced.lastIndexOf(" ");
-    if (lastSpace > 20) {
-      fallback = cleanCandidateClause(sliced.substring(0, lastSpace));
+  let chosen = angleVariants[optionIndex % angleVariants.length] || cleanBase;
+  if (loc && !chosen.includes(loc) && optionIndex === 0) {
+    chosen = `${loc}: ${chosen}`;
+  }
+  chosen = cleanCandidateClause(chosen);
+
+  const isChosenDup = existingHeadlines.some((ex) => {
+    if (!ex) return false;
+    return normalizeText(ex) === normalizeText(chosen) || checkHeadlineSimilarity(ex, chosen) >= 0.85;
+  });
+
+  if (isChosenDup) {
+    for (const alt of angleVariants) {
+      const cleanedAlt = cleanCandidateClause(alt);
+      const isAltDup = existingHeadlines.some((ex) => {
+        if (!ex) return false;
+        return normalizeText(ex) === normalizeText(cleanedAlt) || checkHeadlineSimilarity(ex, cleanedAlt) >= 0.85;
+      });
+      if (!isAltDup) {
+        chosen = cleanedAlt;
+        break;
+      }
     }
   }
 
-  return fallback;
+  if (countCharacters(chosen) > target.max) {
+    const sliced = chosen.substring(0, target.max);
+    const lastSpace = sliced.lastIndexOf(" ");
+    if (lastSpace > 20) {
+      chosen = cleanCandidateClause(sliced.substring(0, lastSpace));
+    }
+  }
+
+  return chosen;
 }
 
 /**

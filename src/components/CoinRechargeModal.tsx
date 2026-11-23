@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { CashfreePaymentModal } from './CashfreePaymentModal';
+import { PlanFeatureDetail } from '../lib/userPlanManager';
 import {
   Coins,
   X,
@@ -67,6 +69,7 @@ interface CoinRechargeModalProps {
   onClose: () => void;
   currentUserEmail?: string;
   currentUserId?: string;
+  currentUser?: any;
   onBalanceUpdated?: (newBalance: number) => void;
 }
 
@@ -75,6 +78,7 @@ export const CoinRechargeModal: React.FC<CoinRechargeModalProps> = ({
   onClose,
   currentUserEmail,
   currentUserId,
+  currentUser,
   onBalanceUpdated,
 }) => {
   const [selectedPackId, setSelectedPackId] = useState<'starter' | 'supersaver' | 'megapro'>('supersaver');
@@ -85,9 +89,10 @@ export const CoinRechargeModal: React.FC<CoinRechargeModalProps> = ({
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'packs' | 'history'>('packs');
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [cashfreePackPlan, setCashfreePackPlan] = useState<PlanFeatureDetail | null>(null);
 
-  const activeEmail = (currentUserEmail || (typeof window !== 'undefined' ? localStorage.getItem('reporter_email') || localStorage.getItem('user_email') : '') || '').toLowerCase().trim();
-  const activeUserId = (currentUserId || (typeof window !== 'undefined' ? localStorage.getItem('reporter_user_id') : '') || activeEmail).trim();
+  const activeEmail = (currentUserEmail || currentUser?.email || (typeof window !== 'undefined' ? localStorage.getItem('reporter_email') || localStorage.getItem('user_email') : '') || '').toLowerCase().trim();
+  const activeUserId = (currentUserId || currentUser?.userId || currentUser?.uid || (typeof window !== 'undefined' ? localStorage.getItem('reporter_user_id') : '') || activeEmail).trim();
 
   // Load Wallet Data
   const loadWalletData = async () => {
@@ -121,54 +126,48 @@ export const CoinRechargeModal: React.FC<CoinRechargeModalProps> = ({
 
   const selectedPack = COIN_PACKAGES.find((p) => p.id === selectedPackId) || COIN_PACKAGES[1];
 
-  // Handle Recharge Execution
-  const handleRecharge = async () => {
-    setIsProcessing(true);
+  // Handle Recharge Execution via Cashfree Payment Gateway
+  const handleRecharge = () => {
     setStatusMessage(null);
-    try {
-      const res = await fetch('/api/wallet/recharge', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: activeEmail,
-          userId: activeUserId,
-          packId: selectedPack.id,
-          amount: selectedPack.price,
-          coins: selectedPack.coins,
-          paymentMethod: 'cashfree',
-        }),
-      });
+    const coinPlan: PlanFeatureDetail = {
+      id: selectedPack.id as any,
+      planKey: `COIN_PACK_${selectedPack.id.toUpperCase()}` as any,
+      nameHi: `${selectedPack.nameHi} (${selectedPack.coins.toLocaleString('en-IN')} कॉइन्स)`,
+      nameEn: `${selectedPack.name} (${selectedPack.coins} Coins)`,
+      priceDisplay: `₹${selectedPack.price}`,
+      priceNum: selectedPack.price,
+      durationDays: 365,
+      validityLabel: 'लाइफटाइम कॉइन्स',
+      period: 'इन्स्टैंट वॉलेट क्रेडिट',
+      tagline: `₹${selectedPack.price} में ${selectedPack.coins.toLocaleString('en-IN')} कॉइन्स तुरंत प्राप्त करें`,
+      hasWatermark: false,
+      features: [
+        `${selectedPack.coins.toLocaleString('en-IN')} कॉइन्स सीधे वॉलेट में`,
+        'दैनिक डाउनलोड सीमा समाप्त होने पर उपयोग योग्य',
+        'अतिरिक्त फ्रेम व ग्राफिक एक्सपोर्ट सुविधा',
+      ],
+      graphicExportResolution: '1080p',
+      maxGraphicsPerDay: 99999,
+      hasVideoStudio: true,
+      hasAiTools: true,
+      hasVipDeskFrames: true,
+      isActive: true,
+    };
+    setCashfreePackPlan(coinPlan);
+  };
 
-      const data = await res.json();
-      if (res.ok && data.success) {
-        const newBal = data.wallet?.coinBalance ?? (coinBalance + selectedPack.coins);
-        setCoinBalance(newBal);
-        setStatusMessage({
-          type: 'success',
-          text: `🎉 बधाई हो! ₹${selectedPack.price} में ${selectedPack.coins.toLocaleString('en-IN')} कॉइन आपके वॉलेट में जुड़ गए!`,
-        });
-
-        // Notify parent and global header
-        if (onBalanceUpdated) onBalanceUpdated(newBal);
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('wallet_balance_updated', { detail: { balance: newBal } }));
-        }
-
-        // Refresh transactions list
-        loadWalletData();
-      } else {
-        setStatusMessage({
-          type: 'error',
-          text: data.error || 'रिचार्ज प्रक्रिया पूरी नहीं हो सकी। कृपया पुनः प्रयास करें।',
-        });
-      }
-    } catch (e: any) {
-      setStatusMessage({
-        type: 'error',
-        text: e.message || 'नेटवर्क समस्या के कारण रिचार्ज विफल रहा।',
-      });
-    } finally {
-      setIsProcessing(false);
+  const handleCashfreePaymentSuccess = (planId: string) => {
+    setCashfreePackPlan(null);
+    setStatusMessage({
+      type: 'success',
+      text: `🎉 बधाई हो! ₹${selectedPack.price} में ${selectedPack.coins.toLocaleString('en-IN')} कॉइन आपके वॉलेट में जुड़ गए!`,
+    });
+    loadWalletData();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('wallet_balance_updated'));
+    }
+    if (onBalanceUpdated) {
+      onBalanceUpdated(coinBalance + selectedPack.coins);
     }
   };
 
@@ -472,6 +471,16 @@ export const CoinRechargeModal: React.FC<CoinRechargeModalProps> = ({
           )}
         </div>
       </div>
+
+      {cashfreePackPlan && (
+        <CashfreePaymentModal
+          isOpen={Boolean(cashfreePackPlan)}
+          plan={cashfreePackPlan}
+          currentUser={currentUser || { email: activeEmail, userId: activeUserId }}
+          onClose={() => setCashfreePackPlan(null)}
+          onSuccess={handleCashfreePaymentSuccess}
+        />
+      )}
     </div>
   );
 

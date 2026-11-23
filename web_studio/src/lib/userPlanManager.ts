@@ -1020,8 +1020,19 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
       const sess = localStorage.getItem('reporter_auth_session');
       if (sess) {
         const u = JSON.parse(sess);
-        return u?.email || '';
+        if (u?.email) return u.email;
       }
+    } catch {}
+    try {
+      const prof = localStorage.getItem('user_channel_profile');
+      if (prof) {
+        const p = JSON.parse(prof);
+        if (p?.email) return p.email;
+      }
+    } catch {}
+    try {
+      const savedEmail = localStorage.getItem('reporter_email') || localStorage.getItem('user_email');
+      if (savedEmail) return savedEmail;
     } catch {}
     return '';
   })()).toLowerCase().trim();

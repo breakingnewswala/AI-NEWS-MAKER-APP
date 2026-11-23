@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Type,
   AlertCircle,
@@ -1523,21 +1524,20 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       link.href = objectUrl;
       link.download = filename;
       link.setAttribute('download', filename);
-      link.style.position = 'fixed';
-      link.style.left = '-9999px';
-      link.style.top = '-9999px';
-      link.style.opacity = '0.01';
+      link.style.display = 'none';
       document.body.appendChild(link);
 
       try {
-        const clickEvent = new MouseEvent('click', {
-          view: window,
-          bubbles: true,
-          cancelable: true,
-        });
-        link.dispatchEvent(clickEvent);
-      } catch {
         link.click();
+      } catch (clickErr) {
+        try {
+          const clickEvent = new MouseEvent('click', {
+            view: window,
+            bubbles: true,
+            cancelable: true,
+          });
+          link.dispatchEvent(clickEvent);
+        } catch {}
       }
 
       setTimeout(() => {
@@ -2793,6 +2793,12 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       return;
     }
 
+    // Freeze & pause preview video immediately so it doesn't play aloud or move in background
+    setIsPlaying(false);
+    try {
+      video.pause();
+    } catch {}
+
     let originalLoop = video.loop;
 
     try {
@@ -3430,7 +3436,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       } catch {}
       try {
         video.loop = originalLoop;
+        video.pause();
       } catch {}
+      setIsPlaying(false);
       isExportingRef.current = false;
       setTimeout(() => {
         setIsExporting(false);
@@ -3679,7 +3687,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               {/* Still Overlay during video export to keep preview still and reduce CPU/GPU load */}
               {isExporting && (
                 <div
-                  className="absolute inset-0 z-50 bg-slate-950/85 backdrop-blur-xs flex flex-col items-center justify-center p-4 text-center select-none pointer-events-auto"
+                  className="absolute inset-0 z-50 bg-slate-950 flex flex-col items-center justify-center p-4 text-center select-none pointer-events-auto"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <Sparkles className="w-8 h-8 text-amber-400 animate-spin mb-3" />
@@ -5762,75 +5770,26 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                           </div>
                         </div>
                       ) : (
-                        /* Image Watermark Upload */
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-300">वॉटरमार्क इमेज चुनें:</label>
-                          <div className="flex items-center gap-3">
-                            {watermarkImage ? (
-                              <div className="flex items-center gap-2">
-                                <img
-                                  src={watermarkImage}
-                                  alt="Watermark preview"
-                                  className="h-10 w-16 object-contain bg-black/40 rounded p-1 border border-slate-700"
-                                />
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="text-[10px] text-emerald-400 font-bold">
-                                    {watermarkImage === (userPngLogo || activeLogoUrl || channelLogoUrl) ? '✓ आधिकारिक चैनल लोगो' : 'कस्टम वॉटरमार्क'}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const defaultLogo = userPngLogo || activeLogoUrl || channelLogoUrl || '/assets/ai_news_maker_logo.png';
-                                      setWatermarkImage(defaultLogo);
-                                    }}
-                                    className="text-[9px] text-amber-300 hover:underline text-left cursor-pointer"
-                                  >
-                                    डिफ़ॉल्ट लोगो रीसेट
-                                  </button>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => setWatermarkImage(null)}
-                                  className="px-2 py-1 bg-red-950 text-red-300 border border-red-800 rounded text-[10px] font-bold ml-1 cursor-pointer"
-                                >
-                                  हटाएं
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-slate-400 italic">कोई इमेज सेट नहीं है</span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const defaultLogo = userPngLogo || activeLogoUrl || channelLogoUrl || '/assets/ai_news_maker_logo.png';
-                                    if (defaultLogo) setWatermarkImage(defaultLogo);
-                                  }}
-                                  className="px-2 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded text-[10px] font-bold cursor-pointer"
-                                >
-                                  चैनल लोगो लगाएं
-                                </button>
-                              </div>
-                            )}
-                            <label className="ml-auto px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold rounded-xl border border-slate-700 cursor-pointer flex items-center gap-1.5">
-                              <Upload className="w-3.5 h-3.5 text-amber-400" />
-                              <span>इमेज अपलोड करें</span>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={(e) => {
-                                  const file = e.target.files?.[0];
-                                  if (file) {
-                                    const reader = new FileReader();
-                                    reader.onload = () => {
-                                      setWatermarkImage(reader.result as string);
-                                      showToast('🖼️ वॉटरमार्क इमेज सेट हो गई!');
-                                    };
-                                    reader.readAsDataURL(file);
-                                  }
-                                }}
+                        /* Image Watermark: Locked to User Profile Logo Only (Upload button removed as per requirements) */
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-slate-300 block">वॉटरमार्क इमेज (आधिकारिक चैनल लोगो):</label>
+                          <div className="p-3 bg-slate-900 border border-slate-700 rounded-xl flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={watermarkImage || userPngLogo || activeLogoUrl || channelLogoUrl || '/assets/ai_news_maker_logo.png'}
+                                alt="Watermark preview"
+                                className="h-10 w-16 object-contain bg-black/40 rounded p-1 border border-slate-700"
                               />
-                            </label>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
+                                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                  <span>✓ आधिकारिक चैनल लोगो (प्रोफाइल से)</span>
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                  यह लोगो आपकी प्रोफाइल से स्वतः लिया गया है। आप नीचे से इसकी पारदर्शिता व स्थिति बदल सकते हैं।
+                                </span>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -7266,8 +7225,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       )}
 
       {/* Video Render Complete & Instant Download Modal Dialog */}
-      {isVideoSuccessModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in">
+      {isVideoSuccessModalOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in">
           <div className="bg-gradient-to-b from-slate-900 via-slate-950 to-black border-2 border-emerald-500/80 rounded-3xl w-full max-w-md shadow-2xl p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-emerald-500/30">
               <div className="flex items-center gap-2.5">
@@ -7353,7 +7312,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               </button>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Reset Confirmation Modal */}
