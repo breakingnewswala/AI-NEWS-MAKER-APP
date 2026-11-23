@@ -12789,19 +12789,43 @@ function regenerateHeadlineOptionFromFacts(arg1, arg2, arg3, arg4, arg5, arg6) {
   if (validCandidates.length > 0) {
     return validCandidates[0].text;
   }
-  let fallback = cleanBase;
-  if (loc && !fallback.includes(loc)) {
-    fallback = `${loc}: ${fallback}`;
+  const angleVariants = [
+    cleanBase,
+    loc ? `${loc} \u092E\u0947\u0902 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0905\u0932\u0930\u094D\u091F, ${cleanBase}` : `\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940, ${cleanBase}`,
+    loc ? `${loc} \u0938\u0947 \u092C\u0921\u093C\u093E \u0905\u092A\u0921\u0947\u091F: ${cleanBase}, \u0915\u094D\u0937\u0947\u0924\u094D\u0930 \u092E\u0947\u0902 \u091A\u0930\u094D\u091A\u093E \u0924\u0947\u091C` : `\u092C\u0921\u093C\u093E \u0905\u0938\u0930: ${cleanBase}, \u0932\u094B\u0917\u094B\u0902 \u0915\u093E \u0927\u094D\u092F\u093E\u0928 \u0906\u0915\u0930\u094D\u0937\u093F\u0924`,
+    loc ? `\u0935\u093F\u0936\u0947\u0937 \u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0930\u093F\u092A\u094B\u0930\u094D\u091F: ${loc} \u092E\u0947\u0902 ${cleanBase}` : `\u0935\u093F\u0936\u0947\u0937 \u092A\u0921\u093C\u0924\u093E\u0932: ${cleanBase}, \u091C\u093E\u0928\u093F\u090F \u092A\u0942\u0930\u0947 \u092E\u093E\u092E\u0932\u0947 \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0924\u0925\u094D\u092F`,
+    loc ? `\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 (${loc}): ${cleanBase}` : `\u0905\u0939\u092E \u091C\u093E\u0928\u0915\u093E\u0930\u0940: ${cleanBase}, \u092A\u0942\u0930\u093E \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u090F\u0915 \u0928\u091C\u0930 \u092E\u0947\u0902`
+  ];
+  let chosen = angleVariants[optionIndex % angleVariants.length] || cleanBase;
+  if (loc && !chosen.includes(loc) && optionIndex === 0) {
+    chosen = `${loc}: ${chosen}`;
   }
-  fallback = cleanCandidateClause(fallback);
-  if (countCharacters(fallback) > target.max) {
-    const sliced = fallback.substring(0, target.max);
-    const lastSpace = sliced.lastIndexOf(" ");
-    if (lastSpace > 20) {
-      fallback = cleanCandidateClause(sliced.substring(0, lastSpace));
+  chosen = cleanCandidateClause(chosen);
+  const isChosenDup = existingHeadlines.some((ex) => {
+    if (!ex) return false;
+    return normalizeText(ex) === normalizeText(chosen) || checkHeadlineSimilarity(ex, chosen) >= 0.85;
+  });
+  if (isChosenDup) {
+    for (const alt of angleVariants) {
+      const cleanedAlt = cleanCandidateClause(alt);
+      const isAltDup = existingHeadlines.some((ex) => {
+        if (!ex) return false;
+        return normalizeText(ex) === normalizeText(cleanedAlt) || checkHeadlineSimilarity(ex, cleanedAlt) >= 0.85;
+      });
+      if (!isAltDup) {
+        chosen = cleanedAlt;
+        break;
+      }
     }
   }
-  return fallback;
+  if (countCharacters(chosen) > target.max) {
+    const sliced = chosen.substring(0, target.max);
+    const lastSpace = sliced.lastIndexOf(" ");
+    if (lastSpace > 20) {
+      chosen = cleanCandidateClause(sliced.substring(0, lastSpace));
+    }
+  }
+  return chosen;
 }
 function extractPublisherFromDomain(rawUrl) {
   if (!rawUrl || typeof rawUrl !== "string") return [];
@@ -24405,6 +24429,26 @@ app.get(["/api/user-profile", "/api/user/profile"], (req, res) => {
       }
     }
     const safeProfile = { ...match };
+    const cleanProfileEmail = (match.email || "").toLowerCase().trim();
+    const cleanProfilePhone = (match.whatsappNumber || match.mobileNumber || match.mobile || "").toString().replace(/\D/g, "").slice(-10);
+    const trialLedgerData = loadTrialLedger();
+    const ledgerMatch = cleanProfileEmail && trialLedgerData[cleanProfileEmail] || cleanProfilePhone && trialLedgerData[`phone_${cleanProfilePhone}`];
+    if (ledgerMatch && ledgerMatch.trialStartedAt) {
+      if (!match.trialStartedAt) match.trialStartedAt = ledgerMatch.trialStartedAt;
+      if (!match.trialEndsAt) match.trialEndsAt = ledgerMatch.trialEndsAt;
+    } else {
+      if (!match.trialStartedAt) {
+        match.trialStartedAt = match.createdAt || mMatch && mMatch.createdAt || Date.now();
+      }
+      if (!match.trialEndsAt) {
+        match.trialEndsAt = match.trialStartedAt + 7 * 864e5;
+      }
+      if (cleanProfileEmail || cleanProfilePhone) {
+        recordTrialLedger(cleanProfileEmail, cleanProfilePhone, match.trialStartedAt, match.trialEndsAt);
+      }
+    }
+    safeProfile.trialStartedAt = match.trialStartedAt;
+    safeProfile.trialEndsAt = match.trialEndsAt;
     const caller = req.user || getAuthenticatedUser(req);
     const callerEmail = (caller?.email || "").toLowerCase().trim();
     const callerUid = (caller?.userId || caller?.uid || "").toLowerCase().trim();
@@ -24636,6 +24680,9 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
       socialLinks: profile.socialLinks ? { ...existing.socialLinks || {}, ...profile.socialLinks } : existing.socialLinks,
       customHeaderPng: profile.customHeaderPng !== void 0 ? profile.customHeaderPng : existing.customHeaderPng,
       customFooterPng: isProOrVipUser ? profile.customFooterPng !== void 0 ? profile.customFooterPng : existing.customFooterPng : void 0,
+      createdAt: existing.createdAt || profile.createdAt || Date.now(),
+      trialStartedAt: existing.trialStartedAt || profile.trialStartedAt || existing.createdAt || profile.createdAt || Date.now(),
+      trialEndsAt: existing.trialEndsAt || profile.trialEndsAt || (existing.trialStartedAt || profile.trialStartedAt || existing.createdAt || profile.createdAt || Date.now()) + 7 * 864e5,
       updatedAt: Date.now()
     };
     if (!isAdmin && existing.logoApprovalStatus === "approved" && (existing.activeLogoUrl || existing.channelLogoUrl)) {
@@ -24647,6 +24694,11 @@ app.post(["/api/user-profile", "/api/user/profile"], async (req, res) => {
     }
     const canonicalKey = updated.email ? updated.email.toLowerCase().trim() : cleanId;
     allProfiles[canonicalKey] = updated;
+    const userEm = (updated.email || "").toLowerCase().trim();
+    const userPh = (updated.whatsappNumber || updated.mobileNumber || "").toString().replace(/\D/g, "").slice(-10);
+    if (userEm || userPh) {
+      recordTrialLedger(userEm, userPh, updated.trialStartedAt, updated.trialEndsAt);
+    }
     if (isMasterAdminEmail) {
       allProfiles["breakingnewswala.com@gmail.com"] = updated;
       allProfiles["usr_627265616b69"] = { ...updated, userId: "usr_627265616b69", uid: "usr_627265616b69" };
@@ -32207,6 +32259,7 @@ ${finalClosing}` : ""}`;
       p1 = rawParagraphs[0];
       p2 = rawParagraphs[1];
     } else {
+      const cleanLoc = (location || "").replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
       const sentences = rawBody.split(/[।\n]+|\.\s+/).map((s) => s.trim()).filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
       if (sentences.length >= 4) {
         const mid = Math.ceil(sentences.length / 2);
@@ -32264,6 +32317,7 @@ ${p2}`.trim();
         p3 = `${location ? `${location} \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0907\u0938` : "\u0907\u0938"} \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0926\u094D\u0935\u093E\u0930\u093E \u091C\u093E\u0902\u091A \u0935 \u0906\u0917\u0947 \u0915\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u091C\u093E\u0930\u0940 \u0939\u0948\u0964`;
       }
     } else {
+      const cleanLoc = (location || "").replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
       const sentences = rawBody.split(/[।\n]+|\.\s+/).map((s) => s.trim()).filter((s) => s.length > 8 && /[\u0900-\u097F]/.test(s));
       if (sentences.length >= 6) {
         const chunk = Math.ceil(sentences.length / 3);
@@ -32277,11 +32331,11 @@ ${p2}`.trim();
       } else if (sentences.length === 2) {
         p1 = sentences[0] + "\u0964";
         p2 = sentences[1] + "\u0964";
-        p3 = `${location ? `${location} \u0915\u094D\u0937\u0947\u0924\u094D\u0930 \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0907\u0938` : "\u0907\u0938"} \u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0935 \u092A\u0941\u0932\u093F\u0938 \u0926\u094D\u0935\u093E\u0930\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u0926\u092E \u0909\u0920\u093E\u090F \u091C\u093E \u0930\u0939\u0947 \u0939\u0948\u0902\u0964`;
+        p3 = cleanLoc ? `${cleanLoc} \u092E\u0947\u0902 \u0918\u091F\u0928\u093E \u0915\u0940 \u0938\u0942\u091A\u0928\u093E \u092E\u093F\u0932\u0924\u0947 \u0939\u0940 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0935\u093F\u092D\u093E\u0917 \u0935 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0928\u0947 \u0938\u0902\u091C\u094D\u091E\u093E\u0928 \u0932\u093F\u092F\u093E \u0939\u0948 \u0914\u0930 \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964` : "\u092E\u093E\u092E\u0932\u0947 \u0915\u094B \u0932\u0947\u0915\u0930 \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0935 \u092A\u0941\u0932\u093F\u0938 \u0926\u094D\u0935\u093E\u0930\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u0926\u092E \u0909\u0920\u093E\u090F \u091C\u093E \u0930\u0939\u0947 \u0939\u0948\u0902 \u0914\u0930 \u0906\u0917\u0947 \u0915\u0940 \u091C\u093E\u0902\u091A \u091C\u093E\u0930\u0940 \u0939\u0948\u0964";
       } else {
-        p1 = sentences[0] ? sentences[0] + "\u0964" : headlineToStrip || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u0940 \u092E\u0941\u0916\u094D\u092F \u091C\u093E\u0928\u0915\u093E\u0930\u0940\u0964";
-        p2 = `${location ? `${location} \u092E\u0947\u0902` : ""} \u0938\u093E\u092E\u0928\u0947 \u0906\u090F \u0907\u0938 \u092E\u093E\u092E\u0932\u0947 \u0915\u094B \u0932\u0947\u0915\u0930 \u0938\u094D\u0925\u093E\u0928\u0940\u092F \u0938\u094D\u0924\u0930 \u092A\u0930 \u091A\u0930\u094D\u091A\u093E\u090F\u0902 \u0924\u0947\u091C \u0939\u0948\u0902 \u0914\u0930 \u0938\u094D\u0925\u093F\u0924\u093F \u0915\u093E \u091C\u093E\u092F\u091C\u093E \u0932\u093F\u092F\u093E \u091C\u093E \u0930\u0939\u093E \u0939\u0948\u0964`;
-        p3 = "\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0906\u0917\u0947 \u0915\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u0914\u0930 \u091C\u093E\u0902\u091A \u091C\u093E\u0930\u0940 \u0939\u0948, \u091C\u093F\u0938\u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u091C\u0932\u094D\u0926 \u0938\u093E\u091D\u093E \u0915\u0940 \u091C\u093E\u090F\u0917\u0940\u0964";
+        p1 = sentences[0] ? sentences[0].endsWith("\u0964") ? sentences[0] : `${sentences[0]}\u0964` : headlineToStrip ? `${headlineToStrip}\u0964` : "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u091C\u093E\u0928\u0915\u093E\u0930\u0940\u0964";
+        p2 = cleanLoc ? `${cleanLoc} \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0907\u0938 \u092A\u0942\u0930\u0947 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u0940 \u092A\u0943\u0937\u094D\u0920\u092D\u0942\u092E\u093F \u0914\u0930 \u092E\u0941\u0916\u094D\u092F \u0915\u093E\u0930\u0923\u094B\u0902 \u0915\u094B \u0932\u0947\u0915\u0930 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u092A\u0921\u093C\u0924\u093E\u0932 \u0915\u0940 \u091C\u093E \u0930\u0939\u0940 \u0939\u0948\u0964` : "\u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u0940 \u092A\u0943\u0937\u094D\u0920\u092D\u0942\u092E\u093F \u0914\u0930 \u0915\u093E\u0930\u0923\u094B\u0902 \u0915\u094B \u0932\u0947\u0915\u0930 \u0938\u094D\u0925\u093E\u0928\u0940\u092F \u0938\u094D\u0924\u0930 \u092A\u0930 \u091A\u0930\u094D\u091A\u093E\u090F\u0902 \u0924\u0947\u091C \u0939\u0948\u0902\u0964";
+        p3 = cleanLoc ? `${cleanLoc} \u092E\u0947\u0902 \u092E\u093E\u092E\u0932\u0947 \u0915\u0940 \u0917\u0902\u092D\u0940\u0930\u0924\u093E \u0915\u094B \u0926\u0947\u0916\u0924\u0947 \u0939\u0941\u090F \u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0926\u094D\u0935\u093E\u0930\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u0935 \u0928\u093F\u0917\u0930\u093E\u0928\u0940 \u091C\u093E\u0930\u0940 \u0939\u0948\u0964` : "\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0906\u0917\u0947 \u0915\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u092A\u094D\u0930\u0915\u094D\u0930\u093F\u092F\u093E \u0935 \u0928\u093F\u0917\u0930\u093E\u0928\u0940 \u091C\u093E\u0930\u0940 \u0939\u0948, \u091C\u093F\u0938\u0938\u0947 \u091C\u0941\u0921\u093C\u0940 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u091C\u0932\u094D\u0926 \u0938\u093E\u091D\u093E \u0915\u0940 \u091C\u093E\u090F\u0917\u0940\u0964";
       }
     }
     finalBodyText = `${p1}
@@ -36288,6 +36342,17 @@ app.post("/api/wallet/recharge", (req, res) => {
     if (!cleanEmail && !cleanUserId) {
       return res.status(400).json({ error: "\u0909\u092A\u092F\u094B\u0917\u0915\u0930\u094D\u0924\u093E \u0908\u092E\u0947\u0932 \u0905\u0925\u0935\u093E ID \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948" });
     }
+    const isAdmin = isAuthorizedAdmin(req) || isAuthorizedMasterAdmin(req);
+    if (!isAdmin) {
+      if (!orderId) {
+        return res.status(403).json({ error: "\u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 \u092D\u0941\u0917\u0924\u093E\u0928 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u0948\u0936\u092B\u094D\u0930\u0940 \u092A\u0947\u092E\u0947\u0902\u091F \u0917\u0947\u091F\u0935\u0947 \u0926\u094D\u0935\u093E\u0930\u093E \u0930\u093F\u091A\u093E\u0930\u094D\u091C \u0915\u0930\u0947\u0902\u0964" });
+      }
+      const allPayments = loadPaymentsDatabase();
+      const verifiedPayment = allPayments.find((p) => p.orderId === orderId && (p.orderStatus === "PAID" || p.paymentStatus === "SUCCESS"));
+      if (!verifiedPayment) {
+        return res.status(403).json({ error: "\u0905\u092E\u093E\u0928\u094D\u092F \u092F\u093E \u0905\u0927\u0942\u0930\u093E \u092D\u0941\u0917\u0924\u093E\u0928\u0964 \u0915\u0948\u0936\u092B\u094D\u0930\u0940 \u0938\u0947 \u0938\u0924\u094D\u092F\u093E\u092A\u093F\u0924 \u0939\u094B\u0928\u0947 \u092A\u0930 \u0939\u0940 \u0915\u0949\u0907\u0928 \u091C\u094B\u0921\u093C\u0947 \u091C\u093E\u090F\u0902\u0917\u0947\u0964" });
+      }
+    }
     const walletKey = cleanEmail || cleanUserId;
     const rDb = loadRewardsDatabase();
     if (!rDb.wallets[walletKey]) {
@@ -37214,13 +37279,27 @@ app.post("/api/cashfree/create-order", async (req, res) => {
       return res.status(400).json({ error: "\u092A\u094D\u0932\u093E\u0928 \u0906\u0908\u0921\u0940 \u0906\u0935\u0936\u094D\u092F\u0915 \u0939\u0948\u0964" });
     }
     const isGraphicPack = planId === "GRAPHIC_PACK_20_7D" || planKey === "GRAPHIC_PACK_20_7D";
+    const rawTargetKey = String(planKey || planId || "").toLowerCase().trim();
+    const isCoinPack = ["starter", "supersaver", "megapro", "coin_starter", "coin_supersaver", "coin_megapro", "coin_pack_starter", "coin_pack_supersaver", "coin_pack_megapro"].includes(rawTargetKey);
     const catalog = loadPlansCatalogDatabase();
     const targetPlan = catalog.find((p) => p.id === planId || p.planKey === planKey);
     let orderAmount = isGraphicPack ? 99 : targetPlan?.priceNum || 999;
-    const planName = isGraphicPack ? "\u20B999 \u092E\u0947\u0902 20 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 (7 \u0926\u093F\u0928)" : targetPlan?.nameHi || planKey || planId;
+    let planName = isGraphicPack ? "\u20B999 \u092E\u0947\u0902 20 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 (7 \u0926\u093F\u0928)" : targetPlan?.nameHi || planKey || planId;
+    if (isCoinPack) {
+      if (rawTargetKey.includes("starter")) {
+        orderAmount = 99;
+        planName = "\u0938\u094D\u091F\u093E\u0930\u094D\u091F\u0930 \u0915\u0949\u0907\u0928 \u092A\u0948\u0915 (1,000 \u0915\u0949\u0907\u0928\u094D\u0938)";
+      } else if (rawTargetKey.includes("supersaver")) {
+        orderAmount = 299;
+        planName = "\u0938\u0941\u092A\u0930 \u0938\u0947\u0935\u0930 \u0915\u0949\u0907\u0928 \u092A\u0948\u0915 (5,000 \u0915\u0949\u0907\u0928\u094D\u0938)";
+      } else if (rawTargetKey.includes("megapro")) {
+        orderAmount = 499;
+        planName = "\u092E\u0947\u0917\u093E \u092A\u094D\u0930\u094B \u0915\u0949\u0907\u0928 \u092A\u0948\u0915 (10,000 \u0915\u0949\u0907\u0928\u094D\u0938)";
+      }
+    }
     let appliedCouponCode = null;
     let discountAmount = 0;
-    if (!isGraphicPack && couponCode && String(couponCode).trim()) {
+    if (!isGraphicPack && !isCoinPack && couponCode && String(couponCode).trim()) {
       const cleanCode = String(couponCode).trim().toUpperCase();
       const allCoupons = loadPackageCouponsDatabase();
       const cp = allCoupons.find((c) => c.code.toUpperCase() === cleanCode && c.isActive);
@@ -37237,7 +37316,7 @@ app.post("/api/cashfree/create-order", async (req, res) => {
         }
       }
     }
-    if (customerEmail && !isGraphicPack) {
+    if (customerEmail && !isGraphicPack && !isCoinPack) {
       const cleanCustomerEmail = customerEmail.toLowerCase().trim();
       const masterUsers = loadUsersMasterDatabase();
       const existingUser = masterUsers.find((u) => u.email && u.email.toLowerCase().trim() === cleanCustomerEmail);
@@ -37470,6 +37549,67 @@ app.post("/api/cashfree/verify-order", async (req, res) => {
           planId: "GRAPHIC_PACK_20_7D",
           amount: 99,
           message: "\u20B999 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u092A\u0948\u0915 (20 \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u0917\u094D\u0930\u093E\u092B\u093F\u0915, 7 \u0926\u093F\u0928 \u0935\u0948\u0927\u0924\u093E) \u0938\u092B\u0932\u0924\u093E\u092A\u0942\u0930\u094D\u0935\u0915 \u0905\u0928\u0932\u0949\u0915 \u0939\u094B \u0917\u092F\u093E!"
+        });
+      }
+      const isCoinPack = ["starter", "supersaver", "megapro", "coin_starter", "coin_supersaver", "coin_megapro", "coin_pack_starter", "coin_pack_supersaver", "coin_pack_megapro"].includes(rawPlanKey);
+      if (isCoinPack) {
+        let coinAmount = 1e3;
+        let inrAmount = 99;
+        let packName = "\u0938\u094D\u091F\u093E\u0930\u094D\u091F\u0930 \u092A\u0948\u0915";
+        if (rawPlanKey.includes("supersaver")) {
+          coinAmount = 5e3;
+          inrAmount = 299;
+          packName = "\u0938\u0941\u092A\u0930 \u0938\u0947\u0935\u0930 \u092A\u0948\u0915";
+        } else if (rawPlanKey.includes("megapro")) {
+          coinAmount = 1e4;
+          inrAmount = 499;
+          packName = "\u092E\u0947\u0917\u093E \u092A\u094D\u0930\u094B \u092A\u0948\u0915";
+        }
+        const targetEmail2 = (userEmail || existingOrder?.customerEmail || "").trim().toLowerCase();
+        let currentBalance = 0;
+        if (targetEmail2) {
+          const rDb = loadRewardsDatabase();
+          if (!rDb.wallets[targetEmail2]) {
+            rDb.wallets[targetEmail2] = { coinBalance: 0, pendingCoins: 0, totalEarnedCoins: 0 };
+          }
+          if (existingOrder?.orderStatus !== "PAID") {
+            rDb.wallets[targetEmail2].coinBalance += coinAmount;
+            rDb.wallets[targetEmail2].totalEarnedCoins += coinAmount;
+            const txId = `tx-cf-${orderId}`;
+            const tx = {
+              id: txId,
+              transactionId: txId,
+              userId: targetEmail2,
+              userEmail: targetEmail2,
+              description: `\u0915\u0949\u0907\u0928 \u0930\u093F\u091A\u093E\u0930\u094D\u091C (${packName}: \u20B9${inrAmount} \u092E\u0947\u0902 ${coinAmount} \u0915\u0949\u0907\u0928\u094D\u0938)`,
+              transactionType: "credit",
+              type: "credit",
+              coinAmount,
+              amount: coinAmount,
+              balanceAfter: rDb.wallets[targetEmail2].coinBalance,
+              status: "completed",
+              createdAt: Date.now(),
+              createdBy: "cashfree"
+            };
+            rDb.transactions.unshift(tx);
+            saveRewardsDatabase(rDb);
+          }
+          currentBalance = rDb.wallets[targetEmail2].coinBalance;
+        }
+        if (existingOrder) {
+          existingOrder.orderStatus = "PAID";
+          existingOrder.paidAt = Date.now();
+          savePaymentsDatabase(allPayments);
+        }
+        return res.json({
+          success: true,
+          status: "PAID",
+          orderId,
+          planId: rawPlanKey,
+          amount: inrAmount,
+          coinsAdded: coinAmount,
+          newBalance: currentBalance,
+          message: `\u{1F389} \u092C\u0927\u093E\u0908 \u0939\u094B! \u20B9${inrAmount} \u092E\u0947\u0902 ${coinAmount.toLocaleString("en-IN")} \u0915\u0949\u0907\u0928 \u0906\u092A\u0915\u0947 \u0935\u0949\u0932\u0947\u091F \u092E\u0947\u0902 \u091C\u0941\u0921\u093C \u0917\u090F!`
         });
       }
       let effectiveTier = "advanced";
@@ -37875,7 +38015,7 @@ function saveDailyGraphicCreationsDatabase(data) {
 function getDailyGraphicLimitForTier(tier = "basic") {
   const clean = (tier || "basic").toLowerCase().trim();
   if (clean.includes("vip") || clean.includes("ultra") || clean.includes("desk") || clean.includes("enterprise")) return 75;
-  if (clean.includes("pro") || clean.includes("professional")) return 40;
+  if (clean.includes("pro") || clean.includes("professional") || clean.includes("trial")) return 50;
   if (clean.includes("advance") || clean.includes("advanced")) return 25;
   return 10;
 }
@@ -37904,7 +38044,13 @@ app.post("/api/user/consume-graphic-creation-quota", async (req, res) => {
         message: "\u090F\u0921\u092E\u093F\u0928/\u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928: \u0905\u0938\u0940\u092E\u093F\u0924 \u0917\u094D\u0930\u093E\u092B\u093F\u0915 \u0928\u093F\u0930\u094D\u092E\u093E\u0923"
       });
     }
-    const tier = targetUser?.tier || "basic";
+    let tier = targetUser?.tier || "basic";
+    if (targetUser) {
+      const trialFields = computeTrialFields(targetUser);
+      if (trialFields && trialFields.isTrialActive && tier === "basic") {
+        tier = "professional";
+      }
+    }
     const dailyLimit = getDailyGraphicLimitForTier(tier);
     const { dateStr } = getAsiaKolkataDateAndExpiry();
     const db = loadDailyGraphicCreationsDatabase();
@@ -38296,11 +38442,17 @@ app.get("/api/user-download-status", (req, res) => {
     const matchedUser = users.find(
       (u) => u.email && u.email.toLowerCase().trim() === email || email && u.userId && u.userId.toLowerCase().trim() === email
     );
-    const tier = (matchedUser?.tier || "basic").toLowerCase();
+    let tier = (matchedUser?.tier || "basic").toLowerCase();
+    if (matchedUser) {
+      const trialFields = computeTrialFields(matchedUser);
+      if (trialFields && trialFields.isTrialActive && tier === "basic") {
+        tier = "professional";
+      }
+    }
     const catalog = loadPlansCatalogDatabase();
     const planDetail = catalog.find((p) => p.id === tier);
     const isVipTier = tier === "ultra" || tier === "vip" || tier === "vip_desk";
-    const maxAllowed = planDetail?.maxGraphicsPerDay !== void 0 ? planDetail.maxGraphicsPerDay : isVipTier ? 75 : tier === "professional" ? 40 : tier === "advanced" ? 25 : 10;
+    const maxAllowed = planDetail?.maxGraphicsPerDay !== void 0 ? planDetail.maxGraphicsPerDay : isVipTier ? 75 : tier === "professional" || tier === "pro" ? 50 : tier === "advanced" ? 25 : 10;
     const { dateStr } = getAsiaKolkataDateAndExpiry();
     const userKey = email;
     const currentRecord = dailyDownloadsTracker.get(userKey);
@@ -38410,7 +38562,13 @@ app.post("/api/verify-download-entitlement", async (req, res) => {
         blocked: true
       });
     }
-    const tier = (matchedUser?.tier || "basic").toLowerCase();
+    let tier = (matchedUser?.tier || "basic").toLowerCase();
+    if (matchedUser) {
+      const trialFields = computeTrialFields(matchedUser);
+      if (trialFields && trialFields.isTrialActive && tier === "basic") {
+        tier = "professional";
+      }
+    }
     const hasScheduled = Boolean(headlineScheduleMode === "scheduled" || hasScheduledHeadlines);
     if (hasScheduled) {
       const isProOrVip = tier === "professional" || tier === "ultra" || tier === "pro" || tier === "vip";
@@ -38484,7 +38642,7 @@ app.post("/api/verify-download-entitlement", async (req, res) => {
     const catalog = loadPlansCatalogDatabase();
     const planDetail = catalog.find((p) => p.id === tier);
     const isVipTier = tier === "ultra" || tier === "vip" || tier === "vip_desk";
-    const maxAllowed = planDetail?.maxGraphicsPerDay !== void 0 ? planDetail.maxGraphicsPerDay : isVipTier ? 75 : tier === "professional" ? 40 : tier === "advanced" ? 25 : 10;
+    const maxAllowed = planDetail?.maxGraphicsPerDay !== void 0 ? planDetail.maxGraphicsPerDay : isVipTier ? 75 : tier === "professional" || tier === "pro" ? 50 : tier === "advanced" ? 25 : 10;
     const { dateStr } = getAsiaKolkataDateAndExpiry();
     const userKey = cleanEmail || req.ip || "anon";
     const currentRecord = dailyDownloadsTracker.get(userKey);

@@ -371,7 +371,41 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
   const [isNewsAnalyticsOpen, setIsNewsAnalyticsOpen] = useState<boolean>(false);
   const [newsAnalyticsData, setNewsAnalyticsData] = useState<any>(null);
-  const [dailyQuotaStatus, setDailyQuotaStatus] = useState<UserDailyDownloadStatus | null>(() => getCachedUserDailyDownloadStatus());
+  const [dailyQuotaStatus, setDailyQuotaStatus] = useState<UserDailyDownloadStatus | null>(() => {
+    const cached = getCachedUserDailyDownloadStatus();
+    if (cached) return cached;
+    const sub = getUserSubscription();
+    const limit = sub.planKey === 'VIP DESK'
+      ? 75
+      : (sub.planKey === 'PRO' || sub.tier === 'professional' || sub.isTrialActive)
+        ? 50
+        : sub.planKey === 'ADVANCE'
+          ? 25
+          : 10;
+    return {
+      success: true,
+      plan: sub.tier,
+      maxAllowed: limit,
+      dailyQuota: limit,
+      downloadsToday: 0,
+      remainingToday: limit,
+      remainingDownloads: limit,
+      isExhausted: false,
+      unlimited: Boolean(sub.planKey === 'VIP DESK'),
+      dateStr: new Date().toISOString().slice(0, 10),
+    };
+  });
+
+  const effectiveRemainingQuota: number | 'असीमित' = dailyQuotaStatus?.unlimited
+    ? 'असीमित'
+    : (dailyQuotaStatus?.remainingToday !== undefined
+        ? dailyQuotaStatus.remainingToday
+        : (getUserSubscription().planKey === 'VIP DESK'
+            ? 'असीमित'
+            : (getUserSubscription().planKey === 'PRO' || getUserSubscription().tier === 'professional' || getUserSubscription().isTrialActive)
+              ? 50
+              : 10));
+
   const [selectedStoryPost, setSelectedStoryPost] = useState<NewsFeedPost | null>(null);
   const [isStoryModalOpen, setIsStoryModalOpen] = useState<boolean>(false);
 
@@ -735,18 +769,28 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
   }, [onRefreshLiveNews, isSyncingNews]);
 
   useEffect(() => {
-    fetchUserDailyDownloadStatus(currentUser?.email).then(setDailyQuotaStatus).catch(() => {});
+    const handleRefetch = () => {
+      fetchUserDailyDownloadStatus(currentUser?.email).then(setDailyQuotaStatus).catch(() => {});
+    };
+    handleRefetch();
     const handleQuotaUpdate = (e: any) => {
       if (e?.detail) setDailyQuotaStatus(e.detail);
     };
     const handleDownloadEvent = () => {
-      fetchUserDailyDownloadStatus(currentUser?.email).then(setDailyQuotaStatus).catch(() => {});
+      handleRefetch();
     };
     window.addEventListener('ai_news_download_status_updated', handleQuotaUpdate);
     window.addEventListener('ai_news_bonus_graphic_downloaded', handleDownloadEvent);
+    window.addEventListener('focus', handleRefetch);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') handleRefetch();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       window.removeEventListener('ai_news_download_status_updated', handleQuotaUpdate);
       window.removeEventListener('ai_news_bonus_graphic_downloaded', handleDownloadEvent);
+      window.removeEventListener('focus', handleRefetch);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [currentUser?.email]);
 
@@ -1241,18 +1285,28 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     }
 
     // Check if daily quota is already exhausted before opening studio
-    const currentRemaining = dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : 10;
+    const sub = getUserSubscription();
+    const defaultMax = sub.planKey === 'VIP DESK'
+      ? 75
+      : (sub.planKey === 'PRO' || sub.tier === 'professional' || sub.isTrialActive)
+        ? 50
+        : sub.planKey === 'ADVANCE'
+          ? 25
+          : 10;
+    const currentRemaining = dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : defaultMax;
     if (!dailyQuotaStatus?.unlimited && currentRemaining <= 0) {
       showAppWarning('आज की ग्राफिक निर्माण दैनिक सीमा समाप्त हो चुकी है। कृपया कल पुनः प्रयास करें या प्लान अपग्रेड करें।', 'दैनिक सीमा');
       return;
     }
 
-    // Optimistically decrement count immediately on click (e.g. 10 -> 9, 9 -> 8)
+    // Optimistically decrement count immediately on click (e.g. 50 -> 49 or 10 -> 9)
     if (!dailyQuotaStatus?.unlimited) {
       const newRemaining = Math.max(0, currentRemaining - 1);
-      const newUsed = (dailyQuotaStatus?.usedToday ?? (10 - currentRemaining)) + 1;
+      const newUsed = (dailyQuotaStatus?.usedToday ?? (defaultMax - currentRemaining)) + 1;
       const optimisticStatus = {
         ...(dailyQuotaStatus || {}),
+        maxAllowed: dailyQuotaStatus?.maxAllowed || defaultMax,
+        dailyQuota: dailyQuotaStatus?.dailyQuota || defaultMax,
         remainingToday: newRemaining,
         remainingDownloads: newRemaining,
         usedToday: newUsed,
@@ -2683,7 +2737,7 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
               <div className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-red-400/50 active:scale-95 transition-all duration-150 select-none text-center">
                 <div className="flex items-center gap-1 text-red-500 dark:text-red-400 font-black text-sm">
                   <Palette className="w-4 h-4 shrink-0 text-red-500" />
-                  <span>{dailyQuotaStatus?.unlimited ? 'असीमित' : (dailyQuotaStatus?.remainingToday ?? 10)}</span>
+                  <span>{effectiveRemainingQuota}</span>
                 </div>
                 <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">शेष ग्राफ़िक्स</span>
               </div>
@@ -3309,8 +3363,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             {canModerate
                               ? (isNewsGraphicCreated(currentUser?.email, post.id) ? "ग्राफिक्स फिर से बनाएँ" : "खबर से ग्राफिक बनाएं")
                               : (isNewsGraphicCreated(currentUser?.email, post.id)
-                                  ? `ग्राफिक्स फिर से बनाएँ · शेष ${dailyQuotaStatus?.unlimited ? 'असीमित' : (dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : 10)}`
-                                  : `खबर से ग्राफिक बनाएं · शेष ${dailyQuotaStatus?.unlimited ? 'असीमित' : (dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : 10)}`)}
+                                  ? `ग्राफिक्स फिर से बनाएँ · शेष ${effectiveRemainingQuota}`
+                                  : `खबर से ग्राफिक बनाएं · शेष ${effectiveRemainingQuota}`)}
                           </span>
                         </button>
                       )}
@@ -3964,8 +4018,8 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
                             {canModerate
                               ? (isNewsGraphicCreated(currentUser?.email, post.id) ? "ग्राफिक्स फिर से बनाएँ" : "खबर से ग्राफिक बनाएं")
                               : (isNewsGraphicCreated(currentUser?.email, post.id)
-                                  ? `ग्राफिक्स फिर से बनाएँ · शेष ${dailyQuotaStatus?.unlimited ? 'असीमित' : (dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : 10)}`
-                                  : `खबर से ग्राफिक बनाएं · शेष ${dailyQuotaStatus?.unlimited ? 'असीमित' : (dailyQuotaStatus?.remainingToday !== undefined ? dailyQuotaStatus.remainingToday : 10)}`)}
+                                  ? `ग्राफिक्स फिर से बनाएँ · शेष ${effectiveRemainingQuota}`
+                                  : `खबर से ग्राफिक बनाएं · शेष ${effectiveRemainingQuota}`)}
                           </span>
                         </button>
                       )}

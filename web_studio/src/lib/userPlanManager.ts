@@ -191,16 +191,16 @@ export const DEFAULT_PLAN_DETAILS: PlanFeatureDetail[] = [
     validityLabel: '30 दिन (लॉन्चिंग ऑफर)',
     period: 'प्रति माह',
     badge: 'पत्रकार व चैनल चॉइस',
-    tagline: 'फुल ग्राफिक + वीडियो डिज़ाइन स्टूडियो — 40 कार्ड प्रतिदिन',
+    tagline: 'फुल ग्राफिक + वीडियो डिज़ाइन स्टूडियो — 50 कार्ड प्रतिदिन',
     hasWatermark: false,
     graphicExportResolution: '1080p',
-    maxGraphicsPerDay: 40,
+    maxGraphicsPerDay: 50,
     hasVideoStudio: true,
     hasAiTools: true,
     hasVipDeskFrames: false,
     isActive: true,
     features: [
-      '⚡ 40 ग्राफिक डाउनलोड प्रतिदिन',
+      '⚡ 50 ग्राफिक डाउनलोड प्रतिदिन',
       '🎨 पूर्ण स्टैंडर्ड फ़ॉन्ट कलेक्शन व प्राइमरी कलर हाइलाइट',
       '🔍 इंटरनेट इमेज सर्च व सभी मल्टी-ग्रिड फोटो लेआउट्स',
       '🔤 प्रीमियम टेक्स्ट स्टाइलिंग व सभी फुटर कलर्स',
@@ -318,7 +318,13 @@ export async function fetchUserDailyDownloadStatus(email?: string): Promise<User
   }
 
   const sub = getUserSubscription();
-  const max = sub.planKey === 'VIP DESK' ? 75 : sub.planKey === 'PRO' ? 40 : sub.planKey === 'ADVANCE' ? 25 : 10;
+  const max = sub.planKey === 'VIP DESK'
+    ? 75
+    : (sub.planKey === 'PRO' || sub.tier === 'professional' || sub.isTrialActive)
+      ? 50
+      : sub.planKey === 'ADVANCE'
+        ? 25
+        : 10;
   const fallbackStatus: UserDailyDownloadStatus = {
     success: true,
     plan: sub.tier,

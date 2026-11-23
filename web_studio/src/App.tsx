@@ -3354,8 +3354,31 @@ export default function App() {
         console.warn('Saving to local project history failed:', histErr);
       }
 
-      // Refresh daily download quota status across app
-      fetchUserDailyDownloadStatus(currentUser?.email).catch(() => {});
+      // Record download quota consumption on backend and refresh status across app
+      if (currentUser?.email) {
+        fetch(getApiUrl('/api/verify-download-entitlement'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: currentUser.email,
+            isBonus: isBonusCard,
+            card,
+            checkOnly: false,
+            downloadRequestId,
+          }),
+        })
+          .then(() => fetchUserDailyDownloadStatus(currentUser.email))
+          .then((status) => {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('ai_news_download_status_updated', { detail: status }));
+            }
+          })
+          .catch(() => {
+            fetchUserDailyDownloadStatus(currentUser?.email).catch(() => {});
+          });
+      } else {
+        fetchUserDailyDownloadStatus(currentUser?.email).catch(() => {});
+      }
 
       if (card.sourceNewsId) {
         markNewsGraphicCreated(currentUser?.email, card.sourceNewsId);

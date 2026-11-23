@@ -144,7 +144,15 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
   const [desktopRemainingQuota, setDesktopRemainingQuota] = useState<number | 'असीमित'>(() => {
     const cached = getCachedUserDailyDownloadStatus();
     if (cached?.unlimited) return 'असीमित';
-    return cached?.remainingToday ?? 10;
+    if (typeof cached?.remainingToday === 'number') return cached.remainingToday;
+    const sub = getUserSubscription();
+    return sub.planKey === 'VIP DESK'
+      ? 'असीमित'
+      : (sub.planKey === 'PRO' || sub.tier === 'professional' || sub.isTrialActive)
+        ? 50
+        : sub.planKey === 'ADVANCE'
+          ? 25
+          : 10;
   });
   useEffect(() => {
     const handleQuotaSync = (e: any) => {
@@ -154,8 +162,14 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
       }
     };
     window.addEventListener('ai_news_download_status_updated', handleQuotaSync);
+    if (currentUser?.email) {
+      fetchUserDailyDownloadStatus(currentUser.email).then((data) => {
+        if (data?.unlimited) setDesktopRemainingQuota('असीमित');
+        else if (typeof data?.remainingToday === 'number') setDesktopRemainingQuota(data.remainingToday);
+      }).catch(() => {});
+    }
     return () => window.removeEventListener('ai_news_download_status_updated', handleQuotaSync);
-  }, []);
+  }, [currentUser?.email]);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [isWalletLoading, setIsWalletLoading] = useState<boolean>(true);
 

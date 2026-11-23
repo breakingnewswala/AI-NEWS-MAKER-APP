@@ -23777,6 +23777,7 @@ export function ensureHashtagHierarchy(
       p1 = rawParagraphs[0];
       p2 = rawParagraphs[1];
     } else {
+      const cleanLoc = (location || "").replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
       const sentences = rawBody
         .split(/[।\n]+|\.\s+/)
         .map((s) => s.trim())
@@ -23844,6 +23845,7 @@ export function ensureHashtagHierarchy(
         p3 = `${location ? `${location} से जुड़े इस` : "इस"} मामले में संबंधित अधिकारियों द्वारा जांच व आगे की आवश्यक प्रक्रिया जारी है।`;
       }
     } else {
+      const cleanLoc = (location || "").replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, "").trim();
       const sentences = rawBody
         .split(/[।\n]+|\.\s+/)
         .map((s) => s.trim())
@@ -23861,11 +23863,17 @@ export function ensureHashtagHierarchy(
       } else if (sentences.length === 2) {
         p1 = sentences[0] + "।";
         p2 = sentences[1] + "।";
-        p3 = `${location ? `${location} क्षेत्र से जुड़े इस` : "इस"} पूरे घटनाक्रम पर संबंधित प्रशासन व पुलिस द्वारा आवश्यक कदम उठाए जा रहे हैं।`;
+        p3 = cleanLoc
+          ? `${cleanLoc} में घटना की सूचना मिलते ही संबंधित विभाग व प्रशासन ने संज्ञान लिया है और आवश्यक कार्रवाई की जा रही है।`
+          : "मामले को लेकर संबंधित प्रशासन व पुलिस द्वारा आवश्यक कदम उठाए जा रहे हैं और आगे की जांच जारी है।";
       } else {
-        p1 = sentences[0] ? sentences[0] + "।" : (headlineToStrip || "ताज़ा समाचार की मुख्य जानकारी।");
-        p2 = `${location ? `${location} में` : ""} सामने आए इस मामले को लेकर स्थानीय स्तर पर चर्चाएं तेज हैं और स्थिति का जायजा लिया जा रहा है।`;
-        p3 = "मामले में आगे की आवश्यक कार्रवाई और जांच जारी है, जिससे जुड़ी विस्तृत जानकारी जल्द साझा की जाएगी।";
+        p1 = sentences[0] ? (sentences[0].endsWith("।") ? sentences[0] : `${sentences[0]}।`) : (headlineToStrip ? `${headlineToStrip}।` : "ताज़ा समाचार से जुड़ी महत्वपूर्ण जानकारी।");
+        p2 = cleanLoc
+          ? `${cleanLoc} से जुड़े इस पूरे घटनाक्रम की पृष्ठभूमि और मुख्य कारणों को लेकर विस्तृत पड़ताल की जा रही है।`
+          : "घटनाक्रम की पृष्ठभूमि और कारणों को लेकर स्थानीय स्तर पर चर्चाएं तेज हैं।";
+        p3 = cleanLoc
+          ? `${cleanLoc} में मामले की गंभीरता को देखते हुए संबंधित अधिकारियों द्वारा आवश्यक प्रक्रिया व निगरानी जारी है।`
+          : "मामले में आगे की आवश्यक प्रक्रिया व निगरानी जारी है, जिससे जुड़ी जानकारी जल्द साझा की जाएगी।";
       }
     }
     finalBodyText = `${p1}\n\n${p2}\n\n${p3}`.trim();
@@ -30787,7 +30795,7 @@ function saveDailyGraphicCreationsDatabase(data: Record<string, Record<string, {
 function getDailyGraphicLimitForTier(tier = "basic"): number {
   const clean = (tier || "basic").toLowerCase().trim();
   if (clean.includes("vip") || clean.includes("ultra") || clean.includes("desk") || clean.includes("enterprise")) return 75;
-  if (clean.includes("pro") || clean.includes("professional")) return 40;
+  if (clean.includes("pro") || clean.includes("professional") || clean.includes("trial")) return 50;
   if (clean.includes("advance") || clean.includes("advanced")) return 25;
   return 10;
 }
@@ -30822,7 +30830,13 @@ app.post("/api/user/consume-graphic-creation-quota", async (req, res) => {
       });
     }
 
-    const tier = targetUser?.tier || "basic";
+    let tier = targetUser?.tier || "basic";
+    if (targetUser) {
+      const trialFields = computeTrialFields(targetUser);
+      if (trialFields && trialFields.isTrialActive && tier === "basic") {
+        tier = "professional";
+      }
+    }
     const dailyLimit = getDailyGraphicLimitForTier(tier);
     const { dateStr } = getAsiaKolkataDateAndExpiry();
 
@@ -31371,14 +31385,20 @@ app.get("/api/user-download-status", (req, res) => {
       (u.email && u.email.toLowerCase().trim() === email) ||
       (email && u.userId && u.userId.toLowerCase().trim() === email)
     );
-    const tier = (matchedUser?.tier || "basic").toLowerCase();
+    let tier = (matchedUser?.tier || "basic").toLowerCase();
+    if (matchedUser) {
+      const trialFields = computeTrialFields(matchedUser);
+      if (trialFields && trialFields.isTrialActive && tier === "basic") {
+        tier = "professional";
+      }
+    }
     const catalog = loadPlansCatalogDatabase();
     const planDetail = catalog.find(p => p.id === tier);
     const isVipTier = tier === 'ultra' || tier === 'vip' || tier === 'vip_desk';
-    // Daily graphic limits: BASIC: 10, ADVANCE: 25, PRO: 40, VIP DESK: 75
+    // Daily graphic limits: BASIC: 10, ADVANCE: 25, PRO: 50, VIP DESK: 75
     const maxAllowed = planDetail?.maxGraphicsPerDay !== undefined
       ? planDetail.maxGraphicsPerDay
-      : (isVipTier ? 75 : tier === 'professional' ? 40 : tier === 'advanced' ? 25 : 10);
+      : (isVipTier ? 75 : (tier === 'professional' || tier === 'pro') ? 50 : tier === 'advanced' ? 25 : 10);
     const { dateStr } = getAsiaKolkataDateAndExpiry();
     const userKey = email;
     const currentRecord = dailyDownloadsTracker.get(userKey);
@@ -31504,7 +31524,13 @@ app.post("/api/verify-download-entitlement", async (req, res) => {
     }
 
     // 3. User tier
-    const tier = (matchedUser?.tier || "basic").toLowerCase();
+    let tier = (matchedUser?.tier || "basic").toLowerCase();
+    if (matchedUser) {
+      const trialFields = computeTrialFields(matchedUser);
+      if (trialFields && trialFields.isTrialActive && tier === "basic") {
+        tier = "professional";
+      }
+    }
 
     // 3.1 Verify Headline Scheduling Entitlement (Part 5)
     // Multi-Headline Scheduling is exclusively for Pro and VIP-Dash users
@@ -31589,13 +31615,13 @@ app.post("/api/verify-download-entitlement", async (req, res) => {
     }
 
     // 5. Daily download limits per tier (using Asia/Kolkata date)
-    // Daily graphic limits: BASIC: 10, ADVANCE: 25, PRO: 40, VIP DESK: 75
+    // Daily graphic limits: BASIC: 10, ADVANCE: 25, PRO: 50, VIP DESK: 75
     const catalog = loadPlansCatalogDatabase();
     const planDetail = catalog.find(p => p.id === tier);
     const isVipTier = tier === 'ultra' || tier === 'vip' || tier === 'vip_desk';
     const maxAllowed = planDetail?.maxGraphicsPerDay !== undefined
       ? planDetail.maxGraphicsPerDay
-      : (isVipTier ? 75 : tier === 'professional' ? 40 : tier === 'advanced' ? 25 : 10);
+      : (isVipTier ? 75 : (tier === 'professional' || tier === 'pro') ? 50 : tier === 'advanced' ? 25 : 10);
 
     const { dateStr } = getAsiaKolkataDateAndExpiry();
     const userKey = cleanEmail || req.ip || "anon";

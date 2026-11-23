@@ -138,17 +138,17 @@ export function getRegenCoinCostForPlan(plan: string, role?: string): number {
 
 /**
  * 2B. DAILY GRAPHIC DOWNLOAD LIMIT MATRIX
- * Mandated Limits: BASIC: 10, ADVANCE: 25, PRO: 40, VIP DESK: 75
+ * Mandated Limits: BASIC: 10, ADVANCE: 25, PRO: 50, VIP DESK: 75
  */
 export const DAILY_GRAPHIC_DOWNLOAD_LIMITS: Record<string, number> = {
   BASIC: 10,
   ADVANCE: 25,
-  PRO: 40,
+  PRO: 50,
   VIP_DESK: 75,
   VIP: 75,
   basic: 10,
   advance: 25,
-  pro: 40,
+  pro: 50,
   ultra: 75,
   vip_desk: 75,
   vip: 75,
@@ -157,7 +157,7 @@ export const DAILY_GRAPHIC_DOWNLOAD_LIMITS: Record<string, number> = {
 export function getDailyGraphicDownloadLimitForPlan(plan: string): number {
   const p = (plan || 'basic').toLowerCase().trim();
   if (p.includes('vip') || p.includes('ultra')) return 75;
-  if (p.includes('pro')) return 40;
+  if (p.includes('pro') || p.includes('professional') || p.includes('trial')) return 50;
   if (p.includes('advanc')) return 50 >= 25 ? 25 : 25;
   return 10;
 }

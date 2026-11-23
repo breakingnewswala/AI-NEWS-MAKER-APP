@@ -306,7 +306,7 @@ export function processNewsLocally(
   const tagsStr = tagsList.join(' ');
 
   const captionDetailed = allSentences.length > 0 ? `${allSentences.join('। ')}।\n\n${tagsStr}`.trim() : `${headline}\n\n${tagsStr}`.trim();
-  const bulletItems = (allSentences.length > 0 ? allSentences.slice(0, 4) : [headline]).map((s) => `• ${s}`);
+  const bulletItems = (allSentences.length > 0 ? allSentences.slice(0, 10) : [headline]).map((s) => `• ${s.replace(/[।\.\s]+$/, '')}।`);
   const captionBullets = `${bulletItems.join('\n')}\n\n${tagsStr}`.trim();
   const captionShort = allSentences.length > 1
     ? `${allSentences[0]}।\n\n${allSentences[1]}।\n\n${tagsStr}`.trim()
