@@ -32687,6 +32687,15 @@ async function startServer() {
         return renderSpaIndexHtml(req, res);
       });
 
+      // Canonical React Testing Route: All /testing requests route directly to canonical SPA
+      app.get(["/testing", "/testing/*"], (req, res) => {
+        const ext = path.extname(req.path);
+        if (ext && ext !== ".html") {
+          return res.status(404).json({ success: false, error: "Not Found" });
+        }
+        return renderSpaIndexHtml(req, res);
+      });
+
       app.get("*", (req, res) => {
         if (req.path.startsWith("/api/")) {
           return res.status(404).json({ success: false, error: `API route not found: GET ${req.path}` });

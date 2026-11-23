@@ -612,6 +612,14 @@ export default function App() {
     return 'home';
   });
 
+  const [isTestingUrlActive, setIsTestingUrlActive] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const path = (window.location.pathname || '').toLowerCase();
+    const hash = (window.location.hash || '').toLowerCase();
+    const search = (window.location.search || '').toLowerCase();
+    return path.includes('testing') || hash.includes('testing') || search.includes('testing') || search.includes('mode=test');
+  });
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [breakingNewsAlerts, setBreakingNewsAlerts] = useState<Array<{
     id: string;
@@ -767,6 +775,8 @@ export default function App() {
     const handlePopState = () => {
       const path = (window.location.pathname || '').toLowerCase();
       const hash = (window.location.hash || '').replace(/^#\/?/, '').split('?')[0].split('/')[0].toLowerCase();
+      const search = (window.location.search || '').toLowerCase();
+      setIsTestingUrlActive(path.includes('testing') || hash.includes('testing') || search.includes('testing') || search.includes('mode=test'));
       if (path.includes('terms') || hash.includes('terms')) { setCurrentTab('terms'); return; }
       if (path.includes('privacy') || hash.includes('privacy')) { setCurrentTab('privacy'); return; }
       if (path.includes('refund') || path.includes('cancellation') || hash.includes('refund') || hash.includes('cancellation')) { setCurrentTab('refunds'); return; }
@@ -2275,7 +2285,7 @@ export default function App() {
     };
   }, [posts, videos]);
 
-  const isTestModeActive = isUserAdmin(currentUser) && getAdminSystemMode() === 'test';
+  const isTestModeActive = (isUserAdmin(currentUser) && getAdminSystemMode() === 'test') || isTestingUrlActive;
   const isAdminUser = isUserAdmin(currentUser) && !isTestModeActive;
   const actionAllowance = isUserActionAllowed(currentUser, userSubscription);
   const isActionLocked = !isAdminUser && !actionAllowance.allowed;
@@ -4700,28 +4710,48 @@ export default function App() {
         </div>
       )}
 
-      {/* Persistent Admin Test Mode Banner (Part 6) */}
+      {/* Persistent Admin Test Mode Banner / Testing URL Banner */}
       {isTestModeActive && (
-        <div className="w-full bg-gradient-to-r from-purple-950 via-slate-900 to-purple-950 text-white border-b-2 border-purple-500 px-3 sm:px-6 py-2 shadow-2xl sticky top-0 z-50 flex items-center justify-between gap-2.5 animate-in slide-in-from-top-2">
+        <div className="w-full bg-gradient-to-r from-purple-950 via-slate-900 to-amber-950 text-white border-b-2 border-amber-500/70 px-3 sm:px-6 py-2 shadow-2xl sticky top-0 z-[60] flex items-center justify-between gap-2.5 animate-in slide-in-from-top-2">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-ping shrink-0" />
-            <span className="text-xs sm:text-sm font-black text-purple-200 truncate">
-              🧪 टेस्ट मोड सक्रिय: [{(getAdminTestPlanTier() || 'BASIC').toUpperCase()}] का वास्तविक अनुभव
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping shrink-0" />
+            <span className="text-xs sm:text-sm font-black text-amber-200 truncate">
+              {isTestingUrlActive
+                ? '🧪 टेस्टिंग मोड सक्रिय (URL: /testing): नए अपडेट्स व फीचर्स का लाइव प्रीव्यू'
+                : `🧪 टेस्ट मोड सक्रिय: [${(getAdminTestPlanTier() || 'BASIC').toUpperCase()}] का वास्तविक अनुभव`}
             </span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => {
-                setAdminSystemMode('admin');
-                window.dispatchEvent(new Event('ai_news_admin_view_mode_changed'));
-                window.location.reload();
-              }}
-              className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black rounded-xl text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer active:scale-95"
-            >
-              <span>⚡</span>
-              <span>एडमिन मोड में लौटें</span>
-            </button>
+            {isTestingUrlActive ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsTestingUrlActive(false);
+                  setAdminSystemMode('admin');
+                  if (typeof window !== 'undefined' && window.history && window.history.pushState) {
+                    window.history.pushState(null, '', '/');
+                  }
+                  setCurrentTab('home');
+                }}
+                className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black rounded-xl text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer active:scale-95"
+              >
+                <span>🌐</span>
+                <span>प्राइमरी वेबसाइट पर जाएं</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setAdminSystemMode('admin');
+                  window.dispatchEvent(new Event('ai_news_admin_view_mode_changed'));
+                  window.location.reload();
+                }}
+                className="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black rounded-xl text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer active:scale-95"
+              >
+                <span>⚡</span>
+                <span>एडमिन मोड में लौटें</span>
+              </button>
+            )}
           </div>
         </div>
       )}

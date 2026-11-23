@@ -39597,6 +39597,13 @@ async function startServer() {
         }
         return renderSpaIndexHtml(req, res);
       });
+      app.get(["/testing", "/testing/*"], (req, res) => {
+        const ext = import_path2.default.extname(req.path);
+        if (ext && ext !== ".html") {
+          return res.status(404).json({ success: false, error: "Not Found" });
+        }
+        return renderSpaIndexHtml(req, res);
+      });
       app.get("*", (req, res) => {
         if (req.path.startsWith("/api/")) {
           return res.status(404).json({ success: false, error: `API route not found: GET ${req.path}` });
