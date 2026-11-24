@@ -38165,13 +38165,13 @@ function getDailyVideoLimitForTier(tier = "basic") {
   if (clean.includes("vip") || clean.includes("ultra") || clean.includes("desk") || clean.includes("enterprise")) {
     return { limit: 30, displayLimit: "Unlimited", isUnlimitedDisplay: true };
   }
-  if (clean.includes("pro") || clean.includes("professional")) {
+  if (clean.includes("pro") || clean.includes("professional") || clean.includes("trial")) {
     return { limit: 15, displayLimit: "15", isUnlimitedDisplay: false };
   }
   if (clean.includes("advance") || clean.includes("advanced")) {
-    return { limit: 5, displayLimit: "5", isUnlimitedDisplay: false };
+    return { limit: 7, displayLimit: "7", isUnlimitedDisplay: false };
   }
-  return { limit: 2, displayLimit: "2", isUnlimitedDisplay: false };
+  return { limit: 3, displayLimit: "3", isUnlimitedDisplay: false };
 }
 app.post("/api/user/consume-video-creation-quota", async (req, res) => {
   try {
@@ -38200,7 +38200,13 @@ app.post("/api/user/consume-video-creation-quota", async (req, res) => {
         message: "\u090F\u0921\u092E\u093F\u0928/\u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928: \u0905\u0938\u0940\u092E\u093F\u0924 \u0935\u0940\u0921\u093F\u092F\u094B \u0928\u093F\u0930\u094D\u092E\u093E\u0923"
       });
     }
-    const tier = targetUser?.tier || "basic";
+    let tier = targetUser?.tier || "basic";
+    if (targetUser) {
+      const trialFields = computeTrialFields(targetUser);
+      if (trialFields && trialFields.isTrialActive && tier === "basic") {
+        tier = "professional";
+      }
+    }
     const videoRule = getDailyVideoLimitForTier(tier);
     const { dateStr } = getAsiaKolkataDateAndExpiry();
     const db = loadDailyVideoCreationsDatabase();
@@ -38293,7 +38299,13 @@ app.get("/api/user/video-creation-quota", (req, res) => {
         remainingToday: 999999
       });
     }
-    const tier = targetUser?.tier || "basic";
+    let tier = targetUser?.tier || "basic";
+    if (targetUser) {
+      const trialFields = computeTrialFields(targetUser);
+      if (trialFields && trialFields.isTrialActive && tier === "basic") {
+        tier = "professional";
+      }
+    }
     const videoRule = getDailyVideoLimitForTier(tier);
     const { dateStr } = getAsiaKolkataDateAndExpiry();
     const db = loadDailyVideoCreationsDatabase();

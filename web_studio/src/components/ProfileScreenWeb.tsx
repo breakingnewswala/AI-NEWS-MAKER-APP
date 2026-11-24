@@ -759,6 +759,19 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   const [activeCoinPack, setActiveCoinPack] = useState<CoinPackage | null>(null);
 
   const handleExecuteWalletRecharge = (pack: CoinPackage) => {
+    const sub = getUserSubscription(activeEmail);
+    const isExpired = !isAdminUser && Boolean(
+      sub?.isPlanExpired ||
+      sub?.isTrialExpired ||
+      (typeof sub?.daysRemaining === 'number' && sub.daysRemaining <= 0)
+    );
+    if (isExpired) {
+      setWalletRechargeFeedback({
+        type: 'error',
+        text: '⚠️ आपका सब्सक्रिप्शन समाप्त हो चुका है। नया कॉइन पैक रिचार्ज करने के लिए पहले कृपया पैकेज रिन्यू करें। आप अपने मौजूदा कॉइन्स का उपयोग कर सकते हैं।',
+      });
+      return;
+    }
     setActiveCoinPack(pack);
     setWalletRechargeFeedback(null);
     const coinPlan: PlanFeatureDetail = {
@@ -4170,7 +4183,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                 <div className="flex items-center gap-2.5 shrink-0">
                   <span className="px-2.5 py-1 bg-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-mono font-bold rounded-lg border border-amber-500/40 flex items-center gap-1 shadow-xs">
                     <span>🪙</span>
-                    <span>{walletData?.coinBalance ?? 0} Coins</span>
+                    <span>{walletData?.coinBalance ?? 0} कॉइन</span>
                   </span>
                   <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${normalUserTab === 'rewards_wallet' ? 'rotate-180 text-amber-500 dark:text-amber-400' : ''}`} />
                 </div>
@@ -4290,7 +4303,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                                 <span className="text-2xl sm:text-3xl font-black text-amber-300 font-mono">
                                   {pkg.coins.toLocaleString('en-IN')}
                                 </span>
-                                <span className="text-xs font-bold text-amber-400/80">Coins</span>
+                                <span className="text-xs font-bold text-amber-400/80">कॉइन</span>
                               </div>
                               <div className="text-base sm:text-lg font-black text-white font-mono">
                                 ₹{pkg.price}

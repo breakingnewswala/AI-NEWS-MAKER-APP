@@ -5062,18 +5062,32 @@ export default function App() {
                   {userSubscription?.tier === 'basic' ? '🔒 आपका ट्रायल समाप्त हो चुका है' : 'सदस्यता समाप्त'}
                 </h3>
                 <span className="text-xs text-amber-400 font-bold">
-                  {userSubscription?.tier === 'basic' ? 'अब आपको सब्सक्राइब करना पड़ेगा (पैकेज लेना पड़ेगा)' : 'आपका वर्तमान प्लान समाप्त हो गया है'}
+                  {userSubscription?.tier === 'basic' ? 'सेवाएं जारी रखने के लिए पैकेज सब्सक्राइब करें' : 'आपका वर्तमान प्लान समाप्त हो गया है'}
                 </span>
               </div>
             </div>
 
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
               {userSubscription?.tier === 'basic'
-                ? 'आपका ट्रायल समाप्त हो चुका है। अब आपको सब्सक्राइब करना पड़ेगा (पैकेज लेना पड़ेगा)। AI News Maker के सभी स्मार्ट फीचर्स, अनलिमिटेड ग्राफिक निर्माण, एचडी वीडियो स्टूडियो और एक्सपोर्ट टूल्स का उपयोग करने के लिए कृपया अपनी पसंद का कोई पैकेज सब्सक्राइब करें।'
+                ? 'आपका फ्री ट्रायल समाप्त हो चुका है। AI News Maker के सभी स्मार्ट फीचर्स, अनलिमिटेड ग्राफिक निर्माण, एचडी वीडियो स्टूडियो और एक्सपोर्ट टूल्स का उपयोग करने के लिए कृपया अपनी पसंद का कोई पैकेज सब्सक्राइब करें।'
                 : 'आपका प्लान समाप्त हो गया है। अपनी सुविधाएँ जारी रखने के लिए प्लान सक्रिय करें। जब तक आप अपना प्लान सक्रिय नहीं करते, तब तक आप केवल उपलब्ध बोनस खबरों और बोनस वीडियो का उपयोग कर सकते हैं।'}
             </p>
 
-            <div className="pt-2 flex flex-col sm:flex-row gap-2">
+            {/* Rules Clarification Callout */}
+            <div className="p-3 bg-slate-800/80 border border-amber-500/30 rounded-xl space-y-1.5 text-xs text-slate-200">
+              <div className="font-bold text-amber-400 flex items-center gap-1.5">
+                <span>ℹ️</span>
+                <span>विशेष छूट एवं कॉइन उपयोग नियम:</span>
+              </div>
+              <ul className="space-y-1 text-[11px] text-slate-300 list-disc list-inside">
+                <li>आप उपलब्ध <strong className="text-white">बोनस खबरें (Bonus News)</strong> बनाना जारी रख सकते हैं।</li>
+                <li>वॉलेट में मौजूद <strong className="text-amber-300">पुराने कॉइन्स</strong> का उपयोग कर सकते हैं।</li>
+                <li><span className="text-red-400 font-bold">नया कॉइन पैक रिचार्ज</span> खरीदने के लिए पहले पैकेज रिन्यू करना अनिवार्य है।</li>
+              </ul>
+            </div>
+
+            {/* Primary Action Button Positioned Lower in Layout */}
+            <div className="pt-2 flex flex-col gap-2">
               <button
                 type="button"
                 onClick={() => {
@@ -5081,37 +5095,37 @@ export default function App() {
                   try { sessionStorage.setItem('expired_plan_modal_dismissed', 'true'); } catch {}
                   setShowPackagePurchaseModal(true);
                 }}
-                className="flex-1 py-2.5 px-4 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg transition active:scale-95 cursor-pointer"
+                className="w-full py-3 px-4 bg-gradient-to-r from-amber-400 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-slate-950 font-black rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg transition active:scale-95 cursor-pointer"
               >
                 <span>⚡</span>
                 <span>पैकेज चुनें व सब्सक्राइब करें</span>
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsExpiredModalDismissed(true);
-                  try { sessionStorage.setItem('expired_plan_modal_dismissed', 'true'); } catch {}
-                  navigateToTab('home');
-                  showToast('🎁 बोनस खबरें सूची से बनाएं');
-                }}
-                className="flex-1 py-2.5 px-4 bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/40 font-black rounded-xl text-xs flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer"
-              >
-                <span>🎁</span>
-                <span>बोनस खबरें बनाएँ</span>
-              </button>
-            </div>
-            
-            <div className="text-center pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsExpiredModalDismissed(true);
-                  try { sessionStorage.setItem('expired_plan_modal_dismissed', 'true'); } catch {}
-                }}
-                className="text-[11px] text-slate-400 hover:text-slate-200 underline cursor-pointer"
-              >
-                बाद में देखें / ऐप एक्सप्लोर करें
-              </button>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsExpiredModalDismissed(true);
+                    try { sessionStorage.setItem('expired_plan_modal_dismissed', 'true'); } catch {}
+                    navigateToTab('home');
+                    showToast('🎁 बोनस खबरें सूची से बनाएं');
+                  }}
+                  className="flex-1 py-2 px-3 bg-amber-400/20 hover:bg-amber-400/30 text-amber-300 border border-amber-400/40 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                >
+                  <span>🎁</span>
+                  <span>बोनस खबरें बनाएँ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsExpiredModalDismissed(true);
+                    try { sessionStorage.setItem('expired_plan_modal_dismissed', 'true'); } catch {}
+                  }}
+                  className="flex-1 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl text-xs transition cursor-pointer text-center"
+                >
+                  बाद में देखें / ऐप एक्सप्लोर करें
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -6125,8 +6139,8 @@ export default function App() {
         )}
       </Suspense>
 
-      {/* Website Footer — Shared on Home, Video & Reels, and Newsroom */}
-      {(currentTab === 'home' || currentTab === 'videos' || currentTab === 'newsroom' || currentTab === 'drafts') && (
+      {/* Website Footer — Shared on Home, Video & Reels, and Drafts (Excluded from Newsroom) */}
+      {(currentTab === 'home' || currentTab === 'videos' || currentTab === 'drafts') && (
         <AppFooterWeb
           onNavigateToTab={navigateToTab}
           onOpenPlans={() => navigateToTab('profile')}
@@ -6357,12 +6371,16 @@ export default function App() {
                 </p>
               </div>
 
-              <div className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-center space-y-2">
-                <div className="flex items-center justify-center gap-2.5 text-xs text-amber-200 font-semibold text-center">
-                  <span className="text-sm">⚡</span>
-                  <span>एआई न्यूज़ मेकर: ख़बर देखने से ख़बर बनाने तक सिर्फ़ दो मिनट</span>
+              <div className="p-4 rounded-2xl bg-slate-800/60 border border-slate-700/60 text-center space-y-2.5">
+                <div className="text-center space-y-1">
+                  <h3 className="text-base sm:text-lg font-black bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-200 bg-clip-text text-transparent">
+                    एआई न्यूज मेकर
+                  </h3>
+                  <p className="text-xs sm:text-sm text-amber-200 font-bold">
+                    खबर देखने से बनाने तक सिर्फ दो मिनट
+                  </p>
                 </div>
-                <div className="flex items-center justify-center gap-2.5 text-xs text-blue-200 font-semibold text-center">
+                <div className="flex items-center justify-center gap-2 text-xs text-blue-200 font-semibold text-center pt-1 border-t border-slate-700/40">
                   <span className="text-sm">🎯</span>
                   <span>एआई के साथ हर ख़बर को दीजिए नया अंदाज़, आपकी ख़बर, आपकी पहचान</span>
                 </div>

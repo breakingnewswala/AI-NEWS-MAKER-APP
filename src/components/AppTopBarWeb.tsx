@@ -306,11 +306,18 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                       e.stopPropagation();
                       setIsGuideOpen(true);
                     }}
-                    className="p-1 rounded-full bg-slate-100 hover:bg-amber-100 dark:bg-slate-800/90 dark:hover:bg-amber-500/20 text-slate-600 dark:text-slate-300 hover:text-amber-700 dark:hover:text-amber-400 border border-slate-200 dark:border-slate-700/80 hover:border-amber-400/50 transition-all cursor-pointer shadow-xs shrink-0 flex items-center justify-center"
+                    className={`rounded-full bg-slate-100 hover:bg-amber-100 dark:bg-slate-800/90 dark:hover:bg-amber-500/20 text-slate-600 dark:text-slate-300 hover:text-amber-700 dark:hover:text-amber-400 border border-slate-200 dark:border-slate-700/80 hover:border-amber-400/50 transition-all cursor-pointer shadow-xs shrink-0 flex items-center justify-center gap-1 ${
+                      isHome ? 'px-2 py-0.5' : 'p-1'
+                    }`}
                     title="ऐप कैसे उपयोग करें? (मार्गदर्शिका / User Guide)"
                     aria-label="ऐप कैसे उपयोग करें"
                   >
                     <HelpCircle className="w-3.5 h-3.5" />
+                    {isHome && (
+                      <span className="text-[10px] sm:text-xs font-bold leading-none text-slate-700 dark:text-slate-200">
+                        गाइड
+                      </span>
+                    )}
                   </button>
                 </div>
 

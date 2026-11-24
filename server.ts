@@ -30973,13 +30973,13 @@ function getDailyVideoLimitForTier(tier = "basic"): { limit: number; displayLimi
   if (clean.includes("vip") || clean.includes("ultra") || clean.includes("desk") || clean.includes("enterprise")) {
     return { limit: 30, displayLimit: "Unlimited", isUnlimitedDisplay: true };
   }
-  if (clean.includes("pro") || clean.includes("professional")) {
+  if (clean.includes("pro") || clean.includes("professional") || clean.includes("trial")) {
     return { limit: 15, displayLimit: "15", isUnlimitedDisplay: false };
   }
   if (clean.includes("advance") || clean.includes("advanced")) {
-    return { limit: 5, displayLimit: "5", isUnlimitedDisplay: false };
+    return { limit: 7, displayLimit: "7", isUnlimitedDisplay: false };
   }
-  return { limit: 2, displayLimit: "2", isUnlimitedDisplay: false };
+  return { limit: 3, displayLimit: "3", isUnlimitedDisplay: false };
 }
 
 app.post("/api/user/consume-video-creation-quota", async (req, res) => {
@@ -31014,7 +31014,13 @@ app.post("/api/user/consume-video-creation-quota", async (req, res) => {
       });
     }
 
-    const tier = targetUser?.tier || "basic";
+    let tier = targetUser?.tier || "basic";
+    if (targetUser) {
+      const trialFields = computeTrialFields(targetUser);
+      if (trialFields && trialFields.isTrialActive && tier === "basic") {
+        tier = "professional";
+      }
+    }
     const videoRule = getDailyVideoLimitForTier(tier);
     const { dateStr } = getAsiaKolkataDateAndExpiry();
 
@@ -31123,7 +31129,13 @@ app.get("/api/user/video-creation-quota", (req, res) => {
       });
     }
 
-    const tier = targetUser?.tier || "basic";
+    let tier = targetUser?.tier || "basic";
+    if (targetUser) {
+      const trialFields = computeTrialFields(targetUser);
+      if (trialFields && trialFields.isTrialActive && tier === "basic") {
+        tier = "professional";
+      }
+    }
     const videoRule = getDailyVideoLimitForTier(tier);
     const { dateStr } = getAsiaKolkataDateAndExpiry();
 

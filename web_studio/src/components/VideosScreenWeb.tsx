@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import { VideoFeedItem, filterActiveVideos } from '../data/newsFeedData';
 import { ReporterUser } from './LoginModal';
-import { isEffectiveAdmin, isUserSuperAdmin, getUserSubscription } from '../lib/userPlanManager';
+import { isEffectiveAdmin, isUserSuperAdmin, getUserSubscription, fetchUserDailyVideoStatus, getCachedUserDailyVideoStatus } from '../lib/userPlanManager';
 import { getApiBaseUrl, getApiUrl, getAuthHeaders } from '../lib/apiConfig';
 import { FeaturePromotionCard, PromoLayoutRatio } from './FeaturePromotionCard';
 import { DEFAULT_PRESET_CATEGORIES } from '../lib/categoryManager';
@@ -85,8 +85,32 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
 
   // User Subscription & Creation limits
   const userSub = getUserSubscription(currentUser?.email);
-  const isVipDesk = userSub?.tier === 'ultra' || userSub?.tier === 'vip';
+  const isVipDesk = userSub?.tier === 'ultra' || userSub?.tier === 'vip' || userSub?.planKey === 'VIP DESK';
   const hasVideoPlan = Boolean(userSub?.hasActivePaidPlan && (userSub?.tier === 'pro' || isVipDesk));
+
+  // Daily Video Quota Status (R4)
+  const [videoQuotaStatus, setVideoQuotaStatus] = useState(() => getCachedUserDailyVideoStatus());
+
+  useEffect(() => {
+    const updateQuota = () => {
+      fetchUserDailyVideoStatus(currentUser?.email, currentUser?.userId).then((st) => {
+        setVideoQuotaStatus(st);
+      }).catch(() => {});
+    };
+    updateQuota();
+
+    const handleQuotaUpdated = (e: any) => {
+      if (e.detail) setVideoQuotaStatus(e.detail);
+    };
+    window.addEventListener('ai_news_video_quota_updated', handleQuotaUpdated);
+    window.addEventListener('focus', updateQuota);
+    return () => {
+      window.removeEventListener('ai_news_video_quota_updated', handleQuotaUpdated);
+      window.removeEventListener('focus', updateQuota);
+    };
+  }, [currentUser?.email, currentUser?.userId]);
+
+  const remainingVideoQuota = videoQuotaStatus?.remainingToday ?? (isVipDesk ? 30 : (userSub?.tier === 'professional' || userSub?.isTrialActive) ? 15 : userSub?.tier === 'advanced' ? 7 : 3);
 
   // Wallet Coin Balance for Authenticated Users (Real-time sync)
   const [walletCoins, setWalletCoins] = useState<number | null>(() => {
@@ -1239,6 +1263,16 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               {activeVideos.length} वीडियो
             </span>
 
+            {/* Remaining Daily Video Quota Badge (Web Desktop) */}
+            <span
+              className="px-3 py-1.5 bg-red-950/80 border border-red-700/50 text-red-300 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-xs select-none"
+              title="आज का शेष वीडियो कोटा"
+            >
+              <Film className="w-3.5 h-3.5 text-red-500 shrink-0" />
+              <span className="font-mono font-black">{isVipDesk ? 'असीमित' : remainingVideoQuota}</span>
+              <span>शेष वीडियो</span>
+            </span>
+
             {/* Admin Latest Sort Indicator */}
 
 
@@ -1373,7 +1407,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 <div className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-red-400/50 active:scale-95 transition-all duration-150 motion-reduce:transform-none select-none text-center">
                   <div className="flex items-center gap-1 text-red-500 dark:text-red-400 font-black text-sm">
                     <Film className="w-4 h-4 shrink-0 text-red-500" />
-                    <span>{isVipDesk ? 'असीमित' : (hasVideoPlan ? 50 : 0)}</span>
+                    <span>{isVipDesk ? 'असीमित' : remainingVideoQuota}</span>
                   </div>
                   <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">शेष वीडियो</span>
                 </div>

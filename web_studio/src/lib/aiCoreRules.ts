@@ -164,19 +164,19 @@ export function getDailyGraphicDownloadLimitForPlan(plan: string): number {
 
 /**
  * 2C. DAILY VIDEO CREATION LIMIT MATRIX
- * Basic: 2 Videos/day, Advanced: 5 Videos/day, Pro: 15 Videos/day, VIP: Unlimited (30 Videos/day)
+ * Basic: 3 Videos/day, Advanced: 7 Videos/day, Pro: 15 Videos/day, VIP: Unlimited (30 Videos/day)
  */
 export const DAILY_VIDEO_CREATION_LIMITS: Record<string, number> = {
-  BASIC: 2,
-  ADVANCE: 5,
-  ADVANCED: 5,
+  BASIC: 3,
+  ADVANCE: 7,
+  ADVANCED: 7,
   PRO: 15,
   VIP: 30,
   VIP_DESK: 30,
   ULTRA: 30,
-  basic: 2,
-  advance: 5,
-  advanced: 5,
+  basic: 3,
+  advance: 7,
+  advanced: 7,
   pro: 15,
   vip: 30,
   vip_desk: 30,
@@ -188,13 +188,13 @@ export function getDailyVideoLimitForPlan(plan: string): { limit: number; displa
   if (p.includes('vip') || p.includes('ultra') || p.includes('enterprise') || p.includes('desk')) {
     return { limit: 30, displayLabel: 'असीमित (अधिकतम 30 वीडियो/दिन)', isUnlimitedDisplay: true };
   }
-  if (p.includes('pro')) {
+  if (p.includes('pro') || p.includes('trial')) {
     return { limit: 15, displayLabel: '15 वीडियो/दिन', isUnlimitedDisplay: false };
   }
   if (p.includes('advance')) {
-    return { limit: 5, displayLabel: '5 वीडियो/दिन', isUnlimitedDisplay: false };
+    return { limit: 7, displayLabel: '7 वीडियो/दिन', isUnlimitedDisplay: false };
   }
-  return { limit: 2, displayLabel: '2 वीडियो/दिन', isUnlimitedDisplay: false };
+  return { limit: 3, displayLabel: '3 वीडियो/दिन', isUnlimitedDisplay: false };
 }
 
 

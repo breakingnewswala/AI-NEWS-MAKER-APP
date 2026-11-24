@@ -41,6 +41,7 @@ import {
   Mic,
   Trash2,
   Plus,
+  Copy,
   ChevronLeft,
   ChevronRight,
   Shield,
@@ -1519,6 +1520,23 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         }
       }
 
+      // Web Share API for Mobile Devices (saves directly to Gallery / Files without navigating away or reloading)
+      if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+        try {
+          const file = new File([blob], filename, { type: blob.type || 'video/mp4' });
+          if (navigator.canShare({ files: [file] })) {
+            navigator.share({
+              files: [file],
+              title: filename,
+              text: 'AI News Maker Video Report',
+            }).catch(() => {});
+            return true;
+          }
+        } catch (shareErr) {
+          console.warn('[VideoExport] Web Share API fallback to anchor:', shareErr);
+        }
+      }
+
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = objectUrl;
@@ -1557,6 +1575,26 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       console.error('triggerBrowserDownload error:', err);
       return false;
     }
+  };
+
+  // Immediate Download Handler for completed renders (prevents re-render and SPA unloading)
+  const handleImmediateDownload = () => {
+    const filename = completedDownloadFilename || generateVideoDownloadFileName('mp4');
+    if (completedBlobRef.current) {
+      triggerBrowserDownload(completedBlobRef.current, filename);
+    } else if (completedDownloadUrl) {
+      const link = document.createElement('a');
+      link.href = completedDownloadUrl;
+      link.download = filename;
+      link.setAttribute('download', filename);
+      link.style.display = 'none';
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        if (link.parentNode) document.body.removeChild(link);
+      }, 3000);
+    }
+    showToast('✅ वीडियो आपके डिवाइस में सेव हो रहा है!');
   };
   
   // Auto-set aspect ratio based on incoming video - default 9:16 for reels or incoming ratio
@@ -2720,26 +2758,12 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   // Export Full Video File with Complete Composition (Parity Guarantee: Video + Frame + Audio)
   const handleDownloadVideo = async (forceRerender: boolean | any = false) => {
     if (isExporting) return;
-    const shouldForceRerender = typeof forceRerender === 'boolean' ? forceRerender : false;
+    const shouldForceRerender = forceRerender === true;
 
-    // If video is already rendered and ready, instantly download without re-rendering!
+    // If video is already rendered and ready, instantly download without re-rendering or consuming additional quota!
     if (!shouldForceRerender && (completedDownloadUrl || completedBlobRef.current)) {
-      const filename = completedDownloadFilename || generateVideoDownloadFileName('mp4');
-      if (completedBlobRef.current) {
-        triggerBrowserDownload(completedBlobRef.current, filename);
-      } else if (completedDownloadUrl) {
-        const link = document.createElement('a');
-        link.href = completedDownloadUrl;
-        link.download = filename;
-        link.setAttribute('download', filename);
-        document.body.appendChild(link);
-        link.click();
-        setTimeout(() => {
-          if (link.parentNode) document.body.removeChild(link);
-        }, 3000);
-      }
+      handleImmediateDownload();
       setIsVideoSuccessModalOpen(true);
-      showToast('✅ तैयार वीडियो तुरंत डाउनलोड हो रहा है!');
       return;
     }
 
@@ -3442,8 +3466,13 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       isExportingRef.current = false;
       setTimeout(() => {
         setIsExporting(false);
-        setVideoExportStatus('');
-        setVideoExportProgress(0);
+        if (completedBlobRef.current || completedDownloadUrl) {
+          setVideoExportStatus('✅ वीडियो रेंडर 100% पूर्ण');
+          setVideoExportProgress(100);
+        } else {
+          setVideoExportStatus('');
+          setVideoExportProgress(0);
+        }
       }, 1500);
     }
   };
@@ -3646,12 +3675,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         </div>
       )}
 
-      <div className="w-full flex flex-col lg:flex-row items-start gap-4 sm:gap-6">
-        {/* Mobile: Editing Mode Switcher Bar */}
-        <div className="w-full block lg:hidden">
-          {renderModeSwitcherBar()}
-        </div>
-
+      <div className="w-full flex flex-col lg:flex-row items-start gap-4 sm:gap-6 pb-28 lg:pb-0">
         {/* LEFT COLUMN (36% Desktop / 34% XL): Live Video Canvas with Sticky Jacket Overlay */}
         <aside className="w-full lg:w-[36%] xl:w-[34%] lg:sticky lg:top-[72px] self-start max-h-[calc(100vh-85px)] z-20 flex flex-col gap-3 overflow-y-auto">
           <div className="w-full bg-black p-3 sm:p-4 rounded-2xl border border-neutral-800 shadow-2xl flex flex-col items-center">
@@ -4489,8 +4513,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               </div>
             )}
 
-            {/* Web-Only Action Buttons Underneath Preview (Section 8: Strictly disabled until 100% completion) */}
-            {!isMobile && (
+            {/* Action Buttons Underneath Preview: Visible on Desktop, OR on Mobile when quickStep === 7 (R2) */}
+            {(!isMobile || quickStep === 7) && (
               <div className="w-full mt-3 pt-2.5 border-t border-neutral-800/80 space-y-2">
                 {!quickVideoValidation.isValid && (
                   <div className="p-2.5 bg-amber-950/40 border border-amber-600/40 rounded-xl text-[11px] text-amber-300 space-y-1.5">
@@ -4513,45 +4537,102 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-2 w-full">
-                  {/* Download Video Button */}
-                  <button
-                    type="button"
-                    onClick={() => handleDownloadVideo(false)}
-                    disabled={isExporting || !quickVideoValidation.isValid}
-                    className={`py-2.5 px-2 font-extrabold text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all ${
-                      quickVideoValidation.isValid && !isExporting
-                        ? 'bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white cursor-pointer active:scale-95'
-                        : 'bg-neutral-800/80 text-neutral-500 cursor-not-allowed border border-neutral-700'
-                    }`}
-                    title={quickVideoValidation.isValid ? 'वीडियो डाउनलोड करें' : 'डाउनलोड के लिए सभी आवश्यक चरण पूरे करें'}
-                  >
-                    <Download className="w-4 h-4 shrink-0" />
-                    <span className="truncate">{isExporting ? 'रेंडरिंग जारी...' : completedDownloadUrl ? 'तैयार वीडियो डाउनलोड' : 'वीडियो डाउनलोड'}</span>
-                  </button>
+                {/* Step 7 Layout Hierarchy: Download Button directly below preview, Captions beneath it */}
+                {quickStep === 7 ? (
+                  <div className="flex flex-col gap-2.5 w-full">
+                    {/* Primary Download Video Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadVideo(false)}
+                      disabled={isExporting || !quickVideoValidation.isValid}
+                      className={`w-full py-3 px-3 font-extrabold text-xs sm:text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 transition-all ${
+                        completedDownloadUrl
+                          ? 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-400 text-white cursor-pointer active:scale-95 animate-pulse'
+                          : quickVideoValidation.isValid && !isExporting
+                          ? 'bg-gradient-to-r from-red-600 via-amber-600 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white cursor-pointer active:scale-95'
+                          : 'bg-neutral-800/80 text-neutral-500 cursor-not-allowed border border-neutral-700'
+                      }`}
+                      title={quickVideoValidation.isValid ? 'वीडियो डाउनलोड करें' : 'डाउनलोड के लिए सभी आवश्यक चरण पूरे करें'}
+                    >
+                      <Download className="w-4 h-4 shrink-0" />
+                      <span>
+                        {isExporting
+                          ? 'वीडियो रेंडर हो रहा है...'
+                          : completedDownloadUrl
+                          ? '✅ तैयार वीडियो डाउनलोड करें (Save Video)'
+                          : quickVideoValidation.isValid
+                          ? '🚀 फुल HD वीडियो डाउनलोड करें (1080p)'
+                          : `❌ डाउनलोड लॉक है (${quickVideoValidation.missingItems.length} चरण बाकी)`}
+                      </span>
+                    </button>
 
-                  {/* Caption Button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (quickVideoValidation.isValid) {
-                        setIsCaptionModalOpen(true);
-                      } else {
-                        showToast('कृपया पहले वीडियो के सभी आवश्यक चरण पूरे करें');
-                      }
-                    }}
-                    disabled={!quickVideoValidation.isValid}
-                    className={`py-2.5 px-2 font-extrabold text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all ${
-                      quickVideoValidation.isValid
-                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white cursor-pointer active:scale-95'
-                        : 'bg-neutral-800/80 text-neutral-500 cursor-not-allowed border border-neutral-700'
-                    }`}
-                    title={quickVideoValidation.isValid ? 'कैप्शन देखें' : 'कैप्शन के लिए सभी आवश्यक चरण पूरे करें'}
-                  >
-                    <Share2 className="w-4 h-4 shrink-0" />
-                    <span className="truncate">कैप्शन देखें</span>
-                  </button>
-                </div>
+                    {/* Social Media Captions Display (Beneath Download Button on Step 7) */}
+                    <div className="w-full p-3 bg-neutral-900/90 border border-neutral-800 rounded-xl space-y-2 text-left">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                          <Share2 className="w-3.5 h-3.5 text-amber-400" />
+                          <span>सोशल मीडिया कैप्शन</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(generatedCaptionText);
+                            setCopiedCaption(true);
+                            showToast('✅ सोशल कैप्शन क्लिपबोर्ड पर कॉपी हो गया!');
+                            setTimeout(() => setCopiedCaption(false), 2500);
+                          }}
+                          className="px-2.5 py-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[11px] rounded-lg transition cursor-pointer flex items-center gap-1 active:scale-95"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>{copiedCaption ? 'कॉपी हो गया!' : 'कॉपी करें'}</span>
+                        </button>
+                      </div>
+                      <div className="p-2.5 bg-black/60 border border-neutral-800 rounded-lg text-[11px] text-neutral-300 leading-relaxed font-sans max-h-32 overflow-y-auto whitespace-pre-wrap select-all">
+                        {generatedCaptionText}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 w-full">
+                    {/* Download Video Button */}
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadVideo(false)}
+                      disabled={isExporting || !quickVideoValidation.isValid}
+                      className={`py-2.5 px-2 font-extrabold text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all ${
+                        quickVideoValidation.isValid && !isExporting
+                          ? 'bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white cursor-pointer active:scale-95'
+                          : 'bg-neutral-800/80 text-neutral-500 cursor-not-allowed border border-neutral-700'
+                      }`}
+                      title={quickVideoValidation.isValid ? 'वीडियो डाउनलोड करें' : 'डाउनलोड के लिए सभी आवश्यक चरण पूरे करें'}
+                    >
+                      <Download className="w-4 h-4 shrink-0" />
+                      <span className="truncate">{isExporting ? 'रेंडरिंग जारी...' : completedDownloadUrl ? 'तैयार वीडियो डाउनलोड' : 'वीडियो डाउनलोड'}</span>
+                    </button>
+
+                    {/* Caption Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (quickVideoValidation.isValid) {
+                          setIsCaptionModalOpen(true);
+                        } else {
+                          showToast('कृपया पहले वीडियो के सभी आवश्यक चरण पूरे करें');
+                        }
+                      }}
+                      disabled={!quickVideoValidation.isValid}
+                      className={`py-2.5 px-2 font-extrabold text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 transition-all ${
+                        quickVideoValidation.isValid
+                          ? 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white cursor-pointer active:scale-95'
+                          : 'bg-neutral-800/80 text-neutral-500 cursor-not-allowed border border-neutral-700'
+                      }`}
+                      title={quickVideoValidation.isValid ? 'कैप्शन देखें' : 'कैप्शन के लिए सभी आवश्यक चरण पूरे करें'}
+                    >
+                      <Share2 className="w-4 h-4 shrink-0" />
+                      <span className="truncate">कैप्शन देखें</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -4567,14 +4648,17 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                     100% रेंडर पूर्ण
                   </span>
                 </div>
-                <a
-                  href={completedDownloadUrl}
-                  download={completedDownloadFilename || 'news_video.mp4'}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleImmediateDownload();
+                  }}
                   className="w-full py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-lg flex items-center justify-center gap-1.5 shadow cursor-pointer transition-colors"
                 >
                   <Download className="w-4 h-4" />
                   <span>यहाँ क्लिक करके वीडियो डाउनलोड करें</span>
-                </a>
+                </button>
               </div>
             )}
 
@@ -4669,8 +4753,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
             /* UNIFIED QUICK VIDEO WORKFLOW (Web & Mobile - 7 Steps)        */
             /* ============================================================ */
             <div className="w-full flex flex-col gap-3 sm:gap-4">
-              {/* Stepper Header Card */}
-              <div className="sticky top-0 z-30 bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-2xl p-2.5 sm:p-3 shadow-xl">
+              {/* Stepper Header Card (Frozen at sticky top-14 z-30) */}
+              <div className="sticky top-14 z-30 bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-2xl p-2.5 sm:p-3 shadow-xl">
                 <div className="flex flex-col gap-1 pb-2 mb-2 border-b border-slate-800 px-1">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
@@ -4695,16 +4779,16 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   </div>
                 </div>
 
-                {/* Horizontal Compact Step Navigation Pills without Tickmarks (All 7 Steps Visible side-by-side) */}
-                <div className="flex items-center gap-1 sm:gap-1.5 w-full text-[10px] sm:text-xs font-bold overflow-hidden">
+                {/* Horizontal Step Navigation Pills (Horizontally scrollable with full Hindi labels) */}
+                <div className="flex items-center gap-1.5 sm:gap-2 w-full text-xs font-bold overflow-x-auto no-scrollbar scroll-smooth py-1">
                   {[
-                    { step: 1, label: 'वीडियो', fullLabel: 'वीडियो व फ्रेम्स', icon: Film, ok: Boolean((videoUrl && videoUrl.trim()) || clips.length > 0) },
-                    { step: 2, label: 'ऑडियो', fullLabel: 'संगीत व ऑडियो', icon: Music, ok: Boolean(audioOption === 'original' || audioOption === 'none' || (audioOption === 'bgm' && (bgmTrack || customAudioUrl))) },
-                    { step: 3, label: 'हेडलाइन', fullLabel: 'हेडलाइन', icon: Type, ok: Boolean(headline && headline.trim().length > 0) },
-                    { step: 4, label: 'लोकेशन', fullLabel: 'लोकेशन', icon: MapPin, ok: Boolean(location && location.trim().length > 0) },
-                    { step: 5, label: 'ब्रांडिंग', fullLabel: 'लोगो व ब्रांडिंग', icon: Sparkles, ok: Boolean((socialHandle && socialHandle.trim().length > 0) || (channelTag && channelTag.trim().length > 0) || (mobileNumber && mobileNumber.trim().length > 0)) },
-                    { step: 6, label: 'वॉटरमार्क', fullLabel: 'वॉटरमार्क', icon: Shield, ok: Boolean(!showWatermark || watermarkType === 'none' || watermarkCustomText || watermarkText || watermarkImage) },
-                    { step: 7, label: 'डाउनलोड', fullLabel: 'डाउनलोड', icon: Download, ok: quickVideoValidation.isValid },
+                    { step: 1, label: 'वीडियो व फ्रेम्स', icon: Film, ok: Boolean((videoUrl && videoUrl.trim()) || clips.length > 0) },
+                    { step: 2, label: 'संगीत व ऑडियो', icon: Music, ok: Boolean(audioOption === 'original' || audioOption === 'none' || (audioOption === 'bgm' && (bgmTrack || customAudioUrl))) },
+                    { step: 3, label: 'हेडलाइन', icon: Type, ok: Boolean(headline && headline.trim().length > 0) },
+                    { step: 4, label: 'लोकेशन', icon: MapPin, ok: Boolean(location && location.trim().length > 0) },
+                    { step: 5, label: 'लोगो व ब्रांडिंग', icon: Sparkles, ok: Boolean((socialHandle && socialHandle.trim().length > 0) || (channelTag && channelTag.trim().length > 0) || (mobileNumber && mobileNumber.trim().length > 0)) },
+                    { step: 6, label: 'वॉटरमार्क', icon: Shield, ok: Boolean(!showWatermark || watermarkType === 'none' || watermarkCustomText || watermarkText || watermarkImage) },
+                    { step: 7, label: 'डाउनलोड व कैप्शन', icon: Download, ok: quickVideoValidation.isValid },
                   ].map((s) => {
                     const isActive = quickStep === s.step;
                     const IconComp = s.icon;
@@ -4713,16 +4797,16 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                         key={s.step}
                         type="button"
                         onClick={() => setQuickStep(s.step)}
-                        title={`चरण ${s.step}: ${s.fullLabel}`}
-                        className={`flex-1 min-w-0 px-1 py-1 sm:px-1.5 sm:py-1 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer select-none ${
+                        title={`चरण ${s.step}: ${s.label}`}
+                        className={`shrink-0 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer select-none whitespace-nowrap text-xs ${
                           isActive
-                            ? 'bg-gradient-to-r from-red-600 to-amber-500 text-white font-black shadow-md ring-1 ring-white/20'
+                            ? 'bg-gradient-to-r from-red-600 to-amber-500 text-white font-black shadow-md ring-1 ring-white/30'
                             : s.ok
                             ? 'bg-slate-800/80 text-emerald-300 border border-emerald-500/30 hover:bg-slate-800'
                             : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800 border border-slate-800'
                         }`}
                       >
-                        <span className={`w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full flex items-center justify-center text-[8.5px] sm:text-[9.5px] font-black shrink-0 ${
+                        <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black shrink-0 ${
                           isActive
                             ? 'bg-white text-red-600'
                             : s.ok
@@ -4731,8 +4815,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                         }`}>
                           {s.step}
                         </span>
-                        <IconComp className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0 hidden xs:inline-block" />
-                        <span className="truncate">{s.label}</span>
+                        <IconComp className="w-3.5 h-3.5 shrink-0" />
+                        <span>{s.label}</span>
                       </button>
                     );
                   })}
@@ -7348,6 +7432,46 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           </div>
         </div>
       )}
+
+      {/* Frozen Bottom Navigation Bar on Mobile (directly above footer menu fixed at bottom-16) (R2) */}
+      <div className="fixed bottom-16 left-0 right-0 z-40 bg-slate-950/98 backdrop-blur-md border-t border-slate-800 shadow-2xl px-3 py-2.5 sm:py-3 lg:hidden">
+        <div className="max-w-md mx-auto flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setQuickStep((s) => Math.max(1, s - 1))}
+            disabled={quickStep === 1}
+            className="flex-1 py-2.5 px-3 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs disabled:opacity-30 cursor-pointer hover:bg-slate-700 transition flex items-center justify-center gap-1.5 active:scale-95"
+          >
+            <ChevronLeft className="w-4 h-4 text-slate-400" />
+            <span>पिछला चरण</span>
+          </button>
+
+          <span className="text-[11px] font-extrabold text-amber-400 px-2 shrink-0">
+            {quickStep}/7
+          </span>
+
+          {quickStep < 7 ? (
+            <button
+              type="button"
+              onClick={() => setQuickStep((s) => Math.min(7, s + 1))}
+              className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-red-600 to-amber-500 text-white font-black text-xs cursor-pointer shadow hover:from-red-500 hover:to-amber-400 transition flex items-center justify-center gap-1.5 active:scale-95"
+            >
+              <span>अगला चरण</span>
+              <ChevronRight className="w-4 h-4 text-white" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleDownloadVideo(false)}
+              disabled={!quickVideoValidation.isValid || isExporting}
+              className="flex-1 py-2.5 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-black text-xs cursor-pointer shadow hover:from-emerald-500 hover:to-teal-400 transition flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Download className="w-4 h-4 text-white" />
+              <span>{isExporting ? 'रेंडरिंग...' : completedDownloadUrl ? 'तैयार वीडियो' : 'डाउनलोड'}</span>
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

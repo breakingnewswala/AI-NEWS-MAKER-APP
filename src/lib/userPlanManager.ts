@@ -345,6 +345,114 @@ export function getCachedUserDailyDownloadStatus(): UserDailyDownloadStatus | nu
   return cachedDownloadStatus;
 }
 
+export interface UserDailyVideoStatus {
+  success: boolean;
+  unlimited: boolean;
+  limit: number;
+  displayLimit: string;
+  isUnlimitedDisplay: boolean;
+  usedToday: number;
+  remainingToday: number;
+  isExhausted: boolean;
+}
+
+let cachedVideoStatus: UserDailyVideoStatus | null = null;
+
+export function getCachedUserDailyVideoStatus(): UserDailyVideoStatus | null {
+  return cachedVideoStatus;
+}
+
+export async function fetchUserDailyVideoStatus(email?: string, userId?: string): Promise<UserDailyVideoStatus> {
+  const cleanEmail = (email || '').toLowerCase().trim();
+  const cleanUserId = (userId || '').trim();
+  try {
+    const res = await fetch(getApiUrl(`/api/user/video-creation-quota?email=${encodeURIComponent(cleanEmail)}&userId=${encodeURIComponent(cleanUserId)}`));
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.success) {
+        cachedVideoStatus = data;
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('ai_news_video_quota_updated', { detail: data }));
+          if (cleanEmail) {
+            try { localStorage.setItem(`daily_video_quota_${cleanEmail}`, JSON.stringify(data)); } catch {}
+          }
+        }
+        return data;
+      }
+    }
+  } catch (err) {
+    console.warn('Failed fetching video quota status:', err);
+  }
+
+  const sub = getUserSubscription(cleanEmail);
+  const isVip = sub.planKey === 'VIP DESK' || sub.tier === 'ultra';
+  const defaultLimit = isVip ? 30 : (sub.tier === 'professional' || sub.isTrialActive || sub.planKey === 'PRO') ? 15 : (sub.tier === 'advanced' || sub.planKey === 'ADVANCE') ? 7 : 3;
+  const fallback: UserDailyVideoStatus = {
+    success: true,
+    unlimited: isVip,
+    limit: defaultLimit,
+    displayLimit: isVip ? 'Unlimited' : String(defaultLimit),
+    isUnlimitedDisplay: isVip,
+    usedToday: 0,
+    remainingToday: defaultLimit,
+    isExhausted: false,
+  };
+  cachedVideoStatus = fallback;
+  return fallback;
+}
+
+export function parseDateToTimestamp(val: unknown): number | null {
+  if (!val) return null;
+  if (typeof val === 'number') {
+    if (isNaN(val) || val <= 0) return null;
+    if (val < 10000000000) return val * 1000; // convert Unix seconds to ms
+    return val;
+  }
+  if (val instanceof Date) {
+    const t = val.getTime();
+    return isNaN(t) || t <= 0 ? null : t;
+  }
+  if (typeof val === 'string') {
+    const str = val.trim();
+    if (!str) return null;
+    if (/^\d+$/.test(str)) {
+      const num = parseInt(str, 10);
+      if (isNaN(num) || num <= 0) return null;
+      if (num < 10000000000) return num * 1000;
+      return num;
+    }
+    // Handle DD/MM/YYYY or DD-MM-YYYY (Indian format: e.g. 01/12/2026, 01-12-2026, 1/12/2026)
+    const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(.*)$/);
+    if (ddmmyyyy) {
+      const day = parseInt(ddmmyyyy[1], 10);
+      const month = parseInt(ddmmyyyy[2], 10) - 1;
+      const year = parseInt(ddmmyyyy[3], 10);
+      const timeStr = ddmmyyyy[4]?.trim();
+      let hours = 23, minutes = 59, seconds = 59;
+      if (timeStr) {
+        const timeMatch = timeStr.match(/(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
+        if (timeMatch) {
+          hours = parseInt(timeMatch[1], 10);
+          minutes = parseInt(timeMatch[2], 10);
+          seconds = timeMatch[3] ? parseInt(timeMatch[3], 10) : 0;
+        }
+      }
+      const d = new Date(year, month, day, hours, minutes, seconds);
+      const t = d.getTime();
+      if (!isNaN(t) && t > 0) return t;
+    }
+    const parsed = Date.parse(str);
+    if (!isNaN(parsed) && parsed > 0) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+        const [y, m, d] = str.split('-').map(Number);
+        return new Date(y, m - 1, d, 23, 59, 59, 999).getTime();
+      }
+      return parsed;
+    }
+  }
+  return null;
+}
+
 if (typeof window !== 'undefined') {
   syncPlansCatalogFromBackend().catch(() => {});
   window.addEventListener('focus', () => {
@@ -1008,12 +1116,15 @@ export function assignCustomHeaderFooterToUser(
 // ==========================================
 export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo {
   if (typeof window === 'undefined') {
+    const isScripterSupport = (targetEmail || '').toLowerCase().trim() === 'support.scripter@gmail.com';
     return {
-      tier: 'advanced',
-      planName: 'ADVANCED',
+      tier: isScripterSupport ? 'professional' : 'advanced',
+      planName: isScripterSupport ? 'TRIAL' : 'ADVANCED',
       trialStartedAt: Date.now(),
-      trialEndsAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+      trialEndsAt: isScripterSupport ? new Date(2026, 11, 1, 23, 59, 59, 999).getTime() : Date.now() + 7 * 24 * 60 * 60 * 1000,
       isTrialActive: true,
+      isTrialExpired: false,
+      isPlanExpired: false,
       daysRemaining: 7,
       isMobileLocked: false,
       isBlocked: false,
@@ -1049,31 +1160,66 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
     (activeEmail && u.email && u.email.toLowerCase().replace(/\s+/g, '') === activeEmail.replace(/\s+/g, ''))
   );
 
+  // Check user profile data in localStorage if matchedUser is undefined or has missing dates
+  let userProfileData: any = null;
+  if (typeof window !== 'undefined' && activeEmail) {
+    try {
+      const pStr = localStorage.getItem(`user_profile_${activeEmail}`);
+      if (pStr) userProfileData = JSON.parse(pStr);
+    } catch {}
+    if (!userProfileData) {
+      try {
+        const chanStr = localStorage.getItem('user_channel_profile');
+        if (chanStr) {
+          const chan = JSON.parse(chanStr);
+          if (chan?.email && (chan.email.toLowerCase().trim() === activeEmail || !activeEmail)) {
+            userProfileData = chan;
+          }
+        }
+      } catch {}
+    }
+  }
+
+  const isScripterSupport = activeEmail === 'support.scripter@gmail.com';
+  // Target expiry for support.scripter@gmail.com is 1 December 2026 (or later)
+  const scripterTargetExpiry = new Date(2026, 11, 1, 23, 59, 59, 999).getTime();
+
   const isBlocked = Boolean(
     matchedUser?.isBlocked ||
     (activeEmail && localStorage.getItem(`user_blocked_${activeEmail}`) === 'true')
   );
 
-  let storedTier = (matchedUser?.tier || localStorage.getItem(STORAGE_KEY_TIER) as UserPlanTier) || 'basic';
+  let storedTier = (matchedUser?.tier || userProfileData?.tier || localStorage.getItem(STORAGE_KEY_TIER) as UserPlanTier) || 'basic';
   const now = Date.now();
 
-  let startTime = matchedUser?.trialStartedAt || (() => {
-    const userTrialKey = activeEmail ? `user_trial_start_${activeEmail.toLowerCase().trim()}` : null;
-    const userStartStr = userTrialKey ? localStorage.getItem(userTrialKey) : null;
-    if (userStartStr && !isNaN(parseInt(userStartStr, 10)) && parseInt(userStartStr, 10) > 0) {
-      return parseInt(userStartStr, 10);
-    }
-    const startStr = localStorage.getItem(STORAGE_KEY_TRIAL_START);
-    const parsed = startStr ? parseInt(startStr, 10) : 0;
-    const computed = (parsed && !isNaN(parsed) && parsed > 0) ? parsed : (matchedUser?.createdAt || now);
-    if (typeof window !== 'undefined') {
-      if (userTrialKey) localStorage.setItem(userTrialKey, String(computed));
-      localStorage.setItem(STORAGE_KEY_TRIAL_START, String(computed));
-    }
-    return computed;
-  })();
+  let startTime = parseDateToTimestamp(matchedUser?.trialStartedAt) ||
+    parseDateToTimestamp(userProfileData?.trialStartedAt) ||
+    (() => {
+      const userTrialKey = activeEmail ? `user_trial_start_${activeEmail.toLowerCase().trim()}` : null;
+      const userStartStr = userTrialKey ? localStorage.getItem(userTrialKey) : null;
+      const parsedUserStart = parseDateToTimestamp(userStartStr);
+      if (parsedUserStart && parsedUserStart > 0) {
+        return parsedUserStart;
+      }
+      const profileCreated = parseDateToTimestamp(userProfileData?.createdAt) || parseDateToTimestamp(matchedUser?.createdAt);
+      if (profileCreated && profileCreated > 0) {
+        if (typeof window !== 'undefined' && userTrialKey) {
+          localStorage.setItem(userTrialKey, String(profileCreated));
+        }
+        return profileCreated;
+      }
+      const startStr = localStorage.getItem(STORAGE_KEY_TRIAL_START);
+      const parsed = parseDateToTimestamp(startStr);
+      // Only fall back to global start key if not in past compared to user creation, or no active user
+      const computed = (parsed && parsed > 0 && (!activeEmail || parsed > now - 8 * 86400000)) ? parsed : now;
+      if (typeof window !== 'undefined') {
+        if (userTrialKey) localStorage.setItem(userTrialKey, String(computed));
+        localStorage.setItem(STORAGE_KEY_TRIAL_START, String(computed));
+      }
+      return computed;
+    })();
 
-  const promoUsed = localStorage.getItem('ai_news_maker_plan_promo_used') || matchedUser?.activatedViaPromoCode || undefined;
+  const promoUsed = localStorage.getItem('ai_news_maker_plan_promo_used') || matchedUser?.activatedViaPromoCode || userProfileData?.activatedViaPromoCode || undefined;
   const isUpgradedPlan =
     (storedTier && storedTier !== 'basic') ||
     (matchedUser?.tier && matchedUser.tier !== 'basic') ||
@@ -1082,23 +1228,60 @@ export function getUserSubscription(targetEmail?: string): UserSubscriptionInfo 
     Boolean(matchedUser?.planName && matchedUser.planName !== 'BASIC' && matchedUser.planName !== 'TRIAL');
 
   const planDetail = getPlanDetail(storedTier);
-  let expiresAt = (matchedUser?.expiresAt && matchedUser.expiresAt > 0)
-    ? matchedUser.expiresAt
-    : (matchedUser?.trialEndsAt || (() => {
+  let expiresAt = (matchedUser?.expiresAt && parseDateToTimestamp(matchedUser.expiresAt))
+    ? parseDateToTimestamp(matchedUser.expiresAt)!
+    : (parseDateToTimestamp(matchedUser?.trialEndsAt) ||
+       parseDateToTimestamp(userProfileData?.expiresAt) ||
+       parseDateToTimestamp(userProfileData?.trialEndsAt) ||
+       (() => {
         const userExpiryKey = activeEmail ? `user_trial_ends_${activeEmail.toLowerCase().trim()}` : null;
         const userExpStr = userExpiryKey ? localStorage.getItem(userExpiryKey) : null;
-        if (userExpStr && !isNaN(parseInt(userExpStr, 10)) && parseInt(userExpStr, 10) > 0) {
-          return parseInt(userExpStr, 10);
+        const parsedUserExp = parseDateToTimestamp(userExpStr);
+        if (parsedUserExp && parsedUserExp > 0) {
+          if (isScripterSupport && parsedUserExp <= now) {
+            if (typeof window !== 'undefined' && userExpiryKey) {
+              localStorage.setItem(userExpiryKey, String(scripterTargetExpiry));
+            }
+            return scripterTargetExpiry;
+          }
+          return parsedUserExp;
+        }
+        if (isScripterSupport) {
+          if (typeof window !== 'undefined' && userExpiryKey) {
+            localStorage.setItem(userExpiryKey, String(scripterTargetExpiry));
+          }
+          return scripterTargetExpiry;
         }
         const expiresAtStr = localStorage.getItem('ai_news_maker_plan_expires_at');
-        const parsed = expiresAtStr ? parseInt(expiresAtStr, 10) : 0;
-        const computed = (parsed && !isNaN(parsed) && parsed > 0) ? parsed : (startTime + (planDetail.durationDays || 7) * 24 * 60 * 60 * 1000);
+        const parsed = parseDateToTimestamp(expiresAtStr);
+        // Do NOT fall back to global expired keys if parsed timestamp is in the past while user is active
+        const isGlobalExpired = parsed ? parsed <= now : true;
+        let computed: number;
+        if (parsed && !isGlobalExpired) {
+          computed = parsed;
+        } else {
+          const days = planDetail.durationDays || 7;
+          const targetDate = new Date(startTime + days * 24 * 60 * 60 * 1000);
+          targetDate.setHours(23, 59, 59, 999);
+          computed = targetDate.getTime();
+        }
         if (typeof window !== 'undefined') {
           if (userExpiryKey) localStorage.setItem(userExpiryKey, String(computed));
-          localStorage.setItem('ai_news_maker_plan_expires_at', String(computed));
+          if (!isGlobalExpired) {
+            localStorage.setItem('ai_news_maker_plan_expires_at', String(computed));
+          }
         }
         return computed;
       })());
+
+  if (isScripterSupport && (!expiresAt || expiresAt <= now)) {
+    expiresAt = scripterTargetExpiry;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('user_trial_ends_support.scripter@gmail.com', String(scripterTargetExpiry));
+      } catch {}
+    }
+  }
 
   // Priority Rule: Admin Upgrade > Paid Membership > Trial > Expired
   if (isUpgradedPlan) {

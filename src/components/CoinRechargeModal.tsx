@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { CashfreePaymentModal } from './CashfreePaymentModal';
-import { PlanFeatureDetail } from '../lib/userPlanManager';
+import { PlanFeatureDetail, getUserSubscription, isUserAdmin } from '../lib/userPlanManager';
 import {
   Coins,
   X,
@@ -46,7 +46,7 @@ export const COIN_PACKAGES: CoinPackage[] = [
     nameHi: 'सुपर सेवर पैक',
     coins: 5000,
     price: 299,
-    badge: '⭐ सर्वाधिक लोकप्रिय (Most Popular)',
+    badge: '⭐ सर्वाधिक लोकप्रिय',
     badgeColor: 'bg-amber-400 text-slate-950 border-amber-300',
     description: '5,000 कॉइन्स + भारी बचत (40% एक्स्ट्रा वैल्यू)',
     popular: true,
@@ -57,7 +57,7 @@ export const COIN_PACKAGES: CoinPackage[] = [
     nameHi: 'मेगा प्रो पैक',
     coins: 10000,
     price: 499,
-    badge: '👑 सर्वश्रेष्ठ मूल्य (Best Value)',
+    badge: '👑 सर्वश्रेष्ठ मूल्य',
     badgeColor: 'bg-gradient-to-r from-red-600 to-amber-500 text-white border-amber-300',
     description: '10,000 कॉइन्स - प्रो व डेली न्यूज़ चैनल्स हेतु',
     bestValue: true,
@@ -129,6 +129,19 @@ export const CoinRechargeModal: React.FC<CoinRechargeModalProps> = ({
   // Handle Recharge Execution via Cashfree Payment Gateway
   const handleRecharge = () => {
     setStatusMessage(null);
+    const sub = getUserSubscription(activeEmail);
+    const isExpired = !isUserAdmin(currentUser) && Boolean(
+      sub?.isPlanExpired ||
+      sub?.isTrialExpired ||
+      (typeof sub?.daysRemaining === 'number' && sub.daysRemaining <= 0)
+    );
+    if (isExpired) {
+      setStatusMessage({
+        type: 'error',
+        text: '⚠️ आपका सब्सक्रिप्शन समाप्त हो चुका है। नया कॉइन पैक रिचार्ज करने के लिए पहले कृपया पैकेज रिन्यू करें। आप अपने मौजूदा कॉइन्स का उपयोग कर सकते हैं।',
+      });
+      return;
+    }
     const coinPlan: PlanFeatureDetail = {
       id: selectedPack.id as any,
       planKey: `COIN_PACK_${selectedPack.id.toUpperCase()}` as any,
@@ -190,7 +203,7 @@ export const CoinRechargeModal: React.FC<CoinRechargeModalProps> = ({
               <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
                 <span>कॉइन वॉलेट व रिचार्ज</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 font-bold">
-                  Coin Wallet
+                  कॉइन वॉलेट
                 </span>
               </h3>
               <p className="text-[11px] text-slate-400">
@@ -214,11 +227,11 @@ export const CoinRechargeModal: React.FC<CoinRechargeModalProps> = ({
             <div className="space-y-1">
               <span className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
                 <Coins className="w-4 h-4 text-amber-400" />
-                <span>उपलब्ध कॉइन बैलेंस (Live Balance):</span>
+                <span>उपलब्ध कॉइन बैलेंस:</span>
               </span>
               <div className="text-2xl sm:text-3xl font-black text-amber-300 font-mono flex items-baseline gap-1.5">
                 <span>{coinBalance.toLocaleString('en-IN')}</span>
-                <span className="text-xs font-bold text-amber-400/80">Coins</span>
+                <span className="text-xs font-bold text-amber-400/80">कॉइन</span>
               </div>
             </div>
 
@@ -253,7 +266,7 @@ export const CoinRechargeModal: React.FC<CoinRechargeModalProps> = ({
                 </span>
               </div>
               <div className="p-2 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between">
-                <span className="text-slate-300">PRO / VIP Desk:</span>
+                <span className="text-slate-300">प्रो / वीआईपी डेस्क:</span>
                 <span className="font-bold text-amber-400">
                   <span className="line-through text-slate-500 mr-1">199</span>
                   139 कॉइन (30% छूट)
@@ -274,7 +287,7 @@ export const CoinRechargeModal: React.FC<CoinRechargeModalProps> = ({
               }`}
             >
               <CreditCard className="w-4 h-4" />
-              <span>रिचार्ज पैक्स (Recharge Packs)</span>
+              <span>रिचार्ज पैक्स</span>
             </button>
             <button
               type="button"
@@ -294,7 +307,7 @@ export const CoinRechargeModal: React.FC<CoinRechargeModalProps> = ({
           {activeTab === 'packs' && (
             <div className="space-y-3">
               <span className="text-xs font-bold text-slate-400 block">
-                रिचार्ज पैक चुनें (Select Coin Pack):
+                रिचार्ज पैक चुनें:
               </span>
 
               <div className="space-y-2.5">
@@ -329,14 +342,9 @@ export const CoinRechargeModal: React.FC<CoinRechargeModalProps> = ({
                         </div>
 
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h4 className="text-xs sm:text-sm font-black text-white truncate">
-                              {pkg.nameHi}
-                            </h4>
-                            <span className="text-[10px] text-slate-400 font-bold">
-                              ({pkg.name})
-                            </span>
-                          </div>
+                          <h4 className="text-xs sm:text-sm font-black text-white truncate">
+                            {pkg.nameHi}
+                          </h4>
                           <p className="text-[11px] text-slate-400 truncate mt-0.5">
                             {pkg.description}
                           </p>
