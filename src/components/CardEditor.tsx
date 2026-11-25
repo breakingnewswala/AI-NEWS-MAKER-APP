@@ -2028,8 +2028,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           }
                           updates.isTestMode = false;
                         } else {
-                          // Regular Clean News Frame (graphic_001) default theme
-                          updates.highlightColor = '#FFE600';
+                          // Basic News Themes (graphic_001..022)
+                          const basicTheme = getBasicNewsTheme(f.id);
+                          const isLight = Boolean(basicTheme?.isLightPlate || f.id === 'graphic_004' || f.id === 'graphic_010' || f.id === 'graphic_014' || f.id === 'graphic_016' || f.id === 'graphic_020');
+                          updates.highlightColor = isLight ? '#DC2626' : (basicTheme?.headlineHighlightColor || '#FFE600');
                           updates.selectedCalloutId = 'callout_story_details_hindi';
                           const ribbonItem = getAssetLibraryItemById('callout_story_details_hindi');
                           updates.customCalloutAssetUrl = ribbonItem?.url;
@@ -2037,8 +2039,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           updates.showCallout = true;
                           updates.selectedLocationBadgeId = undefined; // authentic default pill
                           updates.customLocationBadgeUrl = undefined;
-                          updates.locationTextColor = '#0a0a0a';
-                          updates.locationBgColor = '#FFFFFF';
+                          updates.locationTextColor = isLight ? '#FFFFFF' : '#0a0a0a';
+                          updates.locationBgColor = isLight ? '#DC2626' : '#FFFFFF';
                           updates.showLocation = true;
                           updates.isTestMode = false;
                         }
@@ -2320,8 +2322,10 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           }
                           updates.isTestMode = false;
                         } else {
-                          // Regular Clean News Frame (graphic_001) default theme
-                          updates.highlightColor = '#FFE600';
+                          // Basic News Themes (graphic_001..022)
+                          const basicTheme = getBasicNewsTheme(f.id);
+                          const isLight = Boolean(basicTheme?.isLightPlate || f.id === 'graphic_004' || f.id === 'graphic_010' || f.id === 'graphic_014' || f.id === 'graphic_016' || f.id === 'graphic_020');
+                          updates.highlightColor = isLight ? '#DC2626' : (basicTheme?.headlineHighlightColor || '#FFE600');
                           updates.selectedCalloutId = 'callout_story_details_hindi';
                           const ribbonItem = getAssetLibraryItemById('callout_story_details_hindi');
                           updates.customCalloutAssetUrl = ribbonItem?.url;
@@ -2329,8 +2333,8 @@ export const CardEditor: React.FC<CardEditorProps> = ({
                           updates.showCallout = true;
                           updates.selectedLocationBadgeId = undefined; // authentic default pill
                           updates.customLocationBadgeUrl = undefined;
-                          updates.locationTextColor = '#0a0a0a';
-                          updates.locationBgColor = '#FFFFFF';
+                          updates.locationTextColor = isLight ? '#FFFFFF' : '#0a0a0a';
+                          updates.locationBgColor = isLight ? '#DC2626' : '#FFFFFF';
                           updates.showLocation = true;
                           updates.isTestMode = false;
                         }

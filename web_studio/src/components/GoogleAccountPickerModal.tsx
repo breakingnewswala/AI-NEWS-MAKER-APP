@@ -411,7 +411,7 @@ export const GoogleAccountPickerModal: React.FC<GoogleAccountPickerModalProps> =
                       https://ainewsmaker.online
                     </code>
                   </li>
-                  <li><strong>Save</strong> बटन दबाएं।</li>
+                  <li><strong>Save (सहेजें)</strong> बटन दबाएं।</li>
                 </ol>
                 <p className="text-[10px] text-emerald-400 font-bold">
                   💡 टिप: ऊपर दिए गए 1-क्लिक खाते से आप बिना किसी इंतज़ार के तुरंत स्टूडियो में प्रवेश कर सकते हैं!

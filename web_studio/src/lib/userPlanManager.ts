@@ -389,10 +389,10 @@ export async function fetchUserDailyVideoStatus(email?: string, userId?: string)
   const defaultLimit = isVip ? 30 : (sub.tier === 'professional' || sub.isTrialActive || sub.planKey === 'PRO') ? 15 : (sub.tier === 'advanced' || sub.planKey === 'ADVANCE') ? 7 : 3;
   const fallback: UserDailyVideoStatus = {
     success: true,
-    unlimited: isVip,
+    unlimited: false,
     limit: defaultLimit,
-    displayLimit: isVip ? 'Unlimited' : String(defaultLimit),
-    isUnlimitedDisplay: isVip,
+    displayLimit: String(defaultLimit),
+    isUnlimitedDisplay: false,
     usedToday: 0,
     remainingToday: defaultLimit,
     isExhausted: false,
@@ -924,6 +924,23 @@ export const DEFAULT_GUARANTEED_PLAN_USERS: PlanUserRecord[] = [
   },
 ];
 
+export const DUMMY_TEST_USER_EMAILS = new Set([
+  'testverifier@ainewsmaker.online',
+  'test_user@ainewsmaker.online',
+  'test_verified_editor@ainewsmaker.online',
+  'reporter.test@ainewsmaker.online',
+]);
+
+export function isDummyTestUserAccount(emailOrKey?: string): boolean {
+  if (!emailOrKey) return false;
+  const lower = emailOrKey.toLowerCase().trim();
+  if (DUMMY_TEST_USER_EMAILS.has(lower)) return true;
+  if (lower.endsWith('@ainewsmaker.online') && (lower.startsWith('test') || lower.startsWith('reporter.test'))) {
+    return true;
+  }
+  return false;
+}
+
 export function getPlanUsers(): PlanUserRecord[] {
   if (typeof window === 'undefined') return DEFAULT_GUARANTEED_PLAN_USERS;
   let parsed: PlanUserRecord[] = [];
@@ -939,12 +956,21 @@ export function getPlanUsers(): PlanUserRecord[] {
 
   const map = new Map<string, PlanUserRecord>();
   DEFAULT_GUARANTEED_PLAN_USERS.forEach((u) => {
-    map.set(u.email.toLowerCase().trim(), u);
+    if (!isDummyTestUserAccount(u.email)) {
+      map.set(u.email.toLowerCase().trim(), u);
+    }
   });
   parsed.forEach((u) => {
     if (u && u.email) {
       const key = u.email.toLowerCase().trim();
-      if (key.includes('@test') || key.includes('user_block_') || key.includes('user_to_be_blocked') || String(u.userId || '').includes('usr_block_')) {
+      if (
+        isDummyTestUserAccount(key) ||
+        isDummyTestUserAccount(u.userId) ||
+        key.includes('@test') ||
+        key.includes('user_block_') ||
+        key.includes('user_to_be_blocked') ||
+        String(u.userId || '').includes('usr_block_')
+      ) {
         return;
       }
       const existing = map.get(key);
@@ -2229,10 +2255,15 @@ export async function syncCloudUsers(): Promise<PlanUserRecord[]> {
         const data = await res.json();
         if (data && Array.isArray(data.users)) {
           const map = new Map<string, PlanUserRecord>();
-          DEFAULT_GUARANTEED_PLAN_USERS.forEach((u) => map.set(u.email.toLowerCase().trim(), u));
+          DEFAULT_GUARANTEED_PLAN_USERS.forEach((u) => {
+            if (!isDummyTestUserAccount(u.email)) {
+              map.set(u.email.toLowerCase().trim(), u);
+            }
+          });
           data.users.forEach((u: PlanUserRecord) => {
             if (u && u.email) {
               const key = u.email.toLowerCase().trim();
+              if (isDummyTestUserAccount(key) || isDummyTestUserAccount(u.userId)) return;
               const existing = map.get(key);
               map.set(key, { ...existing, ...u });
             }

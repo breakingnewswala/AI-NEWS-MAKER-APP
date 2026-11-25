@@ -3272,7 +3272,13 @@ async function drawGraphic001Canvas(
     // Render headline text using Canonical Layout & Safe-Zone Engine (Part E: Up to 4 lines support)
     const rawHeadline = resolveEffectiveHeadline(card.headline, card.formattedHeadline);
     const fontFam = card.headlineFontFamily || 'Baloo 2';
-    const highlightColor = card.highlightColor || (activeBasicTheme.isLightPlate ? '#DC2626' : (activeBasicTheme.headlineHighlightColor || '#FFE600'));
+    let highlightColor = card.highlightColor || (activeBasicTheme.isLightPlate ? '#DC2626' : (activeBasicTheme.headlineHighlightColor || '#FFE600'));
+    if (activeBasicTheme.isLightPlate) {
+      const lower = (highlightColor || '').toLowerCase();
+      if (!card.highlightColor || lower.includes('ffe600') || lower.includes('facc15') || lower.includes('fde047') || lower.includes('yellow') || lower.includes('fef08a')) {
+        highlightColor = '#DC2626';
+      }
+    }
     const defaultTextColor = activeBasicTheme.isLightPlate ? '#0B132B' : (card.headlineColor || '#FFFFFF');
 
     // Use previewHeadlineLayout to maintain 100% WYSIWYG line-break parity with CardPreview
@@ -7617,8 +7623,15 @@ function drawRenderedHeadlineLines(
       }
 
       // Fill color
+      let tokenHighlight = highlightColor;
+      if (token.isHighlight && isLightBackground) {
+        const lower = (highlightColor || '').toLowerCase();
+        if (lower.includes('ffe600') || lower.includes('facc15') || lower.includes('fde047') || lower.includes('yellow') || lower.includes('fef08a')) {
+          tokenHighlight = '#DC2626';
+        }
+      }
       ctx.fillStyle = token.isHighlight
-        ? highlightColor
+        ? tokenHighlight
         : isLightBackground
         ? '#0A0A0A'
         : '#FFFFFF';

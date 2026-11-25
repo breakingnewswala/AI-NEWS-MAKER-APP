@@ -640,12 +640,18 @@ export function regenerateHeadlineOptionFromFacts(
   }
 
   // 5. Fallback: If no candidate met exact range without duplication, create a clean synthesized variant
+  const opt5Fallback = cleanFacts.length > 1
+    ? `${cleanBase}: ${cleanFacts[0]}, ${cleanFacts[1]}`
+    : (cleanFacts.length === 1
+      ? `${cleanBase}: ${cleanFacts[0]}, मामले में प्रशासनिक स्तर पर विस्तृत समीक्षा के निर्देश दिए गए`
+      : (loc ? `${loc} से विशेष कवरेज: ${cleanBase}, क्षेत्र में संपूर्ण घटनाक्रम पर नजर, प्रशासन द्वारा आवश्यक कार्रवाई जारी` : `मुख्य कवरेज: ${cleanBase}, क्षेत्र में संपूर्ण घटनाक्रम पर नजर, प्रशासन द्वारा आवश्यक कार्रवाई जारी`));
+
   const angleVariants: string[] = [
     cleanBase,
     loc ? `${loc} में प्रशासन अलर्ट, ${cleanBase}` : `मामले में अधिकारियों के निर्देश जारी, ${cleanBase}`,
     loc ? `${loc} से बड़ा अपडेट: ${cleanBase}, क्षेत्र में चर्चा तेज` : `बड़ा असर: ${cleanBase}, लोगों का ध्यान आकर्षित`,
     loc ? `विशेष ग्राउंड रिपोर्ट: ${loc} में ${cleanBase}` : `विशेष पड़ताल: ${cleanBase}, जानिए पूरे मामले से जुड़े तथ्य`,
-    loc ? `मुख्य समाचार (${loc}): ${cleanBase}` : `अहम जानकारी: ${cleanBase}, पूरा घटनाक्रम एक नजर में`,
+    opt5Fallback,
   ];
 
   let chosen = angleVariants[optionIndex % angleVariants.length] || cleanBase;

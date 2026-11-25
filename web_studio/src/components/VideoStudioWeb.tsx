@@ -1504,23 +1504,31 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   // Robust Browser File Download Helper (Direct User Gesture & Blob URL)
   const triggerBrowserDownload = (blob: Blob, filename: string): boolean => {
     try {
-      if ((window as any).AndroidBridge?.downloadVideo) {
+      if (!blob || blob.size < 100) {
+        showToast('❌ अमान्य वीडियो फ़ाइल');
+        return false;
+      }
+
+      // Android Native Bridge Detection (Part 8.1 - Native Android Gallery Storage)
+      if (typeof window !== 'undefined' && (window as any).AndroidBridge) {
         try {
           const reader = new FileReader();
           reader.onloadend = () => {
-            const base64data = reader.result as string;
-            (window as any).AndroidBridge.downloadVideo(base64data, filename);
+            const dataUrl = reader.result as string;
+            if (dataUrl && (window as any).AndroidBridge.downloadVideo) {
+              (window as any).AndroidBridge.downloadVideo(dataUrl, filename);
+            } else if (dataUrl && (window as any).AndroidBridge.saveVideoToGallery) {
+              const base64 = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+              (window as any).AndroidBridge.saveVideoToGallery(base64, filename);
+            }
           };
           reader.readAsDataURL(blob);
-          return true;
-        } catch {
-          const u = URL.createObjectURL(blob);
-          (window as any).AndroidBridge.downloadVideo(u, filename);
-          return true;
+        } catch (androidErr) {
+          console.warn('[VideoExport] AndroidBridge error:', androidErr);
         }
       }
 
-      // Web Share API for Mobile Devices (saves directly to Gallery / Files without navigating away or reloading)
+      // Web Share API for Mobile Devices
       if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
         try {
           const file = new File([blob], filename, { type: blob.type || 'video/mp4' });
@@ -1530,13 +1538,13 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               title: filename,
               text: 'AI News Maker Video Report',
             }).catch(() => {});
-            return true;
           }
         } catch (shareErr) {
           console.warn('[VideoExport] Web Share API fallback to anchor:', shareErr);
         }
       }
 
+      // Universal Browser Direct Download (PC Windows, macOS, Android Chrome, iOS Safari)
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = objectUrl;
@@ -2774,8 +2782,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       return;
     }
 
-    // Daily Video Creation Quota Enforcement (Basic: 2, Advanced: 5, Pro: 15, VIP: 30)
-    if (currentUser?.email && !isEffectiveSuperAdmin(currentUser)) {
+    // Daily Video Creation Quota Enforcement (Basic: 3, Advanced: 7, Pro: 15, VIP: 30)
+    if (currentUser?.email) {
       try {
         const requestId = `req_vid_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
         const targetVidId = initialVideo?.id || `vid_${activeHeadline.slice(0, 30).replace(/\s+/g, '_')}`;
@@ -2793,6 +2801,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         if (quotaRes.status === 403 || quotaData.exhausted) {
           showToast(quotaData.error || 'आज की वीडियो निर्माण दैनिक सीमा समाप्त हो चुकी है। कृपया कल पुनः प्रयास करें या प्लान अपग्रेड करें।');
           return;
+        }
+        if (quotaData && quotaData.success) {
+          window.dispatchEvent(new CustomEvent('ai_news_video_quota_updated', { detail: quotaData }));
         }
       } catch (e) {
         console.warn('Video quota consumption check failed, proceeding safely:', e);
@@ -3082,12 +3093,13 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
       const recordingPromise = new Promise<Blob>((resolve, reject) => {
         let settled = false;
+        // Generous watchdog timer (120 seconds) to prevent premature cutoffs while recording full videos
         const fallbackTimer = setTimeout(() => {
           if (settled) return;
           settled = true;
           const recordedType = recorder.mimeType || mimeType || 'video/webm';
           resolve(new Blob(chunks, { type: recordedType }));
-        }, 5000);
+        }, 120000);
 
         recorder.onstop = () => {
           if (settled) return;
@@ -7234,7 +7246,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 ) : (
                   <button
                     type="button"
-                    onClick={handleDownloadVideo}
+                    onClick={() => handleDownloadVideo(false)}
                     disabled={!quickVideoValidation.isValid || isExporting}
                     className="px-6 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-extrabold text-xs cursor-pointer shadow hover:from-emerald-500 hover:to-teal-400 transition flex items-center gap-1.5 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                   >

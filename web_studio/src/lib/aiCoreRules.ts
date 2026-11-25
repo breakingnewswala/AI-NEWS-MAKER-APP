@@ -186,7 +186,7 @@ export const DAILY_VIDEO_CREATION_LIMITS: Record<string, number> = {
 export function getDailyVideoLimitForPlan(plan: string): { limit: number; displayLabel: string; isUnlimitedDisplay: boolean } {
   const p = (plan || 'basic').toLowerCase().trim();
   if (p.includes('vip') || p.includes('ultra') || p.includes('enterprise') || p.includes('desk')) {
-    return { limit: 30, displayLabel: 'असीमित (अधिकतम 30 वीडियो/दिन)', isUnlimitedDisplay: true };
+    return { limit: 30, displayLabel: '30 वीडियो/दिन', isUnlimitedDisplay: false };
   }
   if (p.includes('pro') || p.includes('trial')) {
     return { limit: 15, displayLabel: '15 वीडियो/दिन', isUnlimitedDisplay: false };

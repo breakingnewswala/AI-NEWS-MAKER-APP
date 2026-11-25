@@ -187,3 +187,4 @@ runTest("R1 & R2: Video Export Fix and Mobile Layout Hierarchy", () => {
 console.log("==================================================================");
 console.log(`🎉 ALL ${passedCount} / ${totalCount} TESTS IN TEST_MILESTONE1_R1_TO_R7 PASSED!`);
 console.log("==================================================================");
+process.exit(0);

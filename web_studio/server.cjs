@@ -12789,12 +12789,13 @@ function regenerateHeadlineOptionFromFacts(arg1, arg2, arg3, arg4, arg5, arg6) {
   if (validCandidates.length > 0) {
     return validCandidates[0].text;
   }
+  const opt5Fallback = cleanFacts.length > 1 ? `${cleanBase}: ${cleanFacts[0]}, ${cleanFacts[1]}` : cleanFacts.length === 1 ? `${cleanBase}: ${cleanFacts[0]}, \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0938\u094D\u0924\u0930 \u092A\u0930 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0938\u092E\u0940\u0915\u094D\u0937\u093E \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u0926\u093F\u090F \u0917\u090F` : loc ? `${loc} \u0938\u0947 \u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C: ${cleanBase}, \u0915\u094D\u0937\u0947\u0924\u094D\u0930 \u092E\u0947\u0902 \u0938\u0902\u092A\u0942\u0930\u094D\u0923 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0928\u091C\u0930, \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u091C\u093E\u0930\u0940` : `\u092E\u0941\u0916\u094D\u092F \u0915\u0935\u0930\u0947\u091C: ${cleanBase}, \u0915\u094D\u0937\u0947\u0924\u094D\u0930 \u092E\u0947\u0902 \u0938\u0902\u092A\u0942\u0930\u094D\u0923 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0928\u091C\u0930, \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u091C\u093E\u0930\u0940`;
   const angleVariants = [
     cleanBase,
     loc ? `${loc} \u092E\u0947\u0902 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0905\u0932\u0930\u094D\u091F, ${cleanBase}` : `\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940, ${cleanBase}`,
     loc ? `${loc} \u0938\u0947 \u092C\u0921\u093C\u093E \u0905\u092A\u0921\u0947\u091F: ${cleanBase}, \u0915\u094D\u0937\u0947\u0924\u094D\u0930 \u092E\u0947\u0902 \u091A\u0930\u094D\u091A\u093E \u0924\u0947\u091C` : `\u092C\u0921\u093C\u093E \u0905\u0938\u0930: ${cleanBase}, \u0932\u094B\u0917\u094B\u0902 \u0915\u093E \u0927\u094D\u092F\u093E\u0928 \u0906\u0915\u0930\u094D\u0937\u093F\u0924`,
     loc ? `\u0935\u093F\u0936\u0947\u0937 \u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0930\u093F\u092A\u094B\u0930\u094D\u091F: ${loc} \u092E\u0947\u0902 ${cleanBase}` : `\u0935\u093F\u0936\u0947\u0937 \u092A\u0921\u093C\u0924\u093E\u0932: ${cleanBase}, \u091C\u093E\u0928\u093F\u090F \u092A\u0942\u0930\u0947 \u092E\u093E\u092E\u0932\u0947 \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0924\u0925\u094D\u092F`,
-    loc ? `\u092E\u0941\u0916\u094D\u092F \u0938\u092E\u093E\u091A\u093E\u0930 (${loc}): ${cleanBase}` : `\u0905\u0939\u092E \u091C\u093E\u0928\u0915\u093E\u0930\u0940: ${cleanBase}, \u092A\u0942\u0930\u093E \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u090F\u0915 \u0928\u091C\u0930 \u092E\u0947\u0902`
+    opt5Fallback
   ];
   let chosen = angleVariants[optionIndex % angleVariants.length] || cleanBase;
   if (loc && !chosen.includes(loc) && optionIndex === 0) {
@@ -15419,8 +15420,12 @@ function saveNewsDatabase(posts) {
   if (centralDb && centralDb.useFirestore) {
     const activeIds = new Set(cleaned.map((p) => String(p.id)));
     for (const post of cleaned) {
+      const cached = centralDb.cache?.news?.get(post.id);
+      const isModified = !cached || JSON.stringify(cached) !== JSON.stringify(post);
       centralDb.cache.news.set(post.id, post);
-      centralDb.saveNewsPost(post.id, post).catch((e) => console.warn("[Firestore News Sync Error]", e.message));
+      if (isModified) {
+        centralDb.saveNewsPost(post.id, post).catch((e) => console.warn("[Firestore News Sync Error]", e.message));
+      }
     }
     if (centralDb.cache?.news) {
       for (const id of Array.from(centralDb.cache.news.keys())) {
@@ -18719,6 +18724,21 @@ function saveUsersAccountsDatabase(accounts) {
   } catch {
   }
 }
+var DUMMY_TEST_USER_EMAILS = /* @__PURE__ */ new Set([
+  "testverifier@ainewsmaker.online",
+  "test_user@ainewsmaker.online",
+  "test_verified_editor@ainewsmaker.online",
+  "reporter.test@ainewsmaker.online"
+]);
+function isDummyTestUserAccount(emailOrKey) {
+  if (!emailOrKey) return false;
+  const lower = emailOrKey.toLowerCase().trim();
+  if (DUMMY_TEST_USER_EMAILS.has(lower)) return true;
+  if (lower.endsWith("@ainewsmaker.online") && (lower.startsWith("test") || lower.startsWith("reporter.test"))) {
+    return true;
+  }
+  return false;
+}
 function loadUsersMasterDatabase() {
   const unique = /* @__PURE__ */ new Map();
   try {
@@ -18730,7 +18750,7 @@ function loadUsersMasterDatabase() {
         if (Array.isArray(parsed)) {
           for (const u of parsed) {
             const key = (u.email || u.userId || u.id || "").toLowerCase().trim();
-            if (!key) continue;
+            if (!key || isDummyTestUserAccount(key) || isDummyTestUserAccount(u.email)) continue;
             if (!unique.has(key)) {
               unique.set(key, u);
             }
@@ -18742,9 +18762,17 @@ function loadUsersMasterDatabase() {
     console.error("Error reading users_master_database.json:", e);
   }
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
-    for (const u of centralDb.cache.users.values()) {
-      const key = (u.email || u.userId || u.id || "").toLowerCase().trim();
+    for (const [docKey, u] of Array.from(centralDb.cache.users.entries())) {
+      const key = (u.email || u.userId || u.id || docKey || "").toLowerCase().trim();
       if (!key) continue;
+      if (isDummyTestUserAccount(key) || isDummyTestUserAccount(u.email) || isDummyTestUserAccount(docKey)) {
+        centralDb.deleteDoc("users", docKey).catch(() => {
+        });
+        centralDb.deleteDoc("user_profiles", docKey).catch(() => {
+        });
+        centralDb.cache.users.delete(docKey);
+        continue;
+      }
       const existing = unique.get(key);
       const isBlocked = Boolean(existing?.isBlocked || u.isBlocked);
       unique.set(key, { ...existing || {}, ...u, isBlocked });
@@ -19612,7 +19640,9 @@ function reconcileAllUsers() {
     console.error("[User Reconciliation Error]:", err);
   }
 }
-reconcileAllUsers();
+if (process.env.RECONCILE_USERS_ON_BOOT === "true") {
+  reconcileAllUsers();
+}
 function runTrialExpirationAndNotificationCheck() {
   const now = Date.now();
   const users = loadUsersMasterDatabase();
@@ -19787,7 +19817,7 @@ _AI News Maker \u0938\u092A\u094B\u0930\u094D\u091F \u091F\u0940\u092E_`;
   }
 }
 runTrialExpirationAndNotificationCheck();
-setInterval(runTrialExpirationAndNotificationCheck, 10 * 60 * 1e3);
+setInterval(runTrialExpirationAndNotificationCheck, 24 * 60 * 60 * 1e3);
 var VIDEOS_DB_FILE = import_path2.default.join(process.cwd(), "videos_database.json");
 var DELETED_VIDEOS_FILE = import_path2.default.join(process.cwd(), "deleted_videos_ids.json");
 function loadDeletedVideoIds() {
@@ -21119,7 +21149,7 @@ setInterval(() => {
   } catch (e) {
     console.warn("[Reminder Scheduler] error:", e);
   }
-}, 3e4);
+}, 3e5);
 app.get("/api/admin/notifications", requireAdminMiddleware, (req, res) => {
   try {
     const userRes = resolveUserTierAndRole(req);
@@ -23605,8 +23635,8 @@ async function executeRssSynchronization() {
       }
       if (trulyNew.length > 0) {
         existingPosts = [...trulyNew, ...existingPosts].slice(0, 300);
+        saveNewsDatabase(existingPosts);
       }
-      saveNewsDatabase(existingPosts);
       saveRssSourcesDatabase(sources);
     }
     const durationMs = Date.now() - startTime;
@@ -23651,8 +23681,12 @@ async function executeRssSynchronization() {
     isRssSyncRunning = false;
   }
 }
-setInterval(executeRssSynchronization, RSS_SYNC_INTERVAL_MS);
-setTimeout(executeRssSynchronization, 15e3);
+if (process.env.AUTO_RSS_SYNC_ENABLED === "true") {
+  setInterval(executeRssSynchronization, RSS_SYNC_INTERVAL_MS);
+  setTimeout(executeRssSynchronization, 15e3);
+} else {
+  console.log("[RSS Sync] Continuous background timer is disabled to prevent idle Cloud Run billing. Trigger via /api/admin/rss-sync or Cloud Scheduler.");
+}
 app.post(["/api/admin/rss-sync", "/api/rss-sync"], requireAdminMiddleware, async (req, res) => {
   try {
     if (!verifyIsAdminUser(req)) {
@@ -23757,8 +23791,8 @@ async function executeWebScrapeSynchronization() {
       }
       if (trulyNew.length > 0) {
         existingPosts = [...trulyNew, ...existingPosts].slice(0, 300);
+        saveNewsDatabase(existingPosts);
       }
-      saveNewsDatabase(existingPosts);
       saveRssSourcesDatabase(sources);
     }
     const durationMs = Date.now() - startTime;
@@ -24169,14 +24203,21 @@ function loadProfilesDatabase() {
   try {
     if (import_fs2.default.existsSync(PROFILES_DB_FILE)) {
       const raw = import_fs2.default.readFileSync(PROFILES_DB_FILE, "utf-8");
-      Object.assign(dict, JSON.parse(raw));
+      const parsed = JSON.parse(raw);
+      for (const [k, v] of Object.entries(parsed)) {
+        if (!isDummyTestUserAccount(k) && !isDummyTestUserAccount(v?.email)) {
+          dict[k] = v;
+        }
+      }
     }
   } catch (err) {
     console.error("Error reading user_profiles_db.json:", err);
   }
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
     for (const [k, v] of centralDb.cache.users.entries()) {
-      dict[k] = v;
+      if (!isDummyTestUserAccount(k) && !isDummyTestUserAccount(v?.email)) {
+        dict[k] = v;
+      }
     }
   }
   return dict;
@@ -28368,7 +28409,9 @@ app.all(["/api/admin/delete-user", "/api/admin/users/:id", "/api/users/:id", "/a
       console.warn("[Tombstone Record Error]:", e.message);
     }
     try {
-      reconcileAllUsers();
+      if (process.env.RECONCILE_USERS_ON_BOOT === "true") {
+        reconcileAllUsers();
+      }
     } catch {
     }
     return res.json({
@@ -29997,70 +30040,7 @@ async function probeGeminiKeyZeroQuota(apiKey) {
     const latencyMs = Date.now() - start;
     const statusCode = resp.status;
     if (resp.ok) {
-      try {
-        const testAiProbe = new import_genai2.GoogleGenAI({
-          apiKey: cleanKey,
-          httpOptions: { headers: { "User-Agent": "ai-news-maker-health-probe-1token" } }
-        });
-        const timeoutCall = new Promise(
-          (_, reject) => setTimeout(() => reject(new Error("Probe token timeout after 12s")), 12e3)
-        );
-        let probeCall = testAiProbe.models.generateContent({
-          model: "gemini-3.1-flash-lite",
-          contents: "1",
-          config: { maxOutputTokens: 1 }
-        });
-        try {
-          await Promise.race([probeCall, timeoutCall]);
-        } catch (firstProbeErr) {
-          try {
-            probeCall = testAiProbe.models.generateContent({
-              model: "gemini-flash-lite-latest",
-              contents: "1",
-              config: { maxOutputTokens: 1 }
-            });
-            await Promise.race([probeCall, timeoutCall]);
-          } catch {
-            probeCall = testAiProbe.models.generateContent({
-              model: "gemini-3.5-flash-lite",
-              contents: "1",
-              config: { maxOutputTokens: 1 }
-            });
-            await Promise.race([probeCall, timeoutCall]);
-          }
-        }
-        return { success: true, state: "READY", latencyMs: Date.now() - start, statusCode: 200 };
-      } catch (genErr) {
-        const genLatency = Date.now() - start;
-        const classified = classifyApiKeyError(genErr);
-        const errMsg2 = String(genErr?.message || "").toLowerCase();
-        const errStatus2 = String(genErr?.status || "");
-        if (classified.type === "quota" || errStatus2 === "RESOURCE_EXHAUSTED" || errMsg2.includes("429") || errMsg2.includes("quota") || errMsg2.includes("rate limit") || errMsg2.includes("too many requests") || errMsg2.includes("resource_exhausted")) {
-          return {
-            success: false,
-            state: errMsg2.includes("quota") || errMsg2.includes("exhausted") || errMsg2.includes("resource_exhausted") ? "QUOTA_EXHAUSTED" : "RATE_LIMITED",
-            latencyMs: genLatency,
-            statusCode: 429,
-            errorMessage: genErr?.message || "\u0926\u0948\u0928\u093F\u0915 \u0915\u094B\u091F\u093E / \u0930\u0947\u091F \u0932\u093F\u092E\u093F\u091F \u0938\u092E\u093E\u092A\u094D\u0924 (Quota or Rate limit exceeded)"
-          };
-        }
-        if (classified.type === "invalid" || errMsg2.includes("invalid") || errMsg2.includes("not valid") || errMsg2.includes("api_key_invalid")) {
-          return {
-            success: false,
-            state: "INVALID_KEY",
-            latencyMs: genLatency,
-            statusCode: 400,
-            errorMessage: genErr?.message || "\u0905\u092E\u093E\u0928\u094D\u092F API Key (Invalid Key)"
-          };
-        }
-        return {
-          success: false,
-          state: "TEMPORARILY_UNAVAILABLE",
-          latencyMs: genLatency,
-          statusCode: 503,
-          errorMessage: genErr?.message || "\u0917\u0942\u0917\u0932 \u091C\u0947\u092E\u093F\u0928\u0940 \u0938\u0947\u0935\u093E \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0930\u0942\u092A \u0938\u0947 \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927"
-        };
-      }
+      return { success: true, state: "READY", latencyMs: Date.now() - start, statusCode: 200 };
     }
     const errBody = await resp.json().catch(() => ({}));
     const errMsg = String(errBody?.error?.message || "").toLowerCase();
@@ -33947,29 +33927,13 @@ ${rawLink}` : rawLink;
         actualProvider = "gemini";
         console.log("[News AI] Successfully generated news content via Gemini AI Pool");
       } catch (geminiError) {
-        console.warn(`[News AI] Gemini Pool error (${geminiError?.status || geminiError?.message?.slice(0, 90)}). Falling back to local non-hallucinatory draft generator...`);
-        try {
-          const fallbackInput = fullArticleContent || effectiveInput || fetchedArticleSnippet || rawInputText || "";
-          parsedData = createLocalNewsFallback(
-            fallbackInput,
-            rawLink,
-            targetMaxLines,
-            extractedArticleMeta,
-            channelUsername
-          );
-          actualProvider = "local-fallback";
-          parsedData.isLocalFallback = true;
-          parsedData.quotaNotice = "AI \u092E\u0949\u0921\u0932 \u092A\u0930 \u0905\u0938\u094D\u0925\u093E\u092F\u0940 \u0932\u094B\u0921 \u092F\u093E \u0915\u094B\u091F\u093E \u0938\u0940\u092E\u093E \u0915\u0947 \u0915\u093E\u0930\u0923 \u0906\u092A\u0915\u0940 \u0938\u093E\u092E\u0917\u094D\u0930\u0940 \u0938\u0947 \u0917\u0948\u0930-\u0915\u093E\u0932\u094D\u092A\u0928\u093F\u0915 \u0938\u094D\u0925\u093E\u0928\u0940\u092F \u0921\u094D\u0930\u093E\u092B\u094D\u091F \u0924\u0948\u092F\u093E\u0930 \u0915\u093F\u092F\u093E \u0917\u092F\u093E \u0939\u0948\u0964";
-        } catch (localFallbackErr) {
-          console.error("[News AI] Local fallback failed after Gemini error:", localFallbackErr);
-          const mapped = mapAiPoolErrorToUserResponse(geminiError);
-          return res.status(mapped.status).json({
-            success: false,
-            code: mapped.errorCode,
-            errorCode: mapped.errorCode,
-            error: mapped.error
-          });
-        }
+        console.warn(`[News AI] Gemini Pool error (${geminiError?.status || geminiError?.message?.slice(0, 90)}). Returning technical error response per Core Rule...`);
+        return res.status(503).json({
+          success: false,
+          code: "AI_SERVICE_UNAVAILABLE",
+          errorCode: "AI_SERVICE_UNAVAILABLE",
+          error: "\u0924\u0915\u0928\u0940\u0915\u0940 \u0938\u092E\u0938\u094D\u092F\u093E \u0915\u0947 \u0915\u093E\u0930\u0923 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u091C\u0928\u0930\u0947\u091F \u0928\u0939\u0940\u0902 \u0939\u094B \u0938\u0915\u0940\u0964 \u0915\u0943\u092A\u092F\u093E \u0915\u0941\u091B \u0938\u092E\u092F \u092C\u093E\u0926 \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964"
+        });
       }
     }
     if (parsedData) {
@@ -38163,7 +38127,7 @@ function saveDailyVideoCreationsDatabase(data) {
 function getDailyVideoLimitForTier(tier = "basic") {
   const clean = (tier || "basic").toLowerCase().trim();
   if (clean.includes("vip") || clean.includes("ultra") || clean.includes("desk") || clean.includes("enterprise")) {
-    return { limit: 30, displayLimit: "Unlimited", isUnlimitedDisplay: true };
+    return { limit: 30, displayLimit: "30", isUnlimitedDisplay: false };
   }
   if (clean.includes("pro") || clean.includes("professional") || clean.includes("trial")) {
     return { limit: 15, displayLimit: "15", isUnlimitedDisplay: false };
@@ -38188,19 +38152,7 @@ app.post("/api/user/consume-video-creation-quota", async (req, res) => {
     );
     const userRole = (targetUser?.role || "").toLowerCase();
     const isMaster = isAuthorizedMasterAdmin(req) || isProtectedAdminAccount(cleanEmail) || userRole === "admin" || userRole === "superadmin";
-    if (isMaster) {
-      return res.json({
-        success: true,
-        unlimited: true,
-        limit: 999999,
-        displayLimit: "Unlimited",
-        isUnlimitedDisplay: true,
-        usedToday: 0,
-        remainingToday: 999999,
-        message: "\u090F\u0921\u092E\u093F\u0928/\u092E\u093E\u0938\u094D\u091F\u0930 \u090F\u0921\u092E\u093F\u0928: \u0905\u0938\u0940\u092E\u093F\u0924 \u0935\u0940\u0921\u093F\u092F\u094B \u0928\u093F\u0930\u094D\u092E\u093E\u0923"
-      });
-    }
-    let tier = targetUser?.tier || "basic";
+    let tier = targetUser?.tier || (isMaster ? "ultra" : "basic");
     if (targetUser) {
       const trialFields = computeTrialFields(targetUser);
       if (trialFields && trialFields.isTrialActive && tier === "basic") {
@@ -38288,18 +38240,7 @@ app.get("/api/user/video-creation-quota", (req, res) => {
     );
     const userRole = (targetUser?.role || "").toLowerCase();
     const isMaster = isAuthorizedMasterAdmin(req) || isProtectedAdminAccount(cleanEmail) || userRole === "admin" || userRole === "superadmin";
-    if (isMaster) {
-      return res.json({
-        success: true,
-        unlimited: true,
-        limit: 999999,
-        displayLimit: "Unlimited",
-        isUnlimitedDisplay: true,
-        usedToday: 0,
-        remainingToday: 999999
-      });
-    }
-    let tier = targetUser?.tier || "basic";
+    let tier = targetUser?.tier || (isMaster ? "ultra" : "basic");
     if (targetUser) {
       const trialFields = computeTrialFields(targetUser);
       if (trialFields && trialFields.isTrialActive && tier === "basic") {
@@ -39347,7 +39288,7 @@ async function startServer() {
         );
         const assetsSubdir = import_path2.default.join(staticDir, "assets");
         if (import_fs2.default.existsSync(assetsSubdir)) {
-          app.use(["/studio/assets", "/admin/assets"], import_express.default.static(assetsSubdir, {
+          app.use(["/assets", "/studio/assets", "/admin/assets"], import_express.default.static(assetsSubdir, {
             setHeaders: (res) => {
               res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
             }
@@ -39568,9 +39509,13 @@ async function startServer() {
         }
       };
       const renderSpaIndexHtml = (req, res) => {
-        res.setHeader("Cache-Control", "no-cache, must-revalidate");
-        res.setHeader("Pragma", "no-cache");
-        res.setHeader("Expires", "0");
+        if (req.path && req.path.startsWith("/admin")) {
+          res.setHeader("Cache-Control", "no-cache, must-revalidate");
+          res.setHeader("Pragma", "no-cache");
+          res.setHeader("Expires", "0");
+        } else {
+          res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+        }
         const indexHtmlPath = import_path2.default.join(distPath, "index.html");
         try {
           let html = import_fs2.default.readFileSync(indexHtmlPath, "utf-8");
@@ -39624,9 +39569,13 @@ async function startServer() {
         if (ext && ext !== ".html") {
           return res.status(404).json({ success: false, error: "Not Found" });
         }
-        res.setHeader("Cache-Control", "no-cache, must-revalidate");
-        res.setHeader("Pragma", "no-cache");
-        res.setHeader("Expires", "0");
+        if (req.path && req.path.startsWith("/admin")) {
+          res.setHeader("Cache-Control", "no-cache, must-revalidate");
+          res.setHeader("Pragma", "no-cache");
+          res.setHeader("Expires", "0");
+        } else {
+          res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+        }
         const indexHtmlPath = import_path2.default.join(distPath, "index.html");
         try {
           let html = import_fs2.default.readFileSync(indexHtmlPath, "utf-8");

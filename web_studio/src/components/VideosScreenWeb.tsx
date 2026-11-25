@@ -167,13 +167,13 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     };
   }, [currentUser?.email]);
 
-  // Part 6: Auto-refresh video feed every 15s when active, visible and online
+  // Part 6: Controlled video refresh on demand or visibility change (3m interval)
   useEffect(() => {
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible' && navigator.onLine && !isSyncingVideos) {
         handleRefreshVideos();
       }
-    }, 15000);
+    }, 180000);
     return () => clearInterval(interval);
   }, [isSyncingVideos]);
 
@@ -181,7 +181,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
     if (isSyncingVideos) return;
     setIsSyncingVideos(true);
     try {
-      window.dispatchEvent(new CustomEvent('ai_news_feed_refresh_needed'));
+      window.dispatchEvent(new CustomEvent('ai_video_feed_refresh_needed'));
     } catch {}
     setTimeout(() => {
       setIsSyncingVideos(false);
@@ -1206,7 +1206,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               className="flex-1 py-2.5 bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 hover:from-red-500 hover:to-amber-500 text-slate-950 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer active:scale-95"
             >
               <Sparkles className="w-3.5 h-3.5 text-slate-950" />
-              <span>इस वीडियो को बनाएँ</span>
+              <span>इस वीडियो को बनाएँ (शेष {remainingVideoQuota})</span>
             </button>
           )}
 
@@ -1269,7 +1269,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
               title="आज का शेष वीडियो कोटा"
             >
               <Film className="w-3.5 h-3.5 text-red-500 shrink-0" />
-              <span className="font-mono font-black">{isVipDesk ? 'असीमित' : remainingVideoQuota}</span>
+              <span className="font-mono font-black">{remainingVideoQuota}</span>
               <span>शेष वीडियो</span>
             </span>
 
@@ -1407,7 +1407,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 <div className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs hover:border-red-400/50 active:scale-95 transition-all duration-150 motion-reduce:transform-none select-none text-center">
                   <div className="flex items-center gap-1 text-red-500 dark:text-red-400 font-black text-sm">
                     <Film className="w-4 h-4 shrink-0 text-red-500" />
-                    <span>{isVipDesk ? 'असीमित' : remainingVideoQuota}</span>
+                    <span>{remainingVideoQuota}</span>
                   </div>
                   <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">शेष वीडियो</span>
                 </div>
@@ -2204,7 +2204,7 @@ export const VideosScreenWeb: React.FC<VideosScreenWebProps> = ({
                 className="px-5 py-3 bg-gradient-to-r from-red-600 via-amber-600 to-yellow-500 hover:from-red-500 hover:to-amber-500 text-slate-950 font-black text-sm rounded-xl shadow-xl flex items-center justify-center gap-2 shrink-0 transition-transform active:scale-95 cursor-pointer"
               >
                 <Sparkles className="w-4 h-4 text-slate-950" />
-                <span>इस वीडियो को बनाएँ</span>
+                <span>इस वीडियो को बनाएँ (शेष {remainingVideoQuota})</span>
               </button>
             </div>
           </div>

@@ -105,10 +105,12 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
     });
 
     const pollInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (!currentUser?.email) return;
       fetchNotificationsFromServer(currentUser?.email).then((list) => {
         setNotificationsList(list);
       });
-    }, 15000);
+    }, 180000);
 
     const handleUpdate = () => {
       setCurrentTier(getUserSubscription().tier);
@@ -197,7 +199,10 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
     };
 
     fetchBalance();
-    const interval = setInterval(fetchBalance, 10000);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      fetchBalance();
+    }, 180000);
     const handleWalletEvent = () => fetchBalance();
 
     window.addEventListener('ai_news_wallet_updated', handleWalletEvent);

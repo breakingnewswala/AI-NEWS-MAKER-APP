@@ -1720,13 +1720,13 @@ export function fitHeadlinesTo5TierRanges(
     let cand = workingHeadlines[i] || workingHeadlines[workingHeadlines.length - 1] || baseText || '';
     cand = removeRedundantClauses(cleanCandidateClause(cand));
 
-    // Strict 12-22 words and <= 115 characters limit (BREAKING NEWS WALA Core Rule)
-    const words = cand.split(/\s+/).filter(Boolean);
-    if (words.length > 22 || countCharacters(cand) > 115) {
-      const targetWords = words.slice(0, 20);
-      cand = stripDanglingHeadlineEndings(targetWords.join(' '));
-      if (countCharacters(cand) > 115) {
-        cand = stripDanglingHeadlineEndings(cand.substring(0, 110).replace(/\s+[^\s]*$/, ''));
+    // Enforce tier-specific maximum bounds (up to tier.max characters, absolute maximum 200 characters)
+    const charLenInitial = countCharacters(cand);
+    if (charLenInitial > tier.max) {
+      const sliced = cand.substring(0, tier.max);
+      const lastSpace = sliced.lastIndexOf(' ');
+      if (lastSpace >= Math.min(tier.min, 45)) {
+        cand = removeRedundantClauses(cleanCandidateClause(sliced.substring(0, lastSpace)));
       }
     }
 
@@ -1773,6 +1773,12 @@ export function fitHeadlinesTo5TierRanges(
       cand = removeRedundantClauses(cleanCandidateClause(cand));
     }
 
+    // Enforce BREAKING NEWS WALA Editorial Standard: strictly <= 22 words per headline
+    const candWords = cand.split(/\s+/).filter(Boolean);
+    if (candWords.length > 22) {
+      cand = stripDanglingHeadlineEndings(candWords.slice(0, 22).join(' '));
+    }
+
     result.push(cand);
   }
 
@@ -1806,7 +1812,7 @@ export function generate5BalancedHeadlineOptions(
 
   const uniqueOptions: string[] = [];
 
-  const clampToEditorialBounds = (text: string, targetMaxWords: number = 20, maxChars: number = 115): string => {
+  const clampToEditorialBounds = (text: string, targetMaxWords: number = 32, maxChars: number = 200): string => {
     let clean = sanitizeHeadlineClean(text);
     if (!clean) return '';
     clean = clean.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, '').trim();
@@ -1822,11 +1828,11 @@ export function generate5BalancedHeadlineOptions(
     return clean;
   };
 
-  const addOptionIfDistinct = (cand: string, threshold: number = 0.88, maxWords: number = 20, maxChars: number = 115) => {
+  const addOptionIfDistinct = (cand: string, threshold: number = 0.88, maxWords: number = 32, maxChars: number = 200) => {
     if (!cand) return;
     const formatted = clampToEditorialBounds(cand, maxWords, maxChars);
     const wordsCount = formatted.split(/\s+/).filter(Boolean).length;
-    if (!formatted || formatted.length < 15 || wordsCount < 4 || countHeadlineVisibleCharacters(formatted) > 125) return;
+    if (!formatted || formatted.length < 15 || wordsCount < 4 || countHeadlineVisibleCharacters(formatted) > 200) return;
     if (uniqueOptions.includes(formatted)) return;
     const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= threshold);
     if (!isTooSimilar) {
@@ -1834,52 +1840,60 @@ export function generate5BalancedHeadlineOptions(
     }
   };
 
-  // Angle 1: High-Impact Breaking News style (12-16 words, ~65-90 chars)
+  // Angle 1: High-Impact Breaking News style (12-16 words, ~80-110 chars)
   const angle1Base = primaryLoc && !cleanBase.startsWith(primaryLoc)
     ? `${primaryLoc} में बड़ी खबर: ${cleanBase}`
     : cleanBase;
-  addOptionIfDistinct(angle1Base, 0.90, 16, 95);
+  addOptionIfDistinct(angle1Base, 0.90, 18, 110);
 
   // Extract clean, bounded fact sentences from source article
   const validFacts = (factSentences || [])
-    .map((s) => clampToEditorialBounds(s, 18, 105))
-    .filter((s) => s.length >= 20 && countHeadlineVisibleCharacters(s) <= 110 && !BYLINE_REGEX.test(s));
+    .map((s) => clampToEditorialBounds(s, 24, 180))
+    .filter((s) => s.length >= 20 && countHeadlineVisibleCharacters(s) <= 200 && !BYLINE_REGEX.test(s));
 
-  // Angle 2: Factual & Informative style (14-18 words, ~75-100 chars)
+  // Angle 2: Factual & Informative style (14-18 words, ~100-130 chars)
   if (validFacts.length > 0) {
-    addOptionIfDistinct(validFacts[0], 0.88, 18, 100);
+    addOptionIfDistinct(validFacts[0], 0.88, 22, 130);
   } else if (primaryLoc && !cleanBase.startsWith(primaryLoc)) {
-    addOptionIfDistinct(`${primaryLoc}: ${cleanBase}`, 0.92, 18, 100);
+    addOptionIfDistinct(`${primaryLoc}: ${cleanBase}`, 0.92, 22, 130);
   } else {
-    addOptionIfDistinct(`${cleanBase} पर महत्वपूर्ण अपडेट`, 0.88, 18, 100);
+    addOptionIfDistinct(`${cleanBase} पर महत्वपूर्ण अपडेट`, 0.88, 22, 130);
   }
 
-  // Angle 3: Action / Administrative Decision style (15-20 words, ~80-110 chars)
+  // Angle 3: Action / Administrative Decision style (15-20 words, ~125-150 chars)
   if (validFacts.length > 1) {
-    addOptionIfDistinct(validFacts[1], 0.88, 20, 110);
+    addOptionIfDistinct(validFacts[1], 0.88, 26, 150);
   } else {
     const actionAngle = primaryLoc
       ? `${primaryLoc} मामला: प्रशासन अलर्ट, जांच व आवश्यक कार्रवाई तेज`
       : `${cleanBase}: प्रशासन स्तर पर जांच और आवश्यक कार्रवाई तेज`;
-    addOptionIfDistinct(actionAngle, 0.88, 20, 110);
+    addOptionIfDistinct(actionAngle, 0.88, 26, 150);
   }
 
-  // Angle 4: Public Impact / Emotion / Question style (16-22 words, ~85-115 chars)
+  // Angle 4: Public Impact / Context style (16-24 words, ~130-160 chars)
   if (validFacts.length > 2) {
-    addOptionIfDistinct(validFacts[2], 0.88, 22, 115);
+    addOptionIfDistinct(validFacts[2], 0.88, 28, 160);
   } else {
     const impactAngle = primaryLoc
       ? `${primaryLoc} में घटना के बाद स्थानीय स्तर पर चर्चाएं तेज, लोगों में रोष`
       : `घटनाक्रम के बाद व्यवस्थाओं पर उठे सवाल, लोगों ने जताई गहरी चिंता`;
-    addOptionIfDistinct(impactAngle, 0.88, 22, 115);
+    addOptionIfDistinct(impactAngle, 0.88, 28, 160);
   }
 
-  // Angle 5: Crisp Short Viral style (12-18 words, ~65-95 chars)
-  const shortBase = cleanBase.replace(/^(?:बड़ा फैसला|बड़ी खबर|ताज़ा खबर|विशेष|बड़ा अपडेट|अपडेट|मामला):\s*/, '');
-  const viralAngle = primaryLoc && !shortBase.includes(primaryLoc)
-    ? `${primaryLoc} से ग्राउंड रिपोर्ट: ${shortBase}`
-    : shortBase;
-  addOptionIfDistinct(viralAngle, 0.88, 18, 95);
+  // Angle 5: Comprehensive, Impactful Editorial Headline (150-200 chars target)
+  let angle5Candidate = '';
+  if (validFacts.length > 0) {
+    const mainAction = validFacts[0];
+    const contextFact = validFacts.length > 1 ? validFacts[1] : '';
+    angle5Candidate = contextFact
+      ? `${cleanBase}: ${mainAction}, ${contextFact}`
+      : (primaryLoc ? `${primaryLoc} में ${cleanBase}: ${mainAction}` : `${cleanBase}: ${mainAction}`);
+  } else {
+    angle5Candidate = primaryLoc
+      ? `${primaryLoc} से विस्तृत रिपोर्ट: ${cleanBase}, घटनाक्रम को लेकर प्रशासन व अधिकारियों की समीक्षा बैठक में महत्वपूर्ण चर्चा`
+      : `${cleanBase}: घटनाक्रम को लेकर प्रशासनिक स्तर पर समीक्षा, महत्वपूर्ण दिशा-निर्देश जारी किए गए`;
+  }
+  addOptionIfDistinct(angle5Candidate, 0.85, 32, 200);
 
   // Diverse journalistic angles if still fewer than 5:
   if (uniqueOptions.length < 5) {

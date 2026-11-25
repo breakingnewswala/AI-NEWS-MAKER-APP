@@ -462,9 +462,10 @@ export const WhatsAppLiveInbox: React.FC<WhatsAppLiveInboxProps> = ({ currentUse
     if (activeTab === 'inbox') {
       fetchConversations();
       const interval = setInterval(() => {
+        if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
         fetchConversations(true);
         if (selectedConvId) fetchMessages(selectedConvId, true);
-      }, 4000);
+      }, 25000);
       return () => clearInterval(interval);
     }
   }, [filter, search, selectedConvId, activeTab]);

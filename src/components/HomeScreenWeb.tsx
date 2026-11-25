@@ -661,11 +661,14 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     }
   });
 
+  // Persistent impressions tracking to avoid re-firing impressions on every feed update
+  const seenImpressionsRef = useRef<Set<string>>(new Set());
+
   // Viewport Dwell Observer for Qualifying Impressions (1.5s dwell threshold)
   useEffect(() => {
     if (typeof window === 'undefined' || typeof IntersectionObserver === 'undefined') return;
 
-    const seenImpressions = new Set<string>();
+    const seenImpressions = seenImpressionsRef.current;
     const dwellTimers = new Map<string, any>();
 
     const observer = new IntersectionObserver(
@@ -757,14 +760,14 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     };
   }, [currentUser?.email]);
 
-  // Part 6: Auto-refresh data every 15s when page is active, tab is visible, and online, without resetting scroll
+  // Part 6: Controlled auto-refresh every 3 minutes when page is active, tab is visible, and online
   useEffect(() => {
     if (!onRefreshLiveNews) return;
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible' && navigator.onLine && !isSyncingNews) {
         onRefreshLiveNews();
       }
-    }, 15000);
+    }, 180000);
     return () => clearInterval(interval);
   }, [onRefreshLiveNews, isSyncingNews]);
 
@@ -1874,24 +1877,10 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
     }).catch(() => {});
   }, []);
 
-  // Requirement: RSS Feed auto-sync every 10 minutes (600,000 ms)
+  // Keep active RSS posts synchronized from cached data
   useEffect(() => {
-    const handleTenMinuteRssSync = async () => {
-      try {
-        if (onRefreshLiveNews) {
-          await onRefreshLiveNews();
-        } else {
-          await syncAllSourcesLive().catch(() => {});
-        }
-        setActiveRssPosts(getAllSyncedRssNewsPosts());
-      } catch (err) {
-        console.error('[RSS 10-Min AutoSync] error:', err);
-      }
-    };
-
-    const tenMinuteInterval = setInterval(handleTenMinuteRssSync, 10 * 60 * 1000);
-    return () => clearInterval(tenMinuteInterval);
-  }, [onRefreshLiveNews]);
+    setActiveRssPosts(getAllSyncedRssNewsPosts());
+  }, []);
 
   useEffect(() => {
     // Keep approved IDs strictly in sync with authoritative server posts

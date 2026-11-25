@@ -93,7 +93,7 @@ p,
 .animate-marquee-continuous {
   display: flex;
   width: max-content;
-  animation: marquee-scroll 55s linear infinite;
+  animation: marquee-scroll 95s linear infinite;
   will-change: transform;
 }
 

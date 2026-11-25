@@ -2978,8 +2978,12 @@ function saveNewsDatabase(posts: StoredNewsPost[]): boolean {
   if (centralDb && centralDb.useFirestore) {
     const activeIds = new Set(cleaned.map((p) => String(p.id)));
     for (const post of cleaned) {
+      const cached = centralDb.cache?.news?.get(post.id);
+      const isModified = !cached || JSON.stringify(cached) !== JSON.stringify(post);
       centralDb.cache.news.set(post.id, post);
-      centralDb.saveNewsPost(post.id, post).catch((e: any) => console.warn("[Firestore News Sync Error]", e.message));
+      if (isModified) {
+        centralDb.saveNewsPost(post.id, post).catch((e: any) => console.warn("[Firestore News Sync Error]", e.message));
+      }
     }
     if (centralDb.cache?.news) {
       for (const id of Array.from(centralDb.cache.news.keys())) {
@@ -7207,6 +7211,23 @@ function saveUsersAccountsDatabase(accounts: any[]): void {
   } catch {}
 }
 
+const DUMMY_TEST_USER_EMAILS = new Set([
+  'testverifier@ainewsmaker.online',
+  'test_user@ainewsmaker.online',
+  'test_verified_editor@ainewsmaker.online',
+  'reporter.test@ainewsmaker.online',
+]);
+
+function isDummyTestUserAccount(emailOrKey?: string): boolean {
+  if (!emailOrKey) return false;
+  const lower = emailOrKey.toLowerCase().trim();
+  if (DUMMY_TEST_USER_EMAILS.has(lower)) return true;
+  if (lower.endsWith('@ainewsmaker.online') && (lower.startsWith('test') || lower.startsWith('reporter.test'))) {
+    return true;
+  }
+  return false;
+}
+
 function loadUsersMasterDatabase(): AuthoritativeUser[] {
   const unique = new Map<string, any>();
   try {
@@ -7218,7 +7239,7 @@ function loadUsersMasterDatabase(): AuthoritativeUser[] {
         if (Array.isArray(parsed)) {
           for (const u of parsed) {
             const key = (u.email || u.userId || (u as any).id || '').toLowerCase().trim();
-            if (!key) continue;
+            if (!key || isDummyTestUserAccount(key) || isDummyTestUserAccount(u.email)) continue;
             if (!unique.has(key)) {
               unique.set(key, u);
             }
@@ -7231,9 +7252,16 @@ function loadUsersMasterDatabase(): AuthoritativeUser[] {
   }
 
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
-    for (const u of centralDb.cache.users.values()) {
-      const key = (u.email || u.userId || (u as any).id || '').toLowerCase().trim();
+    for (const [docKey, u] of Array.from(centralDb.cache.users.entries())) {
+      const key = (u.email || u.userId || (u as any).id || docKey || '').toLowerCase().trim();
       if (!key) continue;
+      if (isDummyTestUserAccount(key) || isDummyTestUserAccount(u.email) || isDummyTestUserAccount(docKey)) {
+        // Permanently purge dummy test accounts from Firestore
+        centralDb.deleteDoc("users", docKey).catch(() => {});
+        centralDb.deleteDoc("user_profiles", docKey).catch(() => {});
+        centralDb.cache.users.delete(docKey);
+        continue;
+      }
       const existing = unique.get(key);
       const isBlocked = Boolean(existing?.isBlocked || u.isBlocked);
       unique.set(key, { ...(existing || {}), ...u, isBlocked });
@@ -8213,7 +8241,10 @@ function reconcileAllUsers() {
   }
 }
 
-reconcileAllUsers();
+// Controlled User Reconciliation: run on-demand or explicitly via migration flag, avoiding cold-start Firestore write storms
+if (process.env.RECONCILE_USERS_ON_BOOT === 'true') {
+  reconcileAllUsers();
+}
 
 function runTrialExpirationAndNotificationCheck() {
   const now = Date.now();
@@ -8393,7 +8424,8 @@ function runTrialExpirationAndNotificationCheck() {
 }
 
 runTrialExpirationAndNotificationCheck();
-setInterval(runTrialExpirationAndNotificationCheck, 10 * 60 * 1000);
+// Run trial expiration once daily (24h) instead of keeping containers hot every 10 minutes
+setInterval(runTrialExpirationAndNotificationCheck, 24 * 60 * 60 * 1000);
 
 // ============================================================================
 // REAL-TIME VIDEOS / REELS SERVER DATABASE (videos_database.json)
@@ -9934,7 +9966,7 @@ app.post("/api/reminders", async (req, res) => {
   }
 });
 
-// Background Scheduler for Due Reminders (runs every 30 seconds)
+// Background Scheduler for Due Reminders (runs every 5 minutes)
 setInterval(() => {
   try {
     const reminders = loadUserRemindersDatabase();
@@ -9972,7 +10004,7 @@ setInterval(() => {
   } catch (e) {
     console.warn("[Reminder Scheduler] error:", e);
   }
-}, 30000);
+}, 300000);
 
 app.get("/api/admin/notifications", requireAdminMiddleware, (req, res) => {
   try {
@@ -12872,8 +12904,8 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
 
       if (trulyNew.length > 0) {
         existingPosts = [...trulyNew, ...existingPosts].slice(0, 300);
+        saveNewsDatabase(existingPosts);
       }
-      saveNewsDatabase(existingPosts);
       saveRssSourcesDatabase(sources);
     }
 
@@ -12920,9 +12952,13 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
   }
 }
 
-// 15-Minute Permanent Backend Auto-Sync Scheduler (Part 1, Section 2.1)
-setInterval(executeRssSynchronization, RSS_SYNC_INTERVAL_MS);
-setTimeout(executeRssSynchronization, 15000);
+// Controlled Backend Auto-Sync Scheduler: only active when explicitly enabled to prevent runaway idle server charges
+if (process.env.AUTO_RSS_SYNC_ENABLED === 'true') {
+  setInterval(executeRssSynchronization, RSS_SYNC_INTERVAL_MS);
+  setTimeout(executeRssSynchronization, 15000);
+} else {
+  console.log('[RSS Sync] Continuous background timer is disabled to prevent idle Cloud Run billing. Trigger via /api/admin/rss-sync or Cloud Scheduler.');
+}
 
 // 3. POST live sync RSS & Web links -> Production Database (Manual Sync API)
 app.post(["/api/admin/rss-sync", "/api/rss-sync"], requireAdminMiddleware, async (req, res) => {
@@ -13040,8 +13076,8 @@ async function executeWebScrapeSynchronization(): Promise<RssSyncResult> {
 
       if (trulyNew.length > 0) {
         existingPosts = [...trulyNew, ...existingPosts].slice(0, 300);
+        saveNewsDatabase(existingPosts);
       }
-      saveNewsDatabase(existingPosts);
       saveRssSourcesDatabase(sources);
     }
 
@@ -13564,14 +13600,21 @@ function loadProfilesDatabase(): Record<string, StoredUserProfile> {
   try {
     if (fs.existsSync(PROFILES_DB_FILE)) {
       const raw = fs.readFileSync(PROFILES_DB_FILE, "utf-8");
-      Object.assign(dict, JSON.parse(raw));
+      const parsed = JSON.parse(raw);
+      for (const [k, v] of Object.entries(parsed)) {
+        if (!isDummyTestUserAccount(k) && !isDummyTestUserAccount((v as any)?.email)) {
+          dict[k] = v as any;
+        }
+      }
     }
   } catch (err) {
     console.error("Error reading user_profiles_db.json:", err);
   }
   if (centralDb && centralDb.useFirestore && centralDb.isInitialized && centralDb.cache.users.size > 0) {
     for (const [k, v] of centralDb.cache.users.entries()) {
-      dict[k] = v as any;
+      if (!isDummyTestUserAccount(k) && !isDummyTestUserAccount((v as any)?.email)) {
+        dict[k] = v as any;
+      }
     }
   }
   return dict;
@@ -18565,7 +18608,10 @@ app.all(["/api/admin/delete-user", "/api/admin/users/:id", "/api/users/:id", "/a
 
     // 11. Run reconcileAllUsers() so the system immediately purges any residual references
     try {
-      reconcileAllUsers();
+      // Controlled User Reconciliation: run on-demand or explicitly via migration flag, avoiding cold-start Firestore write storms
+if (process.env.RECONCILE_USERS_ON_BOOT === 'true') {
+  reconcileAllUsers();
+}
     } catch {}
 
     return res.json({
@@ -20720,82 +20766,10 @@ async function probeGeminiKeyZeroQuota(apiKey: string): Promise<{
     const latencyMs = Date.now() - start;
     const statusCode = resp.status;
     if (resp.ok) {
-      // Models list metadata succeeded; now run minimal 1-token test to definitively verify generateContent quota
-      try {
-        const testAiProbe = new GoogleGenAI({
-          apiKey: cleanKey,
-          httpOptions: { headers: { "User-Agent": "ai-news-maker-health-probe-1token" } },
-        });
-        const timeoutCall = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Probe token timeout after 12s")), 12000)
-        );
-        let probeCall = testAiProbe.models.generateContent({
-          model: "gemini-3.1-flash-lite",
-          contents: "1",
-          config: { maxOutputTokens: 1 },
-        });
-        try {
-          await Promise.race([probeCall, timeoutCall]);
-        } catch (firstProbeErr: any) {
-          try {
-            probeCall = testAiProbe.models.generateContent({
-              model: "gemini-flash-lite-latest",
-              contents: "1",
-              config: { maxOutputTokens: 1 },
-            });
-            await Promise.race([probeCall, timeoutCall]);
-          } catch {
-            probeCall = testAiProbe.models.generateContent({
-              model: "gemini-3.5-flash-lite",
-              contents: "1",
-              config: { maxOutputTokens: 1 },
-            });
-            await Promise.race([probeCall, timeoutCall]);
-          }
-        }
-        return { success: true, state: "READY", latencyMs: Date.now() - start, statusCode: 200 };
-      } catch (genErr: any) {
-        const genLatency = Date.now() - start;
-        const classified = classifyApiKeyError(genErr);
-        const errMsg = String(genErr?.message || "").toLowerCase();
-        const errStatus = String(genErr?.status || "");
-        if (
-          classified.type === "quota" ||
-          errStatus === "RESOURCE_EXHAUSTED" ||
-          errMsg.includes("429") ||
-          errMsg.includes("quota") ||
-          errMsg.includes("rate limit") ||
-          errMsg.includes("too many requests") ||
-          errMsg.includes("resource_exhausted")
-        ) {
-          return {
-            success: false,
-            state: (errMsg.includes("quota") || errMsg.includes("exhausted") || errMsg.includes("resource_exhausted"))
-              ? "QUOTA_EXHAUSTED"
-              : "RATE_LIMITED",
-            latencyMs: genLatency,
-            statusCode: 429,
-            errorMessage: genErr?.message || "दैनिक कोटा / रेट लिमिट समाप्त (Quota or Rate limit exceeded)",
-          };
-        }
-        if (classified.type === "invalid" || errMsg.includes("invalid") || errMsg.includes("not valid") || errMsg.includes("api_key_invalid")) {
-          return {
-            success: false,
-            state: "INVALID_KEY",
-            latencyMs: genLatency,
-            statusCode: 400,
-            errorMessage: genErr?.message || "अमान्य API Key (Invalid Key)",
-          };
-        }
-        return {
-          success: false,
-          state: "TEMPORARILY_UNAVAILABLE",
-          latencyMs: genLatency,
-          statusCode: 503,
-          errorMessage: genErr?.message || "गूगल जेमिनी सेवा अस्थायी रूप से अनुपलब्ध",
-        };
-      }
+      // Models list metadata succeeded; key is valid and active without burning content generation quota
+      return { success: true, state: "READY", latencyMs: Date.now() - start, statusCode: 200 };
     }
+
     const errBody = await resp.json().catch(() => ({}));
     const errMsg = String(errBody?.error?.message || "").toLowerCase();
     const errStatus = String(errBody?.error?.status || "");
@@ -25997,29 +25971,13 @@ app.post("/api/process-news-command", enforceUserAccessMiddleware, async (req, r
         actualProvider = "gemini";
         console.log("[News AI] Successfully generated news content via Gemini AI Pool");
       } catch (geminiError: any) {
-        console.warn(`[News AI] Gemini Pool error (${geminiError?.status || geminiError?.message?.slice(0, 90)}). Falling back to local non-hallucinatory draft generator...`);
-        try {
-          const fallbackInput = fullArticleContent || effectiveInput || fetchedArticleSnippet || rawInputText || "";
-          parsedData = createLocalNewsFallback(
-            fallbackInput,
-            rawLink,
-            targetMaxLines,
-            extractedArticleMeta,
-            channelUsername
-          );
-          actualProvider = "local-fallback";
-          parsedData.isLocalFallback = true;
-          parsedData.quotaNotice = "AI मॉडल पर अस्थायी लोड या कोटा सीमा के कारण आपकी सामग्री से गैर-काल्पनिक स्थानीय ड्राफ्ट तैयार किया गया है।";
-        } catch (localFallbackErr: any) {
-          console.error("[News AI] Local fallback failed after Gemini error:", localFallbackErr);
-          const mapped = mapAiPoolErrorToUserResponse(geminiError);
-          return res.status(mapped.status).json({
-            success: false,
-            code: mapped.errorCode,
-            errorCode: mapped.errorCode,
-            error: mapped.error,
-          });
-        }
+        console.warn(`[News AI] Gemini Pool error (${geminiError?.status || geminiError?.message?.slice(0, 90)}). Returning technical error response per Core Rule...`);
+        return res.status(503).json({
+          success: false,
+          code: "AI_SERVICE_UNAVAILABLE",
+          errorCode: "AI_SERVICE_UNAVAILABLE",
+          error: "तकनीकी समस्या के कारण हेडलाइन जनरेट नहीं हो सकी। कृपया कुछ समय बाद पुनः प्रयास करें।",
+        });
       }
     }
 
@@ -30971,7 +30929,7 @@ function saveDailyVideoCreationsDatabase(data: Record<string, Record<string, { c
 function getDailyVideoLimitForTier(tier = "basic"): { limit: number; displayLimit: string; isUnlimitedDisplay: boolean } {
   const clean = (tier || "basic").toLowerCase().trim();
   if (clean.includes("vip") || clean.includes("ultra") || clean.includes("desk") || clean.includes("enterprise")) {
-    return { limit: 30, displayLimit: "Unlimited", isUnlimitedDisplay: true };
+    return { limit: 30, displayLimit: "30", isUnlimitedDisplay: false };
   }
   if (clean.includes("pro") || clean.includes("professional") || clean.includes("trial")) {
     return { limit: 15, displayLimit: "15", isUnlimitedDisplay: false };
@@ -31001,20 +30959,7 @@ app.post("/api/user/consume-video-creation-quota", async (req, res) => {
     const userRole = (targetUser?.role || "").toLowerCase();
     const isMaster = isAuthorizedMasterAdmin(req) || isProtectedAdminAccount(cleanEmail) || userRole === 'admin' || userRole === 'superadmin';
 
-    if (isMaster) {
-      return res.json({
-        success: true,
-        unlimited: true,
-        limit: 999999,
-        displayLimit: "Unlimited",
-        isUnlimitedDisplay: true,
-        usedToday: 0,
-        remainingToday: 999999,
-        message: "एडमिन/मास्टर एडमिन: असीमित वीडियो निर्माण",
-      });
-    }
-
-    let tier = targetUser?.tier || "basic";
+    let tier = targetUser?.tier || (isMaster ? "ultra" : "basic");
     if (targetUser) {
       const trialFields = computeTrialFields(targetUser);
       if (trialFields && trialFields.isTrialActive && tier === "basic") {
@@ -31117,19 +31062,7 @@ app.get("/api/user/video-creation-quota", (req, res) => {
     const userRole = (targetUser?.role || "").toLowerCase();
     const isMaster = isAuthorizedMasterAdmin(req) || isProtectedAdminAccount(cleanEmail) || userRole === 'admin' || userRole === 'superadmin';
 
-    if (isMaster) {
-      return res.json({
-        success: true,
-        unlimited: true,
-        limit: 999999,
-        displayLimit: "Unlimited",
-        isUnlimitedDisplay: true,
-        usedToday: 0,
-        remainingToday: 999999,
-      });
-    }
-
-    let tier = targetUser?.tier || "basic";
+    let tier = targetUser?.tier || (isMaster ? "ultra" : "basic");
     if (targetUser) {
       const trialFields = computeTrialFields(targetUser);
       if (trialFields && trialFields.isTrialActive && tier === "basic") {
@@ -32408,7 +32341,7 @@ async function startServer() {
         );
         const assetsSubdir = path.join(staticDir, "assets");
         if (fs.existsSync(assetsSubdir)) {
-          app.use(["/studio/assets", "/admin/assets"], express.static(assetsSubdir, {
+          app.use(["/assets", "/studio/assets", "/admin/assets"], express.static(assetsSubdir, {
             setHeaders: (res) => {
               res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
             }
@@ -32653,9 +32586,13 @@ async function startServer() {
       };
 
       const renderSpaIndexHtml = (req: any, res: any) => {
-        res.setHeader("Cache-Control", "no-cache, must-revalidate");
-        res.setHeader("Pragma", "no-cache");
-        res.setHeader("Expires", "0");
+        if (req.path && req.path.startsWith("/admin")) {
+          res.setHeader("Cache-Control", "no-cache, must-revalidate");
+          res.setHeader("Pragma", "no-cache");
+          res.setHeader("Expires", "0");
+        } else {
+          res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+        }
         const indexHtmlPath = path.join(distPath, "index.html");
         try {
           let html = fs.readFileSync(indexHtmlPath, "utf-8");
@@ -32716,9 +32653,13 @@ async function startServer() {
         if (ext && ext !== ".html") {
           return res.status(404).json({ success: false, error: "Not Found" });
         }
-        res.setHeader("Cache-Control", "no-cache, must-revalidate");
-        res.setHeader("Pragma", "no-cache");
-        res.setHeader("Expires", "0");
+        if (req.path && req.path.startsWith("/admin")) {
+          res.setHeader("Cache-Control", "no-cache, must-revalidate");
+          res.setHeader("Pragma", "no-cache");
+          res.setHeader("Expires", "0");
+        } else {
+          res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=300");
+        }
 
         const indexHtmlPath = path.join(distPath, "index.html");
         try {

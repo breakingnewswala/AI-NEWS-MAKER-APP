@@ -1120,40 +1120,12 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         return;
       }
 
-      // Generate 5 real fallback headlines from the news item so user NEVER sees placeholder instructions!
-      const candidateTitle = cleanHeadlineText(
-        extraData?.title ||
-        card.originalHeadline ||
-        (card.headline && !card.headline.includes('कृपया स्टेप 3') && !card.headline.includes('अपनी मुख्य खबर का शीर्षक') ? card.headline : '') ||
-        ''
-      );
-      const candidateSummary = (extraData?.summary || extraData?.fullNews || card.summary || candidateTitle);
-
-      if (candidateTitle) {
-        const factSentences = candidateSummary
-          .split(/[।\n]+|\.\s+/)
-          .map((x: string) => cleanHeadlineText(x).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
-          .filter((x: string) => x.length > 15 && /[\u0900-\u097F]/.test(x));
-        const effectiveLoc = extraData?.location || card.location || '';
-        const fallback5 = fitHeadlinesTo5TierRanges([candidateTitle], factSentences, candidateTitle, effectiveLoc).slice(0, 5);
-
-        if (fallback5.length > 0) {
-          setHeadlineOptions(fallback5);
-          setSelectedHeadlineIndex(0);
-          onChange({
-            headline: fallback5[0],
-            formattedHeadline: fallback5[0],
-            headlineOptions: fallback5,
-            summary: card.summary || candidateSummary,
-          });
-        }
-      }
-
+      // Per Core Rule: Do NOT generate dummy/corrupted fallback headlines on AI error
       const rawMsg = err?.message || '';
       const isTimeoutOrAbort = /AbortError|Failed to fetch|NetworkError|signal is aborted|timed out|timeout/i.test(rawMsg);
       const errorMsg = isTimeoutOrAbort
         ? 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समय अधिक लगा (Timeout)। कृपया पुनः प्रयास करें।'
-        : (rawMsg || 'समाचार प्राप्त करने या AI सेवा से संपर्क करने में समस्या आई है। कृपया पुनः प्रयास करें।');
+        : (rawMsg.includes('तकनीकी समस्या') ? rawMsg : (rawMsg || 'तकनीकी समस्या के कारण हेडलाइन जनरेट नहीं हो सकी। कृपया कुछ समय बाद पुनः प्रयास करें।'));
       setError(errorMsg);
       setLoading(false);
       isExecutingRef.current = false;

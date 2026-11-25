@@ -713,7 +713,18 @@ export const CardPreview: React.FC<CardPreviewProps> = ({ card: rawCard, scale =
         ? '#DC2626'
         : '#FFE600'));
 
-    const highlightColor = customHighlight || card.highlightColor || defaultTemplateHighlight;
+    const isYellowish = (c?: string) => {
+      if (!c) return false;
+      const lower = c.toLowerCase();
+      return lower.includes('ffe600') || lower.includes('facc15') || lower.includes('fde047') || lower.includes('fef08a') || lower.includes('yellow') || lower.includes('eab308') || lower.includes('f59e0b');
+    };
+
+    let highlightColor = customHighlight || card.highlightColor || defaultTemplateHighlight;
+    if (isLightTemplate || (isBasicTheme && basicTheme.isLightPlate)) {
+      if (!customHighlight || isYellowish(highlightColor)) {
+        highlightColor = '#DC2626';
+      }
+    }
     const isBlackText = baseTextColor.toLowerCase() === '#000000' || baseTextColor.toLowerCase() === 'black' || baseTextColor.toLowerCase() === '#0f172a' || baseTextColor.toLowerCase() === '#0b132b';
 
     const effectiveFontSize = Math.max(7, Math.round(canonicalLayout.fontSize * previewScale));

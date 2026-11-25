@@ -434,11 +434,12 @@ export const AdminApiKeysManager: React.FC<{ currentUser?: any }> = ({ currentUs
     };
     window.addEventListener('ai_news_admin_auth_success', handleAuthSuccess);
 
-    // Auto refresh every 30s to update cooldown timers & health snapshot
+    // Auto refresh every 120s when visible to update cooldown timers & health snapshot
     const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
       fetchKeysData(true);
       fetchHealthStatus();
-    }, 30000);
+    }, 120000);
     return () => {
       clearInterval(timer);
       window.removeEventListener('ai_news_admin_auth_success', handleAuthSuccess);

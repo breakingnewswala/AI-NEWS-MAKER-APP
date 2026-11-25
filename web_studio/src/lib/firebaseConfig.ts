@@ -84,8 +84,8 @@ export async function testConnection() {
   }
 }
 
-// Automatically test connection upon module load
-testConnection();
+// Automatically test connection upon module load (disabled to avoid unneeded Firestore read charges)
+// testConnection();
 
 /**
  * Fetch latest news posts from Firebase Storage

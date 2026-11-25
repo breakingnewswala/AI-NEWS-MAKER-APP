@@ -105,6 +105,7 @@ import {
   rejectLogoChangeRequest,
   registerOrUpdateUser,
   adminRemoveUserSubscription,
+  isDummyTestUserAccount,
 } from '../lib/userPlanManager';
 import {
   getAllIndianStates,
@@ -733,10 +734,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
     fetchLogoReqs();
     fetchAdminAllSubUsers();
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
       fetchUsers();
       fetchLogoReqs();
       fetchAdminAllSubUsers();
-    }, 4000);
+    }, 60000);
     const handleLocalUsersSync = () => {
       if (isMounted) setPlanUsers(getPlanUsers());
     };
@@ -1357,10 +1359,11 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
       }
     }).catch(() => {});
 
-    // 10-second real-time synchronization interval
+    // 60-second real-time synchronization interval
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
       handleSyncUsers();
-    }, 10000);
+    }, 60000);
 
     // Sync immediately when tab becomes visible
     const handleVisibility = () => {
@@ -4181,6 +4184,9 @@ export const AdminPlansAndPackagesManager: React.FC<AdminPlansAndPackagesManager
                             if (userTierCategory === 'VIP' && normTier !== 'ultra' && normTier !== 'vip') return false;
                           }
                         }
+
+                        // Exclude dummy test users
+                        if (isDummyTestUserAccount(u.email) || isDummyTestUserAccount(u.userId)) return false;
 
                         // Filter by status
                         if (userStatusFilter === 'active' && u.isBlocked) return false;

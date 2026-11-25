@@ -1180,7 +1180,7 @@ export default function App() {
 
   useEffect(() => {
     fetchLiveNews();
-    // Silent background auto-refresh every 15 seconds (15,000ms) without disrupting editor or scroll
+    // Controlled background auto-refresh every 3 minutes (180,000ms) when tab is active and visible
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
       if (isFetchingNewsRef.current) return;
@@ -1188,7 +1188,7 @@ export default function App() {
       fetchLiveNews().finally(() => {
         isFetchingNewsRef.current = false;
       });
-    }, 15000);
+    }, 180000);
     const handleNewsApproved = () => {
       fetchLiveNews();
     };
@@ -1304,15 +1304,16 @@ export default function App() {
 
   useEffect(() => {
     fetchLiveVideos();
-    // Silent background auto-refresh every 15 seconds (15,000ms)
+    // Controlled background auto-refresh every 3 minutes (180,000ms) when tab is active and visible
     const interval = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+      if (currentTab !== 'videos') return;
       if (isFetchingVideosRef.current) return;
       isFetchingVideosRef.current = true;
       fetchLiveVideos().finally(() => {
         isFetchingVideosRef.current = false;
       });
-    }, 15000);
+    }, 180000);
     const handleVideoEvent = () => {
       fetchLiveVideos();
     };
@@ -2623,8 +2624,6 @@ export default function App() {
 
   useEffect(() => {
     fetchVersionInfo();
-    const interval = setInterval(fetchVersionInfo, 5 * 60 * 1000);
-    return () => clearInterval(interval);
   }, []);
 
   const showToast = (msg: string) => {
@@ -4045,7 +4044,7 @@ export default function App() {
   }, [posts]);
 
   const handleOpenStudioWithVideo = async (vid: VideoFeedItem) => {
-    if (currentUser?.email && !isUserAdmin(currentUser)) {
+    if (currentUser?.email) {
       try {
         const requestId = `req_vid_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
         const res = await fetch(getApiBaseUrl() + '/api/user/consume-video-creation-quota', {
@@ -4062,6 +4061,9 @@ export default function App() {
         if (res.status === 403 || data.exhausted) {
           alert(data.error || 'आज की वीडियो निर्माण दैनिक सीमा समाप्त हो चुकी है। कृपया कल पुनः प्रयास करें या प्लान अपग्रेड करें।');
           return;
+        }
+        if (data && data.success) {
+          window.dispatchEvent(new CustomEvent('ai_news_video_quota_updated', { detail: data }));
         }
       } catch (e) {
         console.warn('Video quota consumption check error:', e);
@@ -5183,7 +5185,6 @@ export default function App() {
           onEditNews={handleEditNews}
           onDeleteNews={handleDeleteNews}
           onRefreshLiveNews={async () => {
-            await syncAllSourcesLive().catch(() => {});
             await fetchLiveNews();
           }}
           isSyncingNews={isSyncingNews}
