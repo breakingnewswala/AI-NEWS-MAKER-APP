@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.app.Activity
+import android.app.DownloadManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentValues
@@ -58,7 +59,11 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.BufferedOutputStream
 import java.io.File
+import java.io.FileOutputStream
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Native Android JavaScript Interface Bridge for News Graphic Studio.
@@ -70,6 +75,21 @@ class NewsStudioBridge(
     private val onStudioModeChanged: ((mode: String) -> Unit)? = null,
     private val getWebView: () -> WebView? = { null }
 ) {
+
+    private data class PendingVideoTransfer(
+        val file: File,
+        val fileName: String,
+        val mimeType: String,
+        var outputStream: BufferedOutputStream?
+    )
+
+    private val pendingVideoTransfers = ConcurrentHashMap<String, PendingVideoTransfer>()
+    @Volatile
+    private var lastSavedVideoUri: Uri? = null
+    @Volatile
+    private var lastSavedVideoFile: File? = null
+    @Volatile
+    private var lastSavedVideoMime: String = "video/mp4"
 
     private val newsCardSchema by lazy {
         Schema.obj(
@@ -625,6 +645,223 @@ class NewsStudioBridge(
         }
     }
 
+    private fun saveVideoFileToGallery(sourceFile: File, cleanName: String, mime: String): Uri? {
+        var savedUri: Uri? = null
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.Video.Media.DISPLAY_NAME, cleanName)
+                    put(MediaStore.Video.Media.MIME_TYPE, mime)
+                    put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/AINewsMaker")
+                    put(MediaStore.Video.Media.IS_PENDING, 1)
+                }
+                val uri = context.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, contentValues)
+                if (uri != null) {
+                    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                        sourceFile.inputStream().use { inputStream ->
+                            inputStream.copyTo(outputStream, bufferSize = 65536)
+                        }
+                    }
+                    contentValues.clear()
+                    contentValues.put(MediaStore.Video.Media.IS_PENDING, 0)
+                    context.contentResolver.update(uri, contentValues, null, null)
+                    savedUri = uri
+                }
+            } else {
+                val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+                val appDir = File(moviesDir, "AINewsMaker").apply { mkdirs() }
+                val destFile = File(appDir, cleanName)
+                sourceFile.inputStream().use { input ->
+                    destFile.outputStream().use { output ->
+                        input.copyTo(output, bufferSize = 65536)
+                    }
+                }
+                MediaScannerConnection.scanFile(
+                    context,
+                    arrayOf(destFile.absolutePath),
+                    arrayOf(mime),
+                    null
+                )
+                savedUri = Uri.fromFile(destFile)
+            }
+        } catch (mediaErr: Exception) {
+            Log.w("NewsStudioBridge", "MediaStore video save failed, falling back to app Movies dir: ${mediaErr.message}")
+        }
+
+        // Keep an internal shareable copy in cacheDir/shared_videos and fallback storage if MediaStore failed
+        val shareDir = File(context.cacheDir, "shared_videos").apply { mkdirs() }
+        val shareCopy = File(shareDir, cleanName)
+        try {
+            sourceFile.copyTo(shareCopy, overwrite = true)
+            lastSavedVideoFile = shareCopy
+            lastSavedVideoMime = mime
+        } catch (_: Exception) {}
+
+        if (savedUri == null) {
+            val fallbackMoviesDir = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: context.filesDir
+            val fallbackFile = File(fallbackMoviesDir, cleanName)
+            sourceFile.copyTo(fallbackFile, overwrite = true)
+            MediaScannerConnection.scanFile(
+                context,
+                arrayOf(fallbackFile.absolutePath),
+                arrayOf(mime),
+                null
+            )
+            lastSavedVideoFile = fallbackFile
+            savedUri = Uri.fromFile(fallbackFile)
+        }
+
+        lastSavedVideoUri = savedUri
+        return savedUri
+    }
+
+    private fun notifyJsVideoDownloadResult(success: Boolean, message: String, fileName: String = "") {
+        val safeMsg = JSONObject.quote(message)
+        val safeFile = JSONObject.quote(fileName)
+        val js = "(function(){ try { if (window.onAndroidVideoDownloadResult) { window.onAndroidVideoDownloadResult($success, $safeMsg, $safeFile); } } catch(e){} })();"
+        Handler(Looper.getMainLooper()).post {
+            getWebView()?.evaluateJavascript(js, null)
+        }
+    }
+
+    @JavascriptInterface
+    fun beginVideoDownload(fileName: String, mimeType: String): String {
+        return try {
+            val safeBase = fileName.replace(Regex("[^a-zA-Z0-9._-]"), "_").ifBlank {
+                "news_video_${System.currentTimeMillis()}.mp4"
+            }
+            val cleanName = if (safeBase.endsWith(".mp4", ignoreCase = true) || safeBase.endsWith(".webm", ignoreCase = true)) {
+                safeBase
+            } else if (mimeType.contains("webm", ignoreCase = true)) {
+                "$safeBase.webm"
+            } else {
+                "$safeBase.mp4"
+            }
+            val resolvedMime = when {
+                mimeType.contains("webm", ignoreCase = true) || cleanName.endsWith(".webm", ignoreCase = true) -> "video/webm"
+                else -> "video/mp4"
+            }
+
+            val transferId = UUID.randomUUID().toString()
+            val tempDir = File(context.cacheDir, "video_exports").apply { mkdirs() }
+            val tempFile = File(tempDir, "$transferId.tmp")
+            val stream = BufferedOutputStream(FileOutputStream(tempFile), 65536)
+
+            pendingVideoTransfers[transferId] = PendingVideoTransfer(
+                file = tempFile,
+                fileName = cleanName,
+                mimeType = resolvedMime,
+                outputStream = stream
+            )
+            transferId
+        } catch (e: Exception) {
+            Log.e("NewsStudioBridge", "beginVideoDownload failed: ${e.message}", e)
+            ""
+        }
+    }
+
+    @JavascriptInterface
+    fun appendVideoChunk(transferId: String, base64Chunk: String): Boolean {
+        val transfer = pendingVideoTransfers[transferId] ?: return false
+        return try {
+            val cleanBase64 = if (base64Chunk.contains(",")) base64Chunk.substringAfter(",") else base64Chunk
+            val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
+            synchronized(transfer) {
+                transfer.outputStream?.write(bytes)
+            }
+            true
+        } catch (e: Exception) {
+            Log.e("NewsStudioBridge", "appendVideoChunk failed: ${e.message}", e)
+            false
+        }
+    }
+
+    @JavascriptInterface
+    fun finishVideoDownload(transferId: String): Boolean {
+        val transfer = pendingVideoTransfers.remove(transferId) ?: return false
+        return try {
+            synchronized(transfer) {
+                transfer.outputStream?.flush()
+                transfer.outputStream?.close()
+                transfer.outputStream = null
+            }
+
+            if (!transfer.file.exists() || transfer.file.length() < 100L) {
+                transfer.file.delete()
+                notifyJsVideoDownloadResult(false, "वीडियो फ़ाइल खाली या अधूरी थी", transfer.fileName)
+                return false
+            }
+
+            saveVideoFileToGallery(transfer.file, transfer.fileName, transfer.mimeType)
+            try { transfer.file.delete() } catch (_: Exception) {}
+
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(
+                    context,
+                    "✅ वीडियो गैलरी (Movies/AINewsMaker) में सुरक्षित हो गया!",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            notifyJsVideoDownloadResult(true, "वीडियो सफलतापूर्वक गैलरी में सेव हो गया!", transfer.fileName)
+            true
+        } catch (e: Exception) {
+            Log.e("NewsStudioBridge", "finishVideoDownload failed: ${e.message}", e)
+            try { transfer.outputStream?.close() } catch (_: Exception) {}
+            try { transfer.file.delete() } catch (_: Exception) {}
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(context, "वीडियो सेव करने में त्रुटि: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+            notifyJsVideoDownloadResult(false, e.localizedMessage ?: "वीडियो सेव विफल", transfer.fileName)
+            false
+        }
+    }
+
+    @JavascriptInterface
+    fun cancelVideoDownload(transferId: String) {
+        val transfer = pendingVideoTransfers.remove(transferId) ?: return
+        try { transfer.outputStream?.close() } catch (_: Exception) {}
+        try { transfer.file.delete() } catch (_: Exception) {}
+    }
+
+    @JavascriptInterface
+    fun saveVideoToGallery(base64Data: String, fileName: String) {
+        downloadVideo(base64Data, fileName)
+    }
+
+    @JavascriptInterface
+    fun shareLastSavedVideo(title: String) {
+        try {
+            val file = lastSavedVideoFile
+            val contentUri = when {
+                file != null && file.exists() -> {
+                    val authority = "${context.packageName}.fileprovider"
+                    FileProvider.getUriForFile(context, authority, file)
+                }
+                lastSavedVideoUri != null -> lastSavedVideoUri
+                else -> null
+            }
+            if (contentUri == null) {
+                showToast("पहले वीडियो डाउनलोड करें")
+                return
+            }
+
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = lastSavedVideoMime
+                putExtra(Intent.EXTRA_STREAM, contentUri)
+                putExtra(Intent.EXTRA_TEXT, title.ifBlank { "AI News Maker Video Report" })
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val chooser = Intent.createChooser(shareIntent, "वीडियो शेयर करें").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
+        } catch (e: Exception) {
+            Log.e("NewsStudioBridge", "shareLastSavedVideo failed: ${e.message}", e)
+            showToast("वीडियो शेयर नहीं हो सका: ${e.localizedMessage}")
+        }
+    }
+
     @JavascriptInterface
     fun downloadVideo(base64DataOrUrl: String, fileName: String) {
         try {
@@ -637,47 +874,23 @@ class NewsStudioBridge(
             if (base64DataOrUrl.startsWith("data:") || !base64DataOrUrl.startsWith("http")) {
                 val base64Data = if (base64DataOrUrl.contains(",")) base64DataOrUrl.substringAfter(",") else base64DataOrUrl
                 val videoBytes = Base64.decode(base64Data, Base64.DEFAULT)
-
                 val mime = if (cleanName.endsWith(".webm", ignoreCase = true)) "video/webm" else "video/mp4"
 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    val contentValues = ContentValues().apply {
-                        put(MediaStore.Video.Media.DISPLAY_NAME, cleanName)
-                        put(MediaStore.Video.Media.MIME_TYPE, mime)
-                        put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/AINewsMaker")
-                        put(MediaStore.Video.Media.IS_PENDING, 1)
-                    }
-                    val uri = context.contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, contentValues)
-                        ?: throw IllegalStateException("MediaStore URI निर्माण विफल")
+                val tempDir = File(context.cacheDir, "video_exports").apply { mkdirs() }
+                val tempFile = File(tempDir, "direct_${System.currentTimeMillis()}.tmp")
+                tempFile.outputStream().use { it.write(videoBytes) }
 
-                    context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                        outputStream.write(videoBytes)
-                    }
-
-                    contentValues.clear()
-                    contentValues.put(MediaStore.Video.Media.IS_PENDING, 0)
-                    context.contentResolver.update(uri, contentValues, null, null)
-                } else {
-                    val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
-                    val appDir = File(moviesDir, "AINewsMaker").apply { mkdirs() }
-                    val file = File(appDir, cleanName)
-                    file.outputStream().use { it.write(videoBytes) }
-
-                    MediaScannerConnection.scanFile(
-                        context,
-                        arrayOf(file.absolutePath),
-                        arrayOf(mime),
-                        null
-                    )
-                }
+                saveVideoFileToGallery(tempFile, cleanName, mime)
+                try { tempFile.delete() } catch (_: Exception) {}
 
                 Handler(Looper.getMainLooper()).post {
                     Toast.makeText(
                         context,
-                        "✅ वीडियो सफलतापूर्वक गैलरी में सुरक्षित हो गया!",
+                        "✅ वीडियो सफलतापूर्वक गैलरी (Movies/AINewsMaker) में सुरक्षित हो गया!",
                         Toast.LENGTH_LONG
                     ).show()
                 }
+                notifyJsVideoDownloadResult(true, "वीडियो सफलतापूर्वक गैलरी में सेव हो गया!", cleanName)
             } else {
                 val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
                 val uri = Uri.parse(base64DataOrUrl)
@@ -697,6 +910,7 @@ class NewsStudioBridge(
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(context, "वीडियो सेव करने में त्रुटि: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
             }
+            notifyJsVideoDownloadResult(false, e.localizedMessage ?: "वीडियो सेव त्रुटि", fileName)
         }
     }
 

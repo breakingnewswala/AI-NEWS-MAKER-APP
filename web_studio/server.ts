@@ -27,6 +27,9 @@ import {
   cleanLocationField,
   cleanCategoryField,
   preserveHeadlineStateOnRegeneration,
+  stripLeadingEnglishProseSentence,
+  ESSENTIAL_ENGLISH_TO_HINDI_TERMS,
+  transliterateEssentialEnglishTerms,
 } from "./src/lib/speakerUtils";
 import {
   HEADLINE_TARGETS,
@@ -53,6 +56,9 @@ export {
   cleanLocationField,
   cleanCategoryField,
   preserveHeadlineStateOnRegeneration,
+  stripLeadingEnglishProseSentence,
+  ESSENTIAL_ENGLISH_TO_HINDI_TERMS,
+  transliterateEssentialEnglishTerms,
   HEADLINE_TARGETS,
   BLOCKED_MEDIA_BRANDS,
   normalizeText,
@@ -257,6 +263,9 @@ if (cloudStorage) {
 app.use("/uploads", express.static(publicUploadsDir, {
   setHeaders: (res) => {
     res.setHeader("Cache-Control", "public, max-age=2592000, immutable");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.setHeader("Accept-Ranges", "bytes");
   }
 }));
 
@@ -270,13 +279,19 @@ function initializeAuthSecret(): string {
     return secret.trim();
   }
 
-  const isCloudProduction = Boolean(process.env.K_SERVICE || process.env.FIREBASE_APP_HOSTING) && process.env.IS_TEST_ENV !== "true";
+  const kService = (process.env.K_SERVICE || "").trim();
+  const isAiStudioPreview = /^ais-(dev|pre)-/i.test(kService) && !process.env.FIREBASE_APP_HOSTING;
+  const isCloudProduction = Boolean((kService && !isAiStudioPreview) || process.env.FIREBASE_APP_HOSTING) && process.env.IS_TEST_ENV !== "true";
   if (isCloudProduction) {
     console.error("[SECURITY CRITICAL] SESSION_SECRET is missing or invalid in production! Refusing to start with insecure session secret.");
     throw new Error("[SECURITY CRITICAL] SESSION_SECRET environment variable (minimum 32 characters) must be configured in Secret Manager / Production environment.");
   }
 
-  // Local development, CI runners or isolated testing: Stable deterministic fallback secret based on project root
+  if (isAiStudioPreview) {
+    console.warn("[AUTH WARNING] Running in AI Studio preview container without SESSION_SECRET; using deterministic dev fallback secret.");
+  }
+
+  // Local development, AI Studio preview, CI runners or isolated testing: Stable deterministic fallback secret based on project root
   // to avoid invalidating sessions across local server restarts, while retaining high cryptographic entropy (>= 32 chars).
   return crypto.createHmac("sha256", "ai-news-maker-stable-dev-salt").update(process.cwd()).digest("hex");
 }
@@ -12924,8 +12939,9 @@ async function executeRssSynchronization(): Promise<RssSyncResult> {
     };
     lastRssSyncResult = result;
     if (newArticlesCount > 0 || failedSourcesCount > 0) {
+      const failedSuffix = failedSourcesCount > 0 ? `, ${failedSourcesCount} failed` : "";
       console.log(
-        `[RSS Auto-Sync Completed] Fetched ${activeSources.length} sources: ${newArticlesCount} new, ${skippedDuplicatesCount} duplicates skipped, ${failedSourcesCount} failed in ${durationMs}ms`
+        `[RSS Auto-Sync Completed] Fetched ${activeSources.length} sources: ${newArticlesCount} new, ${skippedDuplicatesCount} duplicates skipped${failedSuffix} in ${durationMs}ms`
       );
     }
     return result;
@@ -19036,9 +19052,128 @@ app.get("/api/proxy-image", proxyRateLimiter, async (req, res) => {
     res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     return res.send(buffer);
   } catch (err: any) {
     return res.status(500).send("Error proxying image");
+  }
+});
+
+// Video & audio proxy endpoint to bypass CORS when rendering remote videos onto HTML5 Canvas for Video Studio export
+app.get("/api/proxy-video", proxyRateLimiter, async (req, res) => {
+  try {
+    let mediaUrl = String(req.query.url || "").trim();
+    if (!mediaUrl) {
+      return res.status(400).json({ error: "Missing url parameter" });
+    }
+
+    // Unwrap nested proxy calls
+    while (mediaUrl.includes("/api/proxy-video?url=")) {
+      const parts = mediaUrl.split("/api/proxy-video?url=");
+      mediaUrl = decodeURIComponent(parts[parts.length - 1]);
+    }
+
+    // Handle local /uploads/ paths directly from disk with CORS headers
+    if (mediaUrl.startsWith("/uploads/")) {
+      const safeRel = path.normalize(mediaUrl).replace(/^(\.\.(\/|\\|$))+/, "");
+      const localPath = path.join(process.cwd(), "public", safeRel);
+      const resolvedUploads = path.resolve(publicUploadsDir);
+      const resolvedTarget = path.resolve(localPath);
+      if (resolvedTarget.startsWith(resolvedUploads) && fs.existsSync(resolvedTarget)) {
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        res.setHeader("Accept-Ranges", "bytes");
+        return res.sendFile(resolvedTarget);
+      }
+    }
+
+    // SSRF Validation: block loopback, RFC1918 private IPs, cloud metadata, non-http(s) protocols
+    const urlValidation = isSafePublicUrl(mediaUrl);
+    if (!urlValidation.safe || !urlValidation.parsedUrl) {
+      return res.status(403).json({ error: "प्रतिबंधित लिंक (SSRF Protection): " + (urlValidation.error || "अमान्य URL") });
+    }
+
+    const fetchHeaders: Record<string, string> = {
+      "User-Agent": "Mozilla/5.0 (compatible; AINewsMakerVideoProxy/1.0)",
+    };
+    if (req.headers.range) {
+      fetchHeaders["Range"] = String(req.headers.range);
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    let upstream: Response;
+    try {
+      upstream = await fetch(urlValidation.parsedUrl.toString(), {
+        method: "GET",
+        headers: fetchHeaders,
+        redirect: "follow",
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+
+    // Re-validate final redirected URL against SSRF
+    if (upstream.url) {
+      const finalCheck = isSafePublicUrl(upstream.url);
+      if (!finalCheck.safe) {
+        return res.status(403).json({ error: "प्रतिबंधित रीडायरेक्ट लिंक (SSRF Protection)" });
+      }
+    }
+
+    if (!upstream.ok && upstream.status !== 206) {
+      return res.status(upstream.status).send("Upstream video fetch failed");
+    }
+
+    const contentType = upstream.headers.get("content-type") || "video/mp4";
+    const allowedMedia =
+      contentType.startsWith("video/") ||
+      contentType.startsWith("audio/") ||
+      contentType.includes("octet-stream") ||
+      contentType.includes("mp4") ||
+      contentType.includes("webm");
+    if (!allowedMedia) {
+      return res.status(415).send("Unsupported media content type");
+    }
+
+    res.status(upstream.status);
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges, Content-Type");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.setHeader("Accept-Ranges", upstream.headers.get("accept-ranges") || "bytes");
+    const contentLength = upstream.headers.get("content-length");
+    if (contentLength) res.setHeader("Content-Length", contentLength);
+    const contentRange = upstream.headers.get("content-range");
+    if (contentRange) res.setHeader("Content-Range", contentRange);
+    res.setHeader("Cache-Control", "public, max-age=3600");
+
+    if (!upstream.body) {
+      return res.end();
+    }
+
+    const reader = upstream.body.getReader();
+    req.on("close", () => {
+      try { reader.cancel(); } catch {}
+    });
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        const canContinue = res.write(Buffer.from(value));
+        if (!canContinue) {
+          await new Promise<void>((resolve) => res.once("drain", resolve));
+        }
+      }
+    }
+    return res.end();
+  } catch (err: any) {
+    if (!res.headersSent) {
+      return res.status(500).send("Error proxying video");
+    }
+    try { res.end(); } catch {}
   }
 });
 
@@ -19994,8 +20129,10 @@ async function saveApiKeysVault(vault: ApiKeysVault): Promise<{ success: boolean
   let firestoreSuccess = false;
   let firestoreError: string | undefined;
 
+  const kService = (process.env.K_SERVICE || "").trim();
+  const isAiStudioPreview = /^ais-(dev|pre)-/i.test(kService) && !process.env.FIREBASE_APP_HOSTING;
   const isProduction = Boolean(
-    process.env.K_SERVICE ||
+    (kService && !isAiStudioPreview) ||
     process.env.FIREBASE_APP_HOSTING ||
     process.env.USE_FIRESTORE === "true"
   );
@@ -22063,18 +22200,19 @@ export function parseArticleHtml(html: string, pageUrl: string): {
   );
 
   if (rawDesc) {
-    rawDesc = rawDesc
-      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "")
-      .replace(
-        /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
-        " "
-      )
-      .replace(
-        /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
-        " "
-      )
-      .replace(/\s+/g, " ")
-      .trim();
+    rawDesc = transliterateEssentialEnglishTerms(
+      stripLeadingEnglishProseSentence(rawDesc)
+        .replace(
+          /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+          " "
+        )
+        .replace(
+          /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
+          " "
+        )
+        .replace(/\s+/g, " ")
+        .trim()
+    );
   }
 
   // 3. JSON-LD schema check first (NewsArticle / Article articleBody is often purest full text)
@@ -22092,31 +22230,34 @@ export function parseArticleHtml(html: string, pageUrl: string): {
               rawTitle = stripNewsSiteBranding(cleanHeadlineText(cleanHtmlEntities(String(item.headline))));
             }
             if (!rawDesc && item.description) {
-              rawDesc = cleanHtmlEntities(String(item.description))
-                .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "")
-                .replace(
-                  /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
-                  " "
-                )
-                .replace(
-                  /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
-                  " "
-                )
-                .replace(/\s+/g, " ")
-                .trim();
+              rawDesc = transliterateEssentialEnglishTerms(
+                stripLeadingEnglishProseSentence(cleanHtmlEntities(String(item.description)))
+                  .replace(
+                    /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+                    " "
+                  )
+                  .replace(
+                    /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
+                    " "
+                  )
+                  .replace(/\s+/g, " ")
+                  .trim()
+              );
             }
             if (item.articleBody) {
-              const bodyStr = cleanHtmlEntities(String(item.articleBody))
-                .replace(
-                  /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
-                  " "
-                )
-                .replace(
-                  /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
-                  " "
-                )
-                .replace(/\s+/g, " ")
-                .trim();
+              const bodyStr = transliterateEssentialEnglishTerms(
+                stripLeadingEnglishProseSentence(cleanHtmlEntities(String(item.articleBody)))
+                  .replace(
+                    /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+                    " "
+                  )
+                  .replace(
+                    /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
+                    " "
+                  )
+                  .replace(/\s+/g, " ")
+                  .trim()
+              );
               if (bodyStr.length > jsonLdContent.length) {
                 jsonLdContent = bodyStr.slice(0, 6000);
               }
@@ -22202,22 +22343,23 @@ export function parseArticleHtml(html: string, pageUrl: string): {
 
   for (const pMatch of pMatches) {
     let pClean = cleanHtmlEntities(pMatch[1].replace(/<[^>]+>/g, " ")).trim();
-    pClean = pClean
-      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "")
-      .replace(/(?:लोड हो रहा है[\s\.]*)+/gi, "")
-      .replace(/(?:loading[\s\.]*)+/gi, "")
-      .replace(/(?:please wait[\s\.]*)+/gi, "")
-      .replace(/^(?:नईदुनिया प्रतिनिधि|दैनिक भास्कर|अमर उजाला|पत्रिका|नवभारत टाइम्स|हिंदुस्तान ब्यूरो|विशेष संवाददाता|ब्यूरो|भाषा|आईएएनएस|पीटीआई|वार्ता)[,\s]*[^\n।]+[।\n]?/gi, "")
-      .replace(
-        /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|ये\s*भी\s*पढ़ें|और\s*पढ़ें|संबंधित\s*खबरें|फोटो साभार[:\s]*|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*|read\s*also|also\s*read|must\s*read)/gi,
-        " "
-      )
-      .replace(
-        /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
-        " "
-      )
-      .replace(/\s+/g, " ")
-      .trim();
+    pClean = transliterateEssentialEnglishTerms(
+      stripLeadingEnglishProseSentence(pClean)
+        .replace(/(?:लोड हो रहा है[\s\.]*)+/gi, "")
+        .replace(/(?:loading[\s\.]*)+/gi, "")
+        .replace(/(?:please wait[\s\.]*)+/gi, "")
+        .replace(/^(?:नईदुनिया प्रतिनिधि|दैनिक भास्कर|अमर उजाला|पत्रिका|नवभारत टाइम्स|हिंदुस्तान ब्यूरो|विशेष संवाददाता|ब्यूरो|भाषा|आईएएनएस|पीटीआई|वार्ता)[,\s]*[^\n।]+[।\n]?/gi, "")
+        .replace(
+          /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|ये\s*भी\s*पढ़ें|और\s*पढ़ें|संबंधित\s*खबरें|फोटो साभार[:\s]*|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*|read\s*also|also\s*read|must\s*read)/gi,
+          " "
+        )
+        .replace(
+          /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
+          " "
+        )
+        .replace(/\s+/g, " ")
+        .trim()
+    );
 
     if (pClean.length > 25 && !extractedParagraphs.includes(pClean)) {
       if (
@@ -23339,8 +23481,8 @@ export function formatAsJournalisticHeadline(raw: string): string {
   // 1. Strip conversational starter words that make it sound like spoken narrative
   h = h.replace(/^(?:अब|वहीं|इसके अलावा|साथ ही|प्राप्त जानकारी के अनुसार|सूत्रों के मुताबिक|गौरतलब है कि|बता दें कि|दरअसल|इस दौरान|इसके तहत|सभी|मामले में|इधर)[,\s]*/gi, '');
 
-  // 2. Strip leading English junk (without stripping numbers like 40 or 250)
-  h = h.replace(/^[A-Za-z\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, '');
+  // 2. Strip leading stray punctuation (without stripping numbers or transliterated terms or quotes)
+  h = h.replace(/^[\s,.\-–—:;\/&|!_]+(?=[\u0900-\u097F])/u, '');
 
   // 3. Transform inline declarative phrases like "अब नहीं बनेंगे X" -> "X पर रोक"
   h = h.replace(/(?:अब\s+)?नहीं\s*(?:बनेंगे|बनेगा|बन सकेंगे)\s+([^,:।\n]+)/gu, '$1 पर रोक');
@@ -23661,6 +23803,9 @@ export function ensureHashtagHierarchy(
   // Strip any lingering inline or trailing hashtags from body text so they never pollute paragraphs
   rawBody = rawBody.replace(/#[a-zA-Z0-9_\u0900-\u097F]+/g, "").trim();
 
+  // Transliterate essential English news terms/acronyms (EOW -> ईओडब्ल्यू, CBI -> सीबीआई, etc.) in caption body
+  rawBody = transliterateEssentialEnglishTerms(stripLeadingEnglishProseSentence(rawBody));
+
   // Strip press note flattery using Attachment 5
   rawBody = sanitizePressNoteFlattery(rawBody, false);
   rawBody = sanitizeFlattery(rawBody);
@@ -23939,10 +24084,8 @@ function sanitizeCaptionText(
     " "
   );
 
-  // 3. Remove raw English SEO descriptions at start or within (e.g. "The Madhya Pradesh government has formulated an Industrial Housing Policy...")
-  text = text.replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\\/&|!_]+[.!?।]\\s*)+(?=[\\u0900-\\u097F])/u, "");
-  text = text.replace(/^[A-Za-z0-9\s,.\-–—:;'"()\\/&|!_]{12,}?[.!?।]\\s*(?=[\\u0900-\\u097F])/u, "");
-  text = text.replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, "");
+  // 3. Remove raw English SEO descriptions at start while preserving and transliterating essential English news terms/acronyms (e.g. EOW -> ईओडब्ल्यू)
+  text = transliterateEssentialEnglishTerms(stripLeadingEnglishProseSentence(text));
 
   // 4. Split into paragraphs and filter
   const bodyWithoutHashtags = text.replace(/#[\w\u0900-\u097F]+/g, "").trim();
@@ -24049,13 +24192,14 @@ export function createLocalNewsFallback(
   }
 
   if (extractedDesc) {
-    extractedDesc = extractedDesc
-      .replace(
-        /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
-        " "
+    extractedDesc = transliterateEssentialEnglishTerms(
+      stripLeadingEnglishProseSentence(
+        extractedDesc.replace(
+          /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+          " "
+        )
       )
-      .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\\/&]+[.!?।]\\s*)+(?=[\\u0900-\\u097F])/u, "")
-      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&]{15,}?\.\s*(?=[\u0900-\u097F])/u, "")
+    )
       .replace(/\s+/g, " ")
       .trim();
   }
@@ -24069,11 +24213,14 @@ export function createLocalNewsFallback(
   }
 
   if (extractedContent) {
-    extractedContent = extractedContent
-      .replace(
-        /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
-        " "
+    extractedContent = transliterateEssentialEnglishTerms(
+      stripLeadingEnglishProseSentence(
+        extractedContent.replace(
+          /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+          " "
+        )
       )
+    )
       .replace(/\s+/g, " ")
       .trim();
   }
@@ -24186,15 +24333,16 @@ export function createLocalNewsFallback(
   } else {
     corpusToExtract = (extractedDesc || extractedContent) ? `${extractedDesc}\n\n${extractedContent}` : clean;
   }
-  const rawFactsCorpus = corpusToExtract
-    .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Title|शीर्षक|हेडलाइन|Headline)\s*:\s*[^\n\r]+/gi, " ")
-    .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Meta Description|Description|विवरण|सारांश)\s*:\s*/gi, " ")
-    .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Article Content & Facts|Facts & Content|Content|Article Content|URL|Link)\s*:\s*/gi, " ")
-    .replace(cleanBylineRegex, " ")
-    .replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ")
-    .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\\/&|!_]+[.!?।]\\s*)+(?=[\\u0900-\\u097F])/u, "")
-    .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\\/&|!_]{12,}?[.!?।]\\s*(?=[\\u0900-\\u097F])/u, "")
-    .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, "");
+  const rawFactsCorpus = transliterateEssentialEnglishTerms(
+    stripLeadingEnglishProseSentence(
+      corpusToExtract
+        .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Title|शीर्षक|हेडलाइन|Headline)\s*:\s*[^\n\r]+/gi, " ")
+        .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Meta Description|Description|विवरण|सारांश)\s*:\s*/gi, " ")
+        .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Article Content & Facts|Facts & Content|Content|Article Content|URL|Link)\s*:\s*/gi, " ")
+        .replace(cleanBylineRegex, " ")
+        .replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ")
+    )
+  );
 
   const safeFacts = rawFactsCorpus
     .replace(/(डाॅ|डॉ|पं|प्रो|श्री|क्र|सं|ले|कै|एड)\./g, "$1#DOT#")
@@ -24202,13 +24350,15 @@ export function createLocalNewsFallback(
   const articleSentences = safeFacts
     .split(/[।\n]+|(?<=[^\d])\.\s+/)
     .map((s) =>
-      s
-        .replace(/#DOT#/g, ".")
-        .replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ")
-        .replace(/^(?:Title|Meta Description|Description|URL|Link)[:\s]*/i, "")
-        .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\\/&|!_]+[.!?।]\\s*)+(?=[\\u0900-\\u097F])/u, "")
-        .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{10,}?\s*(?=[\u0900-\u097F])/u, "")
-        .trim()
+      transliterateEssentialEnglishTerms(
+        stripLeadingEnglishProseSentence(
+          s
+            .replace(/#DOT#/g, ".")
+            .replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ")
+            .replace(/^(?:Title|Meta Description|Description|URL|Link)[:\s]*/i, "")
+            .trim()
+        )
+      ).trim()
     )
     .filter((s) => {
       if (s.length <= 15) return false;
@@ -24679,9 +24829,41 @@ function sanitizeHeadlineClean(text: string): string {
   return res.replace(/^(?:में|पर|से|को|का|की|के|ने|और|तथा|व)\s+/u, "").replace(/[।.,!?:–—;\s-]+$/u, "").trim();
 }
 
+const SERVER_CRITICAL_HEADLINE_ENTITIES = [
+  'ईओडब्ल्यू',
+  'सीबीआई',
+  'ईडी',
+  'लोकायुक्त',
+  'एसीबी',
+  'एनआईए',
+  'एसआईटी',
+  'एटीएस',
+  'एसटीएफ',
+  'एनसीबी',
+  'डीआरआई',
+  'एनडीआरएफ',
+  'एसडीआरएफ',
+  'एसडीईआरएफ',
+  'सुप्रीम कोर्ट',
+  'हाई कोर्ट',
+  'सेबी',
+  'आरबीआई',
+  'इसरो',
+  'डीआरडीओ',
+  'बीसीसीआई',
+  'आईपीएल',
+  'एफआईआर',
+  'पॉक्सो',
+  'एसडीएम',
+  'डीएसपी',
+  'कलेक्टर',
+  'सीएमएचओ',
+];
+
 /**
  * Generates up to 5 distinct headline options strictly from the provided article facts.
- * NEVER injects hardcoded unrelated news templates or generic administrative clichÃ©s.
+ * NEVER injects hardcoded unrelated news templates or generic administrative clichés.
+ * Preserves critical investigating agencies and acronyms (e.g. ईओडब्ल्यू, सीबीआई, ईडी) across all 5 options.
  */
 export function generate5BalancedHeadlineOptions(
   primaryTitle: string,
@@ -24692,11 +24874,23 @@ export function generate5BalancedHeadlineOptions(
   if (!cleanBase) return [];
   const loc = location && location !== "विशेष कवरेज" ? location.trim() : "";
 
+  const requiredCriticalEntities = SERVER_CRITICAL_HEADLINE_ENTITIES.filter((ent) => cleanBase.includes(ent));
+
+  const ensureCriticalEntitiesPreserved = (candidateText: string): string => {
+    if (!candidateText || requiredCriticalEntities.length === 0) return candidateText;
+    const missing = requiredCriticalEntities.filter((ent) => !candidateText.includes(ent));
+    if (missing.length === 0) return candidateText;
+    if (cleanBase.length <= 75 && !candidateText.includes(cleanBase)) {
+      return `${cleanBase}: ${candidateText}`;
+    }
+    return `${missing.join(" ")} कार्रवाई: ${candidateText}`;
+  };
+
   const uniqueOptions: string[] = [];
 
   const addOptionIfDistinct = (cand: string) => {
     if (!cand) return;
-    const formatted = sanitizeHeadlineClean(cand);
+    const formatted = sanitizeHeadlineClean(ensureCriticalEntitiesPreserved(cand));
     if (!formatted || formatted.length < 20 || countHeadlineVisibleCharacters(formatted) > 200) return;
     if (uniqueOptions.includes(formatted)) return;
     const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.88);
@@ -25086,9 +25280,10 @@ export function fitHeadlinesTo5TierRanges(
   if (Array.isArray(baseOrContext)) rawSources.push(...baseOrContext.filter(Boolean).map(String));
   if (safeHeadlines.length > 0) rawSources.push(...safeHeadlines);
 
-  const baseText = typeof baseOrContext === 'string' && baseOrContext.trim()
+  const rawBaseText = typeof baseOrContext === 'string' && baseOrContext.trim()
     ? baseOrContext.trim()
     : (typeof contextOrBase === 'string' && contextOrBase.trim() ? contextOrBase.trim() : (safeHeadlines[0] || ''));
+  const baseText = sanitizeHeadlineClean(rawBaseText) || safeHeadlines[0] || '';
 
   const factsList = rawSources
     .flatMap((f: string) => f.split(/[।\n\.\r]+/))
@@ -25305,18 +25500,19 @@ export function buildMasterNewsEditorialPrompt(params: MasterNewsPromptParams): 
     : `पहला हैशटैग अनिवार्य रूप से: #AINewsMakerUser`;
 
   const systemInstruction = `आप एक प्रमुख डिजिटल हिंदी न्यूज़ नेटवर्क के वरिष्ठ संपादक (Professional Hindi News Editor) हैं।
-आपका कार्य पूरे उपलब्ध समाचार लेख को गहराई से पढ़कर, उसके वास्तविक तथ्यों और मुख्य घटनाक्रम के आधार पर 5 अनुमोदित शैलियों में 5 अलग-अलग, सटीक, संक्षिप्त और प्रभावशाली हिंदी हेडलाइंस (विकल्प 1: 80-110 अक्षर, विकल्प 2: 100-130 अक्षर, विकल्प 3: 125-150 अक्षर, विकल्प 4: 130-160 अक्षर, विकल्प 5: 150-200 अक्षर; अधिकतम सीमा 200 अक्षर) तथा 3 सोशल मीडिया कैप्शन तैयार करना है।
+आपका कार्य पूरे उपलब्ध समाचार लेख (URL या रॉ स्क्रिप्ट) को गहराई से पढ़कर, उसके वास्तविक तथ्यों और मुख्य घटनाक्रम के आधार पर 5 अनुमोदित शैलियों में 5 अलग-अलग, सटीक, संक्षिप्त और प्रभावशाली हिंदी हेडलाइंस (विकल्प 1: 80-110 अक्षर, विकल्प 2: 100-130 अक्षर, विकल्प 3: 125-150 अक्षर, विकल्प 4: 130-160 अक्षर, विकल्प 5: 150-200 अक्षर; अधिकतम सीमा 200 अक्षर) तथा 3 सोशल मीडिया कैप्शन तैयार करना है।
+अनिवार्य मुख्य शब्द एवं जांच एजेंसी संरक्षण नियम (MANDATORY KEY ENTITY & ACRONYM PRESERVATION): यदि मूल खबर या शीर्षक में अंग्रेजी के अनिवार्य संक्षिप्त नाम (Acronyms), जांच एजेंसियां, पद, संस्थाएं या मुख्य शब्द (जैसे EOW -> ईओडब्ल्यू, CBI -> सीबीआई, ED -> ईडी, ACB -> एसीबी, Lokayukta -> लोकायुक्त, NIA -> एनआईए, SIT -> एसआईटी, NDRF -> एनडीआरएफ, SDRF -> एसडीआरएफ, FIR -> एफआईआर, SDM -> एसडीएम, DSP -> डीएसपी, Collector -> कलेक्टर, Raid -> छापा/रेड आदि) दिए गए हैं, तो उन्हें कभी भी हटाएं नहीं (NEVER delete or drop them)—उन्हें अनिवार्य रूप से देवनागरी हिंदी में लिप्यंतरित (Transliterate) करके सभी 5 हेडलाइन विकल्पों और तीनों कैप्शनों में शामिल रखें। उदाहरण: "डिंडोरी में EOW का छापा" में "ईओडब्ल्यू" हर हेडलाइन विकल्प और कैप्शन में स्पष्ट रूप से रहना चाहिए।
 कड़ा नियम: किसी भी हेडलाइन की लंबाई बढ़ाने के लिए अपनी ओर से कोई कृत्रिम प्रशासनिक वाक्य ('शासन स्तर पर आवश्यक निर्देश दिए गए', 'संबंधित पक्षों को निर्देश जारी किए गए', 'मामले में नया घटनाक्रम सामने आया है', 'प्रशासनिक व विभागीय स्तर पर जरूरी कदम उठाए जा रहे हैं', 'विशेष डेस्क' आदि) बिल्कुल न जोड़ें। URL को कभी भी हेडलाइन या कैप्शन न बनाएं। केवल वैध JSON लौटाएं।`;
 
-  const effectiveSourceTitle = primaryHeadline || "";
-  const effectiveBody = fullArticleText || fetchedArticleSnippet || effectiveInput || "";
+  const effectiveSourceTitle = transliterateEssentialEnglishTerms(primaryHeadline || "");
+  const effectiveBody = transliterateEssentialEnglishTerms(fullArticleText || fetchedArticleSnippet || effectiveInput || "");
 
   const prompt = `आप एक वरिष्ठ हिंदी न्यूज़ एडिटर हैं।
 नीचे दिए गए पूर्ण समाचार लेख (Article) को ध्यानपूर्वक पढ़ें:
 
 [समाचार सामग्री]:
 """
-${effectiveSourceTitle ? `मूल शीर्षक संदर्भ: ${effectiveSourceTitle}\n\n` : ""}${effectiveBody ? effectiveBody.slice(0, 5500) : effectiveInput}
+${effectiveSourceTitle ? `मूल शीर्षक संदर्भ: ${effectiveSourceTitle}\n\n` : ""}${effectiveBody ? effectiveBody.slice(0, 5500) : transliterateEssentialEnglishTerms(effectiveInput)}
 """
 
 ${customPrompt ? `[यूज़र का अतिरिक्त संपादकीय निर्देश]:\n"""\n${customPrompt}\n"""\n` : ""}
@@ -25350,8 +25546,9 @@ ${customPrompt ? `[यूज़र का अतिरिक्त संपा�
    - विकल्प 5: 150 से 200 अक्षर (खबर का संतुलित, सारगर्भित और प्रभावशाली संपादकीय शीर्षक)
    - कोई भी हेडलाइन किसी भी परिस्थिति में 200 अक्षर से अधिक नहीं होनी चाहिए।
    - यदि मूल समाचार में जानकारी सीमित है, तो न्यूनतम अक्षर संख्या पूरी करने के लिए कभी भी कृत्रिम शब्द न जोड़ें—छोटी लेकिन सटीक हेडलाइन रखें।
-3. भाषा, निष्पक्षता और शुद्धता (LANGUAGE & HONORIFIC REMOVAL):
-   - सभी हेडलाइंस 100% शुद्ध देवनागरी हिंदी में हों। अंग्रेजी संक्षिप्त रूपों को हिंदी देवनागरी में लिखें (जैसे एपीके, यूपीआई, सुप्रीम कोर्ट, हाई कोर्ट, एफआईआर, सीबीआई, ईडी, जीएसटी, आरबीआई, बीसीसीआई, आईपीएल, एआई)।
+3. भाषा, निष्पक्षता और अनिवार्य मुख्य शब्दों का संरक्षण (LANGUAGE, KEY ENTITY PRESERVATION & HONORIFIC REMOVAL):
+   - सभी हेडलाइंस 100% शुद्ध देवनागरी हिंदी में हों।
+   - अनिवार्य मुख्य शब्द एवं जांच एजेंसी संरक्षण: खबर के लिए आवश्यक अंग्रेजी के संक्षिप्त रूपों (Acronyms), जांच एजेंसियों, पदों और बुनियादी शब्दों को कभी भी हटाएं नहीं (NEVER omit or strip them)—उन्हें अनिवार्य रूप से हिंदी देवनागरी में लिखकर सभी 5 हेडलाइन विकल्पों और तीनों कैप्शनों में शामिल रखें (जैसे EOW -> ईओडब्ल्यू, CBI -> सीबीआई, ED -> ईडी, ACB -> एसीबी, Lokayukta -> लोकायुक्त, NIA -> एनआईए, SIT -> एसआईटी, NDRF -> एनडीआरएफ, SDRF -> एसडीआरएफ, FIR -> एफआईआर, SDM -> एसडीएम, DSP -> डीएसपी, Collector -> कलेक्टर, एपीके, यूपीआई, सुप्रीम कोर्ट, हाई कोर्ट, जीएसटी, आरबीआई, बीसीसीआई, आईपीएल, एआई)। उदाहरण: यदि खबर "डिंडोरी में EOW का छापा" है, तो "ईओडब्ल्यू" शब्द हर हेडलाइन विकल्प और कैप्शन में अनिवार्य रूप से होना चाहिए।
    - सम्मानसूचक या चाटुकारिता वाले शब्द ('श्री', 'श्रीमान', 'श्रीमती', 'सुश्री', 'माननीय', 'आदरणीय', 'महोदय', 'जी', 'सम्माननीय', 'सम्मानीय', 'पूज्य') पूरी तरह हटा दें, किंतु व्यक्ति का वास्तविक नाम और आधिकारिक पद सुरक्षित रखें।
    - किसी भी हेडलाइन के अंत में पूर्णविराम (। या .) या प्रश्नवाचक चिह्न न लगाएं। कोई इमोजी या हैशटैग हेडलाइन में न रखें।
    - हेडलाइन का अंत अर्थपूर्ण और स्वाभाविक वाक्य पर समाप्त हो।
@@ -26789,13 +26986,13 @@ Generate exactly 5 BRAND NEW, distinct, balanced headline options of the SAME pr
   * Option 5 (विकल्प 5): 150–200 characters
 - No headline may exceed 200 characters under any circumstance. If the original news is short, keep a shorter accurate headline rather than adding filler.
 - No ending punctuation (. or । or ?). No tier labels or bracketed counts like '[85/100]'.
-- Pure Devanagari Hindi only (no Roman English characters).
+- Pure Devanagari Hindi only — NEVER omit or strip compulsory English acronyms, investigating agencies, posts, or core terms from the source story; always transliterate them into Devanagari Hindi (e.g. EOW -> ईओडब्ल्यू, CBI -> सीबीआई, ED -> ईडी, ACB -> एसीबी, Lokayukta -> लोकायुक्त, NIA -> एनआईए, SIT -> एसआईटी, FIR -> एफआईआर, SDM -> एसडीएम, DSP -> डीएसपी, Collector -> कलेक्टर) and preserve them across ALL 5 headline options.
 Return valid JSON: { "headlineOptions": ["...", "...", "...", "...", "..."] }`;
 
     const regenPrompt = `कृपया निम्नलिखित समाचार के लिए ठीक 5 नए संतुलित, प्रभावशाली पत्रकारिता हेडलाइन विकल्प तैयार करें।
-प्रत्येक विकल्प अधिकतम 200 अक्षर की सीमा के भीतर हो, बिना किसी पूर्णविराम के, शुद्ध हिंदी देवनागरी में, सक्रिय वाच्य में, बिना किसी आंतरिक पुनरावृत्ति के, और केवल मूल खबर के वास्तविक तथ्यों पर आधारित हो।
-शीर्षक संदर्भ: ${sourceTitle}
-समाचार सामग्री/तथ्य: ${sourceText.slice(0, 3000)}
+प्रत्येक विकल्प अधिकतम 200 अक्षर की सीमा के भीतर हो, बिना किसी पूर्णविराम के, शुद्ध हिंदी देवनागरी में, सक्रिय वाच्य में, बिना किसी आंतरिक पुनरावृत्ति के, और केवल मूल खबर के वास्तविक तथ्यों पर आधारित हो। मूल खबर में मौजूद प्रमुख जांच एजेंसी, पद या अंग्रेजी संक्षिप्त नाम (जैसे EOW -> ईओडब्ल्यू, CBI -> सीबीआई, ED -> ईडी, FIR -> एफआईआर आदि) को हटाएं नहीं, बल्कि देवनागरी में लिखकर सभी विकल्पों में शामिल रखें।
+शीर्षक संदर्भ: ${transliterateEssentialEnglishTerms(sourceTitle)}
+समाचार सामग्री/तथ्य: ${transliterateEssentialEnglishTerms(sourceText).slice(0, 3000)}
 ${sourceLoc ? `स्थान: ${sourceLoc}\n` : ""}${customPrompt ? `यूज़र का विशेष निर्देश: ${customPrompt}\n` : ""}
 ${excludeTitles.length > 0 ? `पिछले 5 विकल्प (इन्हें बिल्कुल न दोहराएं, नए कोण बनाएं):\n${excludeTitles.map((t: string, idx: number) => `${idx + 1}. ${t}`).join('\n')}\n` : ""}
 JSON Output Schema:
@@ -27149,11 +27346,14 @@ export function cleanHeadlineText(text: string): string {
   // 3. Remove publisher, portal and city-news suffixes (e.g. "- Bhopal News", "- Indore News", "- MP News")
   cleaned = cleaned
     .replace(
-      /\s*[|\-–—:]\s*(?:[A-Za-z\s]+News|[A-Za-z\s]+Samachar|Dainik Bhaskar|Bhaskar|Aaj Tak|आज तक|BBC News हिंदी|BBC Hindi|NDTV India|NDTV|Amar Ujala|News18|Zee News|Patrika|Navbharat Times|Hindustan|Live Hindustan|Oneindia|ABP News|Jagran|Dainik Jagran|TV9|Navbharat).*$/i,
+      /\s*[|\-–—:]\s*(?:[A-Za-z\s]+News|[A-Za-z\s]+Samachar|Dainik Bhaskar|Bhaskar|Aaj Tak|आज तक|BBC News हिंदी|BBC Hindi|NDTV India|NDTV|Amar Ujala|News18|Zee News|Patrika|Navbharat Times|Hindustan|Live Hindustan|Oneindia|ABP News|Jagran|Dainik Jagran|TV9|Navbharat|Nai Dunia|Naidunia|Haribhoomi|The Sootr|Lallantop|Firstpost|Indian Express|The Hindu|Times of India|Hindustan Times|Republic Bharat|India TV|News24|Goodreturns|Moneycontrol|LiveMint|ET Now|Business Standard|Jansatta|Prabhat Khabar|Punjab Kesari|Rajasthan Patrika|Divya Bhaskar|Sandesh|Lokmat|Sakal|Maharashtra Times).*$/i,
       ""
     )
-    .replace(/\s*[|\-–—:]\s*[A-Za-z\s]{3,30}$/, "")
+    .replace(/\s*[|]\s*[A-Za-z\s]{3,35}$/, "")
     .trim();
+
+  // 3b. Strip leading pure-English SEO translation sentence only if it is a multi-word English prose sentence ending in a period before Devanagari
+  cleaned = stripLeadingEnglishProseSentence(cleaned);
 
   // 4. Remove editorial fluff prefixes and option labels
   cleaned = cleaned
@@ -27193,97 +27393,8 @@ export function cleanHeadlineText(text: string): string {
     .replace(/#[\w\u0900-\u097F]+/g, "")
     .replace(/@[\w\u0900-\u097F]+/g, "");
 
-  // 8. Transliterate common abbreviations and acronyms into Devanagari Hindi
-  const acronyms: [RegExp, string][] = [
-    [/\bAPK\b/gi, "एपीके"],
-    [/\bUPI\b/gi, "यूपीआई"],
-    [/\bOTP\b/gi, "ओटीपी"],
-    [/\bATM\b/gi, "एटीएम"],
-    [/\bSIM\b/gi, "सिम"],
-    [/\bKYC\b/gi, "केवाईसी"],
-    [/\bPDF\b/gi, "पीडीएफ"],
-    [/\bURL\b/gi, "यूआरएल"],
-    [/\bSMS\b/gi, "एसएमएस"],
-    [/\bPIL\b/gi, "पीआईएल"],
-    [/\bAI\b/gi, "एआई"],
-    [/\bPoK\b/gi, "पीओके"],
-    [/\bLOC\b/gi, "एलओसी"],
-    [/\bLAC\b/gi, "एलएसी"],
-    [/\bBSF\b/gi, "बीएसएफ"],
-    [/\bCRPF\b/gi, "सीआरपीएफ"],
-    [/\bCISF\b/gi, "सीआईएसएफ"],
-    [/\bDRDO\b/gi, "डीआरडीओ"],
-    [/\bCJI\b/gi, "सीजेआई"],
-    [/\bSIT\b/gi, "एसआईटी"],
-    [/\bATS\b/gi, "एटीएस"],
-    [/\bSTF\b/gi, "एसटीएफ"],
-    [/\bNCB\b/gi, "एनसीबी"],
-    [/\bCCTV\b/gi, "सीसीटीवी"],
-    [/\bDNA\b/gi, "डीएनए"],
-    [/\bEMI\b/gi, "ईएमआई"],
-    [/\bGDP\b/gi, "जीडीपी"],
-    [/\bDA\b/gi, "डीए"],
-    [/\bHRA\b/gi, "एचआरए"],
-    [/\bISRO\b/gi, "इसरो"],
-    [/\bNASA\b/gi, "नासा"],
-    [/\bFIR\b/gi, "एफआईआर"],
-    [/\bIT\b/gi, "आईटी"],
-    [/\bOPD\b/gi, "ओपीडी"],
-    [/\bVIP\b/gi, "वीआईपी"],
-    [/\bBJP\b/gi, "बीजेपी"],
-    [/\bPM\b/gi, "पीएम"],
-    [/\bCM\b/gi, "सीएम"],
-    [/\bDM\b/gi, "डीएम"],
-    [/\bSP\b/gi, "एसपी"],
-    [/\bSDM\b/gi, "एसडीएम"],
-    [/\bBHK\b/gi, "बीएचके"],
-    [/\bGST\b/gi, "जीएसटी"],
-    [/\bCBI\b/gi, "सीबीआई"],
-    [/\bED\b/gi, "ईडी"],
-    [/\bNIA\b/gi, "एनआईए"],
-    [/\bICU\b/gi, "आईसीयू"],
-    [/\bMP\b/gi, "एमपी"],
-    [/\bUP\b/gi, "यूपी"],
-    [/\bUSA\b/gi, "यूएसए"],
-    [/\bUK\b/gi, "यूके"],
-    [/\bCEO\b/gi, "सीईओ"],
-    [/\bBCCI\b/gi, "बीसीसीआई"],
-    [/\bICC\b/gi, "आईसीसी"],
-    [/\bIPL\b/gi, "आईपीएल"],
-    [/\bT20\b/gi, "टी20"],
-    [/\bODI\b/gi, "वनडे"],
-    [/\bWHO\b/gi, "डब्ल्यूएचओ"],
-    [/\bUN\b/gi, "यूएन"],
-    [/\bNATO\b/gi, "नाटो"],
-    [/\bRBI\b/gi, "आरबीआई"],
-    [/\bSBI\b/gi, "एसबीआई"],
-    [/\bLIC\b/gi, "एलआईसी"],
-    [/\bUPSC\b/gi, "यूपीएससी"],
-    [/\bSSC\b/gi, "एसएससी"],
-    [/\bCBSE\b/gi, "सीबीएसई"],
-    [/\bNEET\b/gi, "नीट"],
-    [/\bJEE\b/gi, "जेईई"],
-    [/\bIIT\b/gi, "आईआईटी"],
-    [/\bIIM\b/gi, "आईआईएम"],
-    [/\bEV\b/gi, "ईवी"],
-    [/\bOTT\b/gi, "ओटीटी"],
-    [/\bSupreme Court\b/gi, "सुप्रीम कोर्ट"],
-    [/\bHigh Court\b/gi, "हाई कोर्ट"],
-    [/\bCongress\b/gi, "कांग्रेस"],
-    [/\bWhatsApp\b/gi, "व्हाट्सएप"],
-    [/\bFacebook\b/gi, "फेसबुक"],
-    [/\bTwitter\b/gi, "ट्विटर"],
-    [/\bInstagram\b/gi, "इंस्टाग्राम"],
-    [/\bYouTube\b/gi, "यूट्यूब"],
-    [/\bGoogle\b/gi, "गूगल"],
-    [/\bTelegram\b/gi, "टेलीग्राम"],
-    [/\bApple\b/gi, "एप्पल"],
-    [/\bMicrosoft\b/gi, "माइक्रोसॉफ्ट"],
-    [/\bAndroid\b/gi, "एंड्रॉइड"],
-  ];
-  for (const [pattern, devanagari] of acronyms) {
-    cleaned = cleaned.replace(pattern, devanagari);
-  }
+  // 8. Transliterate all essential English terms, agencies (EOW -> ईओडब्ल्यू, CBI -> सीबीआई, ED -> ईडी, etc.), posts, places, and acronyms into Devanagari Hindi
+  cleaned = transliterateEssentialEnglishTerms(cleaned);
 
   // 9. Strict English character elimination (protecting [yellow] and [highlight] tags)
   cleaned = cleaned.replace(/\[(yellow|highlight)\]/g, '\uE001');

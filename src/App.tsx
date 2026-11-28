@@ -4704,7 +4704,7 @@ export default function App() {
 
       {/* Toast Notification - Standard Dark Glassmorphic Center Design */}
       {toastMessage && (
-        <div className="fixed inset-0 z-[100] pointer-events-none flex items-center justify-center top-1/2 -translate-y-1/2 p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-[100] pointer-events-none flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="pointer-events-auto bg-slate-900/95 backdrop-blur-xl text-white font-bold text-xs sm:text-sm px-6 py-4 rounded-2xl shadow-2xl border border-emerald-500/80 ring-2 ring-emerald-500/20 flex items-center gap-3 animate-in zoom-in-95 max-w-md text-center justify-center">
             <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
             <span>{toastMessage}</span>
@@ -5301,7 +5301,7 @@ export default function App() {
                 {/* 🔒 STICKY / FROZEN STUDIO HEADER (Row 1: Split Preview + Steps | Row 2: 4 Quick Actions) */}
                 <div
                   id="mobile-studio-sticky-header"
-                  className="sticky top-0 z-30 w-full bg-slate-950/98 backdrop-blur-md border-b border-slate-800 shadow-xl px-2 sm:px-4 pt-1.5 pb-1.5 transition-all"
+                  className="sticky top-0 md:top-14 z-30 w-full bg-slate-950/98 backdrop-blur-md border-b border-slate-800 shadow-xl px-2 sm:px-4 pt-1.5 pb-1.5 transition-all"
                 >
                   {/* Row 1: Split Live Preview & Vertical Step Menu (Mobile: 72-75% / 25-28% | Tablet: 70:30) */}
                   <div className="flex flex-row items-stretch gap-1.5 sm:gap-2.5 md:gap-4 w-full max-w-md sm:max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto">
@@ -5653,9 +5653,9 @@ export default function App() {
                 {/* ==================================================
                     LEFT COLUMN: LOCKED / FREEZE (Larger Live Preview + 3 Action Buttons below)
                     ================================================== */}
-                <div className="w-full lg:w-[420px] xl:w-[460px] 2xl:w-[490px] shrink-0 lg:sticky lg:top-[100px] z-20 flex flex-col gap-3 self-start">
+                <div className="w-full lg:w-[420px] xl:w-[460px] 2xl:w-[490px] shrink-0 xl:sticky xl:top-[72px] z-20 flex flex-col gap-3 self-start">
                   {/* 1. LARGE LIVE 4:5 GRAPHIC PREVIEW CARD */}
-                  <div className="w-full bg-white dark:bg-neutral-950 p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-neutral-800 shadow-sm dark:shadow-2xl flex flex-col">
+                  <div className="w-full bg-neutral-950 p-3 sm:p-4 rounded-2xl border border-neutral-800 shadow-2xl flex flex-col">
                     {/* Top Status Bar on Preview */}
                     <div className="flex items-center justify-between px-1 mb-2 shrink-0">
                       <div className="flex items-center gap-1.5 text-xs text-amber-400 font-black">
@@ -5821,7 +5821,7 @@ export default function App() {
                     ================================================== */}
                 <div className="flex-1 w-full min-w-0 flex flex-col space-y-3">
                   {/* 🎛️ Top Steps Selector: All 8 Steps Horizontal Scroll Bar (Sticky on Scroll) */}
-                  <div className="sticky top-[60px] z-20 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 rounded-2xl p-3 sm:p-4 shadow-sm dark:shadow-xl space-y-3 text-slate-900 dark:text-white">
+                  <div className="sticky top-[68px] z-20 w-full bg-slate-900/95 backdrop-blur-md border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-xl space-y-3 text-white">
                     {/* Top Bar Header */}
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">

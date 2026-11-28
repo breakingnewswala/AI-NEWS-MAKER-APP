@@ -13,8 +13,8 @@ android {
         applicationId = "com.aistudio.ainewsmaker.hzwptx"
         minSdk = 24
         targetSdk = 36
-        versionCode = 15
-        versionName = "15.0"
+        versionCode = 19
+        versionName = "19.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

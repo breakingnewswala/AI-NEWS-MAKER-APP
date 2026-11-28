@@ -2459,13 +2459,13 @@ export const HomeScreenWeb: React.FC<HomeScreenWebProps> = ({
       {canModerate && (
         <>
           {/* Mobile-Only Admin Layout (Part 6 & 12): Sticky Frozen Single Clean Row with 4 Buttons */}
-          <div className="sm:hidden sticky top-0 z-30 px-3 pt-2.5 pb-2 bg-white/95 dark:bg-slate-900/95 border-b border-slate-200 dark:border-amber-500/30 backdrop-blur-md shadow-md">
+          <div className="sm:hidden sticky top-14 z-30 px-3 pt-2.5 pb-2 bg-slate-900/95 border-b border-amber-500/30 backdrop-blur-md shadow-md">
             <div className="grid grid-cols-4 gap-1.5 w-full">
-              <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-1 py-1.5 flex items-center justify-center shadow-xs">
+              <div className="bg-slate-950 border border-slate-800 rounded-xl px-1 py-1.5 flex items-center justify-center shadow-xs">
                 <select
                   value={adminFilterChannel}
                   onChange={(e) => setAdminFilterChannel(e.target.value)}
-                  className="bg-transparent text-amber-700 dark:text-amber-300 text-[10px] font-bold outline-none cursor-pointer w-full text-center truncate"
+                  className="bg-transparent text-amber-300 text-[10px] font-bold outline-none cursor-pointer w-full text-center truncate"
                 >
                   <option value="" className="bg-slate-900 text-white">सभी चैनल</option>
                   {savedChannels.map((c: any, idx) => {

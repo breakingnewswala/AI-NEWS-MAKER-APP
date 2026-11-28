@@ -3744,14 +3744,14 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
   return (
     <div className="min-h-screen bg-[#070D1E] text-white pb-28 w-full max-w-full overflow-x-clip transition-colors">
       {/* Top Header */}
-      <div className="bg-[#0B132B] border-b border-slate-800 text-white px-3.5 sm:px-6 py-3 sm:py-4 shadow-sm sticky top-0 z-40 transition-colors">
+      <div className="bg-[#0B132B] border-b border-slate-800 text-white px-3.5 sm:px-6 py-3 sm:py-4 shadow-sm sticky top-14 z-30 transition-colors">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2.5 sm:gap-4">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <div className="p-2 sm:p-2.5 bg-gradient-to-br from-amber-500 to-red-600 rounded-xl text-slate-950 font-black shadow-lg shrink-0">
               <Sliders className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div className="min-w-0 text-left">
-              <h1 className="text-sm sm:text-xl font-black text-slate-900 dark:text-white flex items-center gap-1.5 sm:gap-2 truncate">
+              <h1 className="text-sm sm:text-xl font-black text-white flex items-center gap-1.5 sm:gap-2 truncate">
                 <span className="truncate">{isAdmin ? 'एडमिन कंट्रोल रूम' : 'मेरी प्रोफाइल व सेटिंग्स'}</span>
                 {testModeEnabled && isAdmin && (
                   <span className="px-1.5 py-0.5 bg-purple-900/80 border border-purple-500 text-purple-200 text-[9px] sm:text-[10px] font-black rounded-full uppercase flex items-center gap-0.5 shrink-0">
@@ -3760,7 +3760,7 @@ export const ProfileScreenWeb: React.FC<ProfileScreenWebProps> = ({
                   </span>
                 )}
               </h1>
-              <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate hidden sm:block">
+              <p className="text-[11px] sm:text-xs text-slate-400 truncate hidden sm:block">
                 {isAdmin
                   ? 'एडमिन डैशबोर्ड, प्लान्स व पैकेज मैनेजर, टेम्पलेट कंट्रोल व RSS फीड्स'
                   : subscription.hasActivePaidPlan || subscription.tier !== 'basic'

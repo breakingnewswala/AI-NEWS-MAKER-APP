@@ -737,21 +737,76 @@ fun BreakingNewsStudioWebView(
                     )
                     addJavascriptInterface(studioBridge, "AndroidBridge")
 
-                    // Native Download Listener so web downloads also route to gallery
-                    setDownloadListener { url, _, _, mimetype, _ ->
+                    // Native Download Listener so both image and video web downloads route cleanly to Android Gallery
+                    setDownloadListener { url, _, contentDisposition, mimetype, _ ->
                         try {
+                            val isVideoDownload = mimetype?.startsWith("video/", ignoreCase = true) == true ||
+                                url.contains(".mp4", ignoreCase = true) ||
+                                url.contains(".webm", ignoreCase = true) ||
+                                contentDisposition?.contains(".mp4", ignoreCase = true) == true ||
+                                contentDisposition?.contains(".webm", ignoreCase = true) == true
+
+                            val resolvedExt = when {
+                                mimetype?.contains("webm", ignoreCase = true) == true || contentDisposition?.contains(".webm", ignoreCase = true) == true -> "webm"
+                                isVideoDownload -> "mp4"
+                                else -> "jpg"
+                            }
+
                             if (url.startsWith("data:")) {
-                                studioBridge.downloadImage(url, "news_card_${System.currentTimeMillis()}.jpg")
+                                if (isVideoDownload || url.startsWith("data:video/")) {
+                                    studioBridge.downloadVideo(url, "news_video_${System.currentTimeMillis()}.$resolvedExt")
+                                } else {
+                                    studioBridge.downloadImage(url, "news_card_${System.currentTimeMillis()}.jpg")
+                                }
                             } else if (url.startsWith("blob:")) {
+                                val escapedUrl = url.replace("\\", "\\\\").replace("'", "\\'")
+                                val escapedMime = (mimetype ?: "").replace("'", "\\'")
                                 val js = """
                                     (function() {
-                                        fetch('$url')
+                                        fetch('$escapedUrl')
                                             .then(function(r) { return r.blob(); })
                                             .then(function(b) {
+                                                var mime = (b && b.type) || '$escapedMime' || '';
+                                                var isVid = mime.indexOf('video/') === 0 || ${if (isVideoDownload) "true" else "false"};
+                                                if (isVid && window.AndroidBridge && window.AndroidBridge.beginVideoDownload) {
+                                                    var ext = mime.indexOf('webm') !== -1 ? 'webm' : 'mp4';
+                                                    var fname = 'news_video_' + Date.now() + '.' + ext;
+                                                    var tid = window.AndroidBridge.beginVideoDownload(fname, mime || ('video/' + ext));
+                                                    if (!tid) return;
+                                                    var CHUNK_SIZE = 192 * 1024;
+                                                    var offset = 0;
+                                                    function sendNext() {
+                                                        if (offset >= b.size) {
+                                                            window.AndroidBridge.finishVideoDownload(tid);
+                                                            return;
+                                                        }
+                                                        var slice = b.slice(offset, offset + CHUNK_SIZE);
+                                                        var reader = new FileReader();
+                                                        reader.onloadend = function() {
+                                                            var dataUrl = reader.result || '';
+                                                            var b64 = dataUrl.indexOf(',') !== -1 ? dataUrl.split(',')[1] : dataUrl;
+                                                            var ok = window.AndroidBridge.appendVideoChunk(tid, b64);
+                                                            if (ok) {
+                                                                offset += CHUNK_SIZE;
+                                                                setTimeout(sendNext, 0);
+                                                            } else {
+                                                                window.AndroidBridge.cancelVideoDownload(tid);
+                                                            }
+                                                        };
+                                                        reader.onerror = function() {
+                                                            window.AndroidBridge.cancelVideoDownload(tid);
+                                                        };
+                                                        reader.readAsDataURL(slice);
+                                                    }
+                                                    sendNext();
+                                                    return;
+                                                }
                                                 var reader = new FileReader();
                                                 reader.onloadend = function() {
-                                                    if (window.AndroidBridge && window.AndroidBridge.downloadImage) {
-                                                        window.AndroidBridge.downloadImage(reader.result, 'news_card_${System.currentTimeMillis()}.jpg');
+                                                    if (isVid && window.AndroidBridge && window.AndroidBridge.downloadVideo) {
+                                                        window.AndroidBridge.downloadVideo(reader.result, 'news_video_' + Date.now() + '.mp4');
+                                                    } else if (window.AndroidBridge && window.AndroidBridge.downloadImage) {
+                                                        window.AndroidBridge.downloadImage(reader.result, 'news_card_' + Date.now() + '.jpg');
                                                     }
                                                 };
                                                 reader.readAsDataURL(b);
@@ -760,12 +815,14 @@ fun BreakingNewsStudioWebView(
                                     })();
                                 """.trimIndent()
                                 evaluateJavascript(js, null)
+                            } else if (isVideoDownload) {
+                                studioBridge.downloadVideo(url, "news_video_${System.currentTimeMillis()}.$resolvedExt")
                             } else {
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                                 context.startActivity(intent)
                             }
                         } catch (e: Exception) {
-                            Toast.makeText(context, "डाउनलोड शुरू हुआ: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "डाउनलोड त्रुटि: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
                         }
                     }
 

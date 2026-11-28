@@ -2,6 +2,7 @@
 // Works seamlessly in static deployments (GitHub Pages, Firebase Hosting, Vercel)
 // and handles news sites via multi-tier edge reader and CORS proxy fallbacks.
 import { extractPublisherFromDomain } from './headlineValidator';
+import { transliterateEssentialEnglishTerms, stripLeadingEnglishProseSentence } from './speakerUtils';
 
 export interface ScrapedNewsArticle {
   title: string;
@@ -18,11 +19,12 @@ export interface ScrapedNewsArticle {
 
 function cleanExtractedTitle(title: string): string {
   if (!title) return '';
-  return title
+  const cleaned = title
     .replace(/\s*[|\-–—:]\s*(Dainik Bhaskar|दैनिक भास्कर|Amar Ujala|अमर उजाला|NDTV Khabar|NDTV India|NDTV|Aaj Tak|आज तक|News18|Patrika|पत्रिका|Navbharat Times|नवभारत टाइम्स|Hindustan|Live Hindustan|BBC News हिंदी|BBC Hindi|ABP News|Zee News|Jagran|दैनिक जागरण|Firstpost|The Hindu|Indian Express).*$/iu, '')
     .replace(/^(न्यूज बनाओ|हेडलाइन बनाओ|खबर बनाओ|ब्रेकिंग न्यूज|headline:|news:)\s*[:\-\s]*/i, '')
     .replace(/^ताज़ा समाचार\s*[:\-\s]*/i, '')
     .trim();
+  return transliterateEssentialEnglishTerms(stripLeadingEnglishProseSentence(cleaned)).trim();
 }
 
 /**
@@ -103,12 +105,16 @@ export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 16
         }
 
         // Clean markdown symbols to yield pure journalistic content
-        const cleanedBody = rawContent
-          .replace(/!\[.*?\]\(.*?\)/g, ' ')
-          .replace(/\[([^\]]+)\]\(.*?\)/g, '$1')
-          .replace(/[*#_`>~]/g, '')
-          .replace(/\s+/g, ' ')
-          .trim();
+        const cleanedBody = transliterateEssentialEnglishTerms(
+          stripLeadingEnglishProseSentence(
+            rawContent
+              .replace(/!\[.*?\]\(.*?\)/g, ' ')
+              .replace(/\[([^\]]+)\]\(.*?\)/g, '$1')
+              .replace(/[*#_`>~]/g, '')
+              .replace(/\s+/g, ' ')
+              .trim()
+          )
+        );
 
         const description = cleanedBody.slice(0, 320);
 
@@ -194,7 +200,8 @@ export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 16
 
         const pList: string[] = [];
         doc.querySelectorAll('article p, .story-details p, .article-body p, main p, p').forEach((p) => {
-          const text = (p.textContent || '').trim();
+          const rawText = (p.textContent || '').trim();
+          const text = transliterateEssentialEnglishTerms(stripLeadingEnglishProseSentence(rawText));
           if (
             text.length > 25 &&
             /[\u0900-\u097F]/.test(text) &&
@@ -207,7 +214,7 @@ export async function scrapeNewsUrlClient(rawUrl: string, timeoutMs: number = 16
         });
 
         const content = pList.join('\n\n').slice(0, 6000);
-        const description = metaDesc.trim() || pList[0] || '';
+        const description = transliterateEssentialEnglishTerms(stripLeadingEnglishProseSentence(metaDesc.trim())) || pList[0] || '';
 
         const hasHindiInTitle = title && /[\u0900-\u097F]/.test(title);
         const hasHindiInBody = content.length >= 60 && /[\u0900-\u097F]/.test(content);

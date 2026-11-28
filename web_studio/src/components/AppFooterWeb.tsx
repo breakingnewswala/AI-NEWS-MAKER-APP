@@ -40,7 +40,7 @@ export const AppFooterWeb: React.FC<AppFooterWebProps> = ({
   };
 
   return (
-    <footer className="w-full bg-[#080d1a] border-t border-slate-800/90 text-slate-200 mt-12 pt-8 sm:pt-12 pb-32 sm:pb-12 px-3 sm:px-6 lg:px-8 relative overflow-hidden">
+    <footer className="w-full bg-[#080d1a] border-t border-slate-800/90 text-slate-200 mt-12 pt-8 sm:pt-12 pb-28 xl:pb-12 px-3 sm:px-6 lg:px-8 relative overflow-hidden">
       {/* Background ambient lighting */}
       <div className="absolute top-0 left-1/4 -translate-x-1/2 w-96 h-96 bg-red-600/5 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute top-1/3 right-10 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />

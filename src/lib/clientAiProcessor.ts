@@ -13,6 +13,8 @@ import {
   stripAllUrlsAndHyperlinks,
   BYLINE_REGEX,
   stripNewspaperBylines,
+  stripLeadingEnglishProseSentence,
+  transliterateEssentialEnglishTerms,
 } from './speakerUtils';
 import {
   countCharacters,
@@ -87,16 +89,18 @@ export function processNewsLocally(
     }
   }
 
-  // Clean trailing publisher suffix
+  // Clean trailing publisher suffix and transliterate compulsory English acronyms/terms
   if (extractedTitle) {
-    extractedTitle = extractedTitle
-      .replace(/\s*[|\-–—:]\s*(Dainik Bhaskar|Bhaskar|Aaj Tak|आज तक|BBC News हिंदी|BBC Hindi|NDTV India|NDTV|Amar Ujala|News18|Zee News|Patrika|Navbharat Times|Hindustan|Live Hindustan).*$/i, '')
-      .replace(/^(न्यूज बनाओ|हेडलाइन बनाओ|खबर बनाओ|ब्रेकिंग न्यूज|headline:|news:)\s*[:\-\s]*/i, '')
-      .replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री)\s+/gu, ' ')
-      .replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, ' ')
-      .replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, '')
-      .replace(/\.{2,}/g, '')
-      .trim();
+    extractedTitle = transliterateEssentialEnglishTerms(
+      extractedTitle
+        .replace(/\s*[|\-–—:]\s*(Dainik Bhaskar|Bhaskar|Aaj Tak|आज तक|BBC News हिंदी|BBC Hindi|NDTV India|NDTV|Amar Ujala|News18|Zee News|Patrika|Navbharat Times|Hindustan|Live Hindustan).*$/i, '')
+        .replace(/^(न्यूज बनाओ|हेडलाइन बनाओ|खबर बनाओ|ब्रेकिंग न्यूज|headline:|news:)\s*[:\-\s]*/i, '')
+        .replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री)\s+/gu, ' ')
+        .replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, ' ')
+        .replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, '')
+        .replace(/\.{2,}/g, '')
+        .trim()
+    );
   }
 
   const targetUrl = linkUrl || (clean.startsWith('http') ? clean : undefined);
@@ -126,29 +130,33 @@ export function processNewsLocally(
   }
 
   if (extractedDesc) {
-    extractedDesc = extractedDesc
-      .replace(/(?:वेबसाइट लिंक से प्राप्त मुख्य समाचार विषय|वेबसाइट लिंक से प्राप्त|समाचार विवरण[:\s]*यह खबर[^\n।]+से संबंधित है[।\.]*|घटनाक्रम को लेकर प्रशासन एवं संबंधित विभाग सक्रिय हैं[।\.]*|समाचार विवरण[:\s]*)/gi, ' ')
-      .replace(
-        /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
-        ' '
+    extractedDesc = transliterateEssentialEnglishTerms(
+      stripLeadingEnglishProseSentence(
+        extractedDesc
+          .replace(/(?:वेबसाइट लिंक से प्राप्त मुख्य समाचार विषय|वेबसाइट लिंक से प्राप्त|समाचार विवरण[:\s]*यह खबर[^\n।]+से संबंधित है[।\.]*|घटनाक्रम को लेकर प्रशासन एवं संबंधित विभाग सक्रिय हैं[।\.]*|समाचार विवरण[:\s]*)/gi, ' ')
+          .replace(
+            /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+            ' '
+          )
+          .trim()
       )
-      .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, '')
-      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, '')
-      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, '')
+    )
       .replace(/\s+/g, ' ')
       .trim();
   }
 
   if (extractedContent) {
-    extractedContent = extractedContent
-      .replace(/(?:वेबसाइट लिंक से प्राप्त मुख्य समाचार विषय|वेबसाइट लिंक से प्राप्त|समाचार विवरण[:\s]*यह खबर[^\n।]+से संबंधित है[।\.]*|घटनाक्रम को लेकर प्रशासन एवं संबंधित विभाग सक्रिय हैं[।\.]*|समाचार विवरण[:\s]*)/gi, ' ')
-      .replace(
-        /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
-        ' '
+    extractedContent = transliterateEssentialEnglishTerms(
+      stripLeadingEnglishProseSentence(
+        extractedContent
+          .replace(/(?:वेबसाइट लिंक से प्राप्त मुख्य समाचार विषय|वेबसाइट लिंक से प्राप्त|समाचार विवरण[:\s]*यह खबर[^\n।]+से संबंधित है[।\.]*|घटनाक्रम को लेकर प्रशासन एवं संबंधित विभाग सक्रिय हैं[।\.]*|समाचार विवरण[:\s]*)/gi, ' ')
+          .replace(
+            /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+            ' '
+          )
+          .trim()
       )
-      .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, '')
-      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, '')
-      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, '')
+    )
       .replace(/\s+/g, ' ')
       .trim();
   }
@@ -179,7 +187,7 @@ export function processNewsLocally(
   } else if (/हादसा|दुर्घटना|टक्कर|पलटी|घायल|मौत|accident/i.test(fullCorpus)) {
     category = 'हादसा';
     categories.push('हादसा', 'सड़क सुरक्षा');
-  } else if (/अपराध|गिरफ्तार|पुलिस|हत्या|चोरी|रेड|धोखाधड़ी|crime/i.test(fullCorpus)) {
+  } else if (/अपराध|गिरफ्तार|पुलिस|हत्या|चोरी|रेड|छापा|ईओडब्ल्यू|सीबीआई|ईडी|लोकायुक्त|धोखाधड़ी|crime|eow/i.test(fullCorpus)) {
     category = 'अपराध';
     categories.push('अपराध', 'पुलिस कार्रवाई');
   } else if (/राजनीति|चुनाव|कांग्रेस|बीजेपी|भाजपा|संसद|विधानसभा|politics/i.test(fullCorpus)) {
@@ -196,19 +204,21 @@ export function processNewsLocally(
   // Helper for sentence extraction with abbreviation protection
   function extractSafeSentences(text: string): string[] {
     if (!text) return [];
-    const cleanText = text
-      .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Title|शीर्षक|हेडलाइन|Headline)\s*:\s*[^\n\r]+/gi, ' ')
-      .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Meta Description|Description|विवरण|सारांश)\s*:\s*/gi, ' ')
-      .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Article Content & Facts|Facts & Content|Content|Article Content|URL|Link)\s*:\s*/gi, ' ')
-      .replace(BYLINE_REGEX, ' ')
-      .replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, ' ')
-      .replace(/<[^>]+>/g, '')
-      .replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री)\s+/gu, ' ')
-      .replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, ' ')
-      .replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, '')
-      .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, '')
-      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{12,}?[.!?।]\s*(?=[\u0900-\u097F])/u, '')
-      .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, '')
+    const cleanText = transliterateEssentialEnglishTerms(
+      stripLeadingEnglishProseSentence(
+        text
+          .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Title|शीर्षक|हेडलाइन|Headline)\s*:\s*[^\n\r]+/gi, ' ')
+          .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Meta Description|Description|विवरण|सारांश)\s*:\s*/gi, ' ')
+          .replace(/(?:^|\n|[\s।.\-–—])\s*(?:Article Content & Facts|Facts & Content|Content|Article Content|URL|Link)\s*:\s*/gi, ' ')
+          .replace(BYLINE_REGEX, ' ')
+          .replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, ' ')
+          .replace(/<[^>]+>/g, '')
+          .replace(/(?:^|[^\p{L}\p{M}])(माननीय|सम्माननीय|सम्मानीय|आदरणीय|श्रीमान|श्रीमती|सुश्री)\s+/gu, ' ')
+          .replace(/(?:^|[^\p{L}\p{M}])श्री\s+(?=[\p{L}])/gu, ' ')
+          .replace(/\s+महोदय(?=[,\s.!?।\n]|$)/gu, '')
+          .trim()
+      )
+    )
       .replace(/\s+/g, ' ')
       .trim();
 
@@ -220,12 +230,15 @@ export function processNewsLocally(
       .split(/[।\n]+|(?<=[^\d])\.\s+/)
       .map((s) => {
         let sent = s.replace(/#DOT#/g, '.').trim();
-        sent = sent
-          .replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, ' ')
-          .replace(/(?:वेबसाइट लिंक से प्राप्त मुख्य समाचार विषय|वेबसाइट लिंक से प्राप्त|मुख्य समाचार विषय|समाचार विवरण[:\s]*यह खबर[^\n।]+से संबंधित है[।\.]*|घटनाक्रम को लेकर प्रशासन एवं संबंधित विभाग सक्रिय हैं[।\.]*|समाचार विवरण[:\s]*)/gi, ' ')
-          .replace(/^(?:Title|Meta Description|Description|URL|Link)[:\s]*/i, '')
-          .replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+[.!?।]\s*)+(?=[\u0900-\u097F])/u, '')
-          .replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{10,}?\s*(?=[\u0900-\u097F])/u, '')
+        sent = transliterateEssentialEnglishTerms(
+          stripLeadingEnglishProseSentence(
+            sent
+              .replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, ' ')
+              .replace(/(?:वेबसाइट लिंक से प्राप्त मुख्य समाचार विषय|वेबसाइट लिंक से प्राप्त|मुख्य समाचार विषय|समाचार विवरण[:\s]*यह खबर[^\n।]+से संबंधित है[।\.]*|घटनाक्रम को लेकर प्रशासन एवं संबंधित विभाग सक्रिय हैं[।\.]*|समाचार विवरण[:\s]*)/gi, ' ')
+              .replace(/^(?:Title|Meta Description|Description|URL|Link)[:\s]*/i, '')
+              .trim()
+          )
+        )
           .replace(/\s+/g, ' ')
           .trim();
         return sent;

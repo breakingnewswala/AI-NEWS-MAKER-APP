@@ -459,15 +459,64 @@ export function validateHeadlinesBatch(
   };
 }
 
+const VALIDATOR_ACRONYM_MAP: [RegExp, string][] = [
+  [/\bEOW\b/gi, "ईओडब्ल्यू"],
+  [/\bCBI\b/gi, "सीबीआई"],
+  [/\bED\b/gi, "ईडी"],
+  [/\bNIA\b/gi, "एनआईए"],
+  [/\bACB\b/gi, "एसीबी"],
+  [/\bSIT\b/gi, "एसआईटी"],
+  [/\bATS\b/gi, "एटीएस"],
+  [/\bSTF\b/gi, "एसटीएफ"],
+  [/\bNCB\b/gi, "एनसीबी"],
+  [/\bDRI\b/gi, "डीआरआई"],
+  [/\bLokayukta?\b/gi, "लोकायुक्त"],
+  [/\bNDRF\b/gi, "एनडीआरएफ"],
+  [/\bSDRF\b/gi, "एसडीआरएफ"],
+  [/\bSDERF\b/gi, "एसडीईआरएफ"],
+  [/\bFIR\b/gi, "एफआईआर"],
+  [/\bSDM\b/gi, "एसडीएम"],
+  [/\bDSP\b/gi, "डीएसपी"],
+  [/\bASP\b/gi, "एएसपी"],
+  [/\bCSP\b/gi, "सीएसपी"],
+  [/\bSDOP\b/gi, "एसडीओपी"],
+  [/\bDGP\b/gi, "डीजीपी"],
+  [/\bDIG\b/gi, "डीआईजी"],
+  [/\bIG\b/gi, "आईजी"],
+  [/\bSP\b/gi, "एसपी"],
+  [/\bDM\b/gi, "डीएम"],
+  [/\bCMHO\b/gi, "सीएमएचओ"],
+  [/\bCEO\b/gi, "सीईओ"],
+  [/\bDFO\b/gi, "डीएफओ"],
+  [/\bRTO\b/gi, "आरटीओ"],
+  [/\bCollector\b/gi, "कलेक्टर"],
+  [/\bRaid\b/gi, "रेड"],
+  [/\bDindori\b/gi, "डिंडोरी"],
+];
+
+const VALIDATOR_CRITICAL_ENTITIES = [
+  "ईओडब्ल्यू", "सीबीआई", "ईडी", "लोकायुक्त", "एसीबी", "एनआईए", "एसआईटी",
+  "एटीएस", "एसटीएफ", "एनसीबी", "डीआरआई", "एनडीआरएफ", "एसडीआरएफ", "एसडीईआरएफ",
+  "सुप्रीम कोर्ट", "हाई कोर्ट", "एनजीटी", "चुनाव आयोग", "आरबीआई", "सेबी",
+  "इसरो", "डीआरडीओ", "एम्स", "यूपीएससी", "एमपीपीएससी",
+];
+
 /**
  * Cleans a candidate sentence of terminal punctuation, explanatory endings, and trailing postpositions.
  */
 export function cleanCandidateClause(clause: string): string {
   if (!clause || typeof clause !== "string") return "";
   let text = clause
+    .replace(/\b([A-Za-z])\.(?:([A-Za-z])\.)+([A-Za-z])?\.?/g, (m) => m.replace(/\./g, "").toUpperCase())
     .replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, "")
     .replace(/\s+/g, " ")
     .trim();
+
+  if (/[\u0900-\u097F]/.test(text)) {
+    for (const [pat, dev] of VALIDATOR_ACRONYM_MAP) {
+      text = text.replace(pat, dev);
+    }
+  }
 
   // Strip explanatory verb endings if present at the end of the clause
   const sentenceEndingRegex =
@@ -556,6 +605,17 @@ export function regenerateHeadlineOptionFromFacts(
     cleanBase = cleanCandidateClause(cleanBase);
   }
 
+  const baseCriticalEntities = VALIDATOR_CRITICAL_ENTITIES.filter((ent) => cleanBase.includes(ent));
+  const ensureCriticalEntities = (cand: string): string => {
+    if (!cand || baseCriticalEntities.length === 0) return cand;
+    const missing = baseCriticalEntities.filter((ent) => !cand.includes(ent));
+    if (missing.length === 0) return cand;
+    if (cleanBase && cleanBase.length <= 48 && !cand.includes(cleanBase)) {
+      return `${cleanBase}: ${cand}`;
+    }
+    return `${missing.join(" व ")} की कार्रवाई: ${cand}`;
+  };
+
   // 3. Generate candidate variations tailored to the tier angle
   const candidates: string[] = [];
 
@@ -568,15 +628,17 @@ export function regenerateHeadlineOptionFromFacts(
     candidates.push(`${loc} में ${cleanBase}`);
   }
 
-  // Angle 3: Facts from article
+  // Angle 3: Facts from article (anchored with critical entities from baseTitle if missing)
   for (const f of cleanFacts) {
     if (f !== cleanBase) {
-      candidates.push(f);
-      if (loc && !f.includes(loc)) {
-        candidates.push(`${loc}: ${f}`);
-      }
-      if (cleanBase && checkHeadlineSimilarity(cleanBase, f) < 0.35) {
+      if (cleanBase && checkHeadlineSimilarity(cleanBase, f) < 0.65) {
         candidates.push(`${cleanBase}, ${f}`);
+        candidates.push(`${cleanBase}: ${f}`);
+      }
+      const anchoredF = ensureCriticalEntities(f);
+      candidates.push(anchoredF);
+      if (loc && !anchoredF.includes(loc)) {
+        candidates.push(`${loc}: ${anchoredF}`);
       }
     }
   }
@@ -587,8 +649,8 @@ export function regenerateHeadlineOptionFromFacts(
     for (let j = 0; j < cleanFacts.length; j++) {
       if (i !== j) {
         const fB = cleanFacts[j];
-        if (checkHeadlineSimilarity(fA, fB) < 0.35) {
-          const next = `${fA}, ${fB}`;
+        if (checkHeadlineSimilarity(fA, fB) < 0.45) {
+          const next = ensureCriticalEntities(`${fA}, ${fB}`);
           candidates.push(next);
           if (loc && !next.includes(loc)) {
             candidates.push(`${loc}: ${next}`);
@@ -602,7 +664,7 @@ export function regenerateHeadlineOptionFromFacts(
   const validCandidates: { text: string; len: number; diff: number }[] = [];
 
   for (const cand of candidates) {
-    let candidate = removeRedundantClauses(cleanCandidateClause(cand));
+    let candidate = removeRedundantClauses(cleanCandidateClause(ensureCriticalEntities(cand)));
     let charLen = countCharacters(candidate);
 
     if (charLen > target.max) {
@@ -629,7 +691,8 @@ export function regenerateHeadlineOptionFromFacts(
     if (isDup) continue;
 
     const ideal = (target.min + target.max) / 2;
-    const diff = charLen >= target.min ? Math.abs(charLen - ideal) : (target.min - charLen) * 3;
+    const missingCriticalPenalty = baseCriticalEntities.some((ent) => !candidate.includes(ent)) ? 120 : 0;
+    const diff = (charLen >= target.min ? Math.abs(charLen - ideal) : (target.min - charLen) * 3) + missingCriticalPenalty;
     validCandidates.push({ text: candidate, len: charLen, diff });
   }
 

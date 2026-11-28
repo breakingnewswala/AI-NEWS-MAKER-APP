@@ -110,6 +110,559 @@ export function normalizeHeadlineText(input: any): string {
   return str;
 }
 
+const ENGLISH_LETTER_TO_DEVANAGARI: Record<string, string> = {
+  A: 'ए', B: 'बी', C: 'सी', D: 'डी', E: 'ई', F: 'एफ', G: 'जी',
+  H: 'एच', I: 'आई', J: 'जे', K: 'के', L: 'एल', M: 'एम', N: 'एन',
+  O: 'ओ', P: 'पी', Q: 'क्यू', R: 'आर', S: 'एस', T: 'टी', U: 'यू',
+  V: 'वी', W: 'डब्ल्यू', X: 'एक्स', Y: 'वाई', Z: 'जेड',
+};
+
+const IGNORED_TECHNICAL_ACRONYMS = new Set([
+  'HTTP', 'HTTPS', 'HTML', 'JSON', 'UTF', 'WWW', 'COM', 'ORG', 'NET',
+  'IST', 'GMT', 'UTC', 'IMG', 'SRC', 'ALT', 'DIV', 'SPAN', 'HREF',
+  'NULL', 'TRUE', 'FALSE', 'NAN',
+]);
+
+export const CRITICAL_HEADLINE_ENTITIES = [
+  'ईओडब्ल्यू', 'सीबीआई', 'ईडी', 'लोकायुक्त', 'एसीबी', 'एनआईए', 'एसआईटी',
+  'एटीएस', 'एसटीएफ', 'एनसीबी', 'डीआरआई', 'एनडीआरएफ', 'एसडीआरएफ', 'एसडीईआरएफ',
+  'सुप्रीम कोर्ट', 'हाई कोर्ट', 'एनजीटी', 'चुनाव आयोग', 'आरबीआई', 'सेबी',
+  'इसरो', 'डीआरडीओ', 'एम्स', 'यूपीएससी', 'एमपीपीएससी', 'व्यापमं', 'ईएसबी',
+];
+
+/**
+ * Strips leading full English SEO translation sentences (6+ pure English words ending in . ! ? before Devanagari)
+ * without stripping leading news acronyms (like "EOW", "CBI", "ED", "EOW Raid:") or numbers (like "10 लाख").
+ */
+export function stripLeadingEnglishProseSentence(input: string): string {
+  if (!input || typeof input !== 'string') return '';
+  return input.replace(
+    /^(?:(?:[A-Za-z0-9,.\-–—:;'"()\/&|!_]+\s+){5,}[A-Za-z0-9,.\-–—:;'"()\/&|!_]+[.!?]\s+)+(?=[\u0900-\u097F])/u,
+    ''
+  );
+}
+
+export const ESSENTIAL_ENGLISH_TO_HINDI_TERMS: [RegExp, string][] = [
+  // Multi-word compounds first
+  [/\bSupreme\s+Court\b/gi, 'सुप्रीम कोर्ट'],
+  [/\bHigh\s+Court\b/gi, 'हाई कोर्ट'],
+  [/\bDistrict\s+Court\b/gi, 'जिला कोर्ट'],
+  [/\bSession\s+Court\b/gi, 'सेशन कोर्ट'],
+  [/\bZero\s+FIR\b/gi, 'जीरो एफआईआर'],
+  [/\bDeputy\s+CM\b/gi, 'डिप्टी सीएम'],
+  [/\bDy\.?\s+CM\b/gi, 'डिप्टी सीएम'],
+  [/\bPaper\s+Leak\b/gi, 'पेपर लीक'],
+  [/\bVande\s+Bharat\b/gi, 'वंदे भारत'],
+  [/\bCT\s+Scan\b/gi, 'सीटी स्कैन'],
+  [/\bHigh\s+Alert\b/gi, 'हाई अलर्ट'],
+  [/\bRed\s+Alert\b/gi, 'रेड अलर्ट'],
+  [/\bOrange\s+Alert\b/gi, 'ऑरेंज अलर्ट'],
+  [/\bYellow\s+Alert\b/gi, 'येलो अलर्ट'],
+  [/\bMadhya\s+Pradesh\b/gi, 'मध्य प्रदेश'],
+  [/\bUttar\s+Pradesh\b/gi, 'उत्तर प्रदेश'],
+  [/\bHimachal\s+Pradesh\b/gi, 'हिमाचल प्रदेश'],
+  [/\bAndhra\s+Pradesh\b/gi, 'आंध्र प्रदेश'],
+  [/\bArunachal\s+Pradesh\b/gi, 'अरुणाचल प्रदेश'],
+  [/\bNew\s+Delhi\b/gi, 'नई दिल्ली'],
+
+  // Investigating & Law Enforcement Agencies (Compulsory in crime/raid headlines)
+  [/\bEOW\b/gi, 'ईओडब्ल्यू'],
+  [/\bCBI\b/gi, 'सीबीआई'],
+  [/\bED\b/gi, 'ईडी'],
+  [/\bNIA\b/gi, 'एनआईए'],
+  [/\bACB\b/gi, 'एसीबी'],
+  [/\bSIT\b/gi, 'एसआईटी'],
+  [/\bATS\b/gi, 'एटीएस'],
+  [/\bSTF\b/gi, 'एसटीएफ'],
+  [/\bNCB\b/gi, 'एनसीबी'],
+  [/\bDRI\b/gi, 'डीआरआई'],
+  [/\bCID\b/gi, 'सीआईडी'],
+  [/\bRAW\b/g, 'रॉ'],
+  [/\bIB\b/g, 'आईबी'],
+  [/\bLokayukta\b/gi, 'लोकायुक्त'],
+  [/\bLokayukt\b/gi, 'लोकायुक्त'],
+  [/\bNDRF\b/gi, 'एनडीआरएफ'],
+  [/\bSDRF\b/gi, 'एसडीआरएफ'],
+  [/\bSDERF\b/gi, 'एसडीईआरएफ'],
+  [/\bCRPF\b/gi, 'सीआरपीएफ'],
+  [/\bBSF\b/gi, 'बीएसएफ'],
+  [/\bCISF\b/gi, 'सीआईएसएफ'],
+  [/\bITBP\b/gi, 'आईटीबीपी'],
+  [/\bSSB\b/gi, 'एसएसबी'],
+  [/\bNSG\b/gi, 'एनएसजी'],
+  [/\bRPF\b/gi, 'आरपीएफ'],
+  [/\bGRP\b/gi, 'जीआरपी'],
+  [/\bPAC\b/gi, 'पीएसी'],
+  [/\bSAF\b/gi, 'एसएएफ'],
+  [/\bPHQ\b/gi, 'पीएचक्यू'],
+
+  // Administrative, Police & Departmental Ranks/Posts
+  [/\bDGP\b/gi, 'डीजीपी'],
+  [/\bADG\b/gi, 'एडीजी'],
+  [/\bDIG\b/gi, 'डीआईजी'],
+  [/\bIG\b/gi, 'आईजी'],
+  [/\bSSP\b/gi, 'एसएसपी'],
+  [/\bASP\b/gi, 'एएसपी'],
+  [/\bDSP\b/gi, 'डीएसपी'],
+  [/\bCSP\b/gi, 'सीएसपी'],
+  [/\bSDOP\b/gi, 'एसडीओपी'],
+  [/\bACP\b/gi, 'एसीपी'],
+  [/\bDCP\b/gi, 'डीसीपी'],
+  [/\bCP\b/g, 'सीपी'],
+  [/\bSP\b/gi, 'एसपी'],
+  [/\bSHO\b/gi, 'एसएचओ'],
+  [/\bTI\b/gi, 'टीआई'],
+  [/\bASI\b/gi, 'एएसआई'],
+  [/\bSI\b/g, 'एसआई'],
+  [/\bIAS\b/gi, 'आईएएस'],
+  [/\bIPS\b/gi, 'आईपीएस'],
+  [/\bIFS\b/gi, 'आईएफएस'],
+  [/\bIRS\b/gi, 'आईआरएस'],
+  [/\bDM\b/gi, 'डीएम'],
+  [/\bSDM\b/gi, 'एसडीएम'],
+  [/\bADM\b/gi, 'एडीएम'],
+  [/\bSDO\b/gi, 'एसडीओ'],
+  [/\bCEO\b/gi, 'सीईओ'],
+  [/\bCFO\b/gi, 'सीएफओ'],
+  [/\bCOO\b/gi, 'सीओओ'],
+  [/\bCTO\b/gi, 'सीटीओ'],
+  [/\bCMD\b/gi, 'सीएमडी'],
+  [/\bCMHO\b/gi, 'सीएमएचओ'],
+  [/\bCMO\b/gi, 'सीएमओ'],
+  [/\bPMO\b/gi, 'पीएमओ'],
+  [/\bBMO\b/gi, 'बीएमओ'],
+  [/\bBEO\b/gi, 'बीईओ'],
+  [/\bDEO\b/gi, 'डीईओ'],
+  [/\bDPO\b/gi, 'डीपीओ'],
+  [/\bCDPO\b/gi, 'सीडीपीओ'],
+  [/\bDFO\b/gi, 'डीएफओ'],
+  [/\bRTO\b/gi, 'आरटीओ'],
+  [/\bARTO\b/gi, 'एआरटीओ'],
+  [/\bDTO\b/gi, 'डीटीओ'],
+  [/\bPRO\b/gi, 'पीआरओ'],
+  [/\bPWD\b/gi, 'पीडब्ल्यूडी'],
+  [/\bPHE\b/gi, 'पीएचई'],
+  [/\bRES\b/g, 'आरईएस'],
+  [/\bWCD\b/gi, 'डब्ल्यूसीडी'],
+  [/\bNHAI\b/gi, 'एनएचएआई'],
+  [/\bMPEB\b/gi, 'एमपीईबी'],
+  [/\bCollector\b/gi, 'कलेक्टर'],
+  [/\bCommissioner\b/gi, 'कमिश्नर'],
+  [/\bTehsildar\b/gi, 'तहसीलदार'],
+  [/\bTahsildar\b/gi, 'तहसीलदार'],
+  [/\bPatwari\b/gi, 'पटवारी'],
+  [/\bSarpanch\b/gi, 'सरपंच'],
+  [/\bSachiv\b/gi, 'सचिव'],
+  [/\bParshad\b/gi, 'पार्षद'],
+  [/\bMayor\b/gi, 'महापौर'],
+
+  // Constitutional, Political & Governance Terms
+  [/\bPM\b/gi, 'पीएम'],
+  [/\bCM\b/gi, 'सीएम'],
+  [/\bMLA\b/gi, 'विधायक'],
+  [/\bMLC\b/gi, 'एमएलसी'],
+  [/\bMP\b/gi, 'एमपी'],
+  [/\bUP\b/g, 'यूपी'],
+  [/\bCJI\b/gi, 'सीजेआई'],
+  [/\bBJP\b/gi, 'बीजेपी'],
+  [/\bNDA\b/gi, 'एनडीए'],
+  [/\bCongress\b/gi, 'कांग्रेस'],
+  [/\bAAP\b/g, 'आप'],
+  [/\bBSP\b/gi, 'बसपा'],
+  [/\bRJD\b/gi, 'आरजेडी'],
+  [/\bJDU\b/gi, 'जेडीयू'],
+  [/\bTMC\b/gi, 'टीएमसी'],
+  [/\bNCP\b/gi, 'एनसीपी'],
+  [/\bRSS\b/gi, 'आरएसएस'],
+  [/\bVHP\b/gi, 'विहिप'],
+  [/\bABVP\b/gi, 'एबीवीपी'],
+  [/\bNSUI\b/gi, 'एनएसयूआई'],
+  [/\bECI\b/gi, 'चुनाव आयोग'],
+  [/\bEVM\b/gi, 'ईवीएम'],
+  [/\bVVPAT\b/gi, 'वीवीपैट'],
+  [/\bNOTA\b/gi, 'नोटा'],
+  [/\bSIR\b/g, 'एसआईआर'],
+  [/\bBLO\b/gi, 'बीएलओ'],
+  [/\bVIP\b/gi, 'वीआईपी'],
+  [/\bVVIP\b/gi, 'वीवीआईपी'],
+
+  // Legal, Crime & Action Terms
+  [/\bFIR\b/gi, 'एफआईआर'],
+  [/\bPOCSO\b/gi, 'पॉक्सो'],
+  [/\bPOSCO\b/gi, 'पॉक्सो'],
+  [/\bPMLA\b/gi, 'पीएमएलए'],
+  [/\bUAPA\b/gi, 'यूएपीए'],
+  [/\bNSA\b/gi, 'एनएसए'],
+  [/\bBNS\b/gi, 'बीएनएस'],
+  [/\bBNSS\b/gi, 'बीएनएसएस'],
+  [/\bIPC\b/gi, 'आईपीसी'],
+  [/\bCrPC\b/gi, 'सीआरपीसी'],
+  [/\bCAA\b/gi, 'सीएए'],
+  [/\bNRC\b/gi, 'एनआरसी'],
+  [/\bNPR\b/gi, 'एनपीआर'],
+  [/\bUCC\b/gi, 'यूसीसी'],
+  [/\bPIL\b/gi, 'पीआईएल'],
+  [/\bNOC\b/gi, 'एनओसी'],
+  [/\bNGT\b/gi, 'एनजीटी'],
+  [/\bNCLT\b/gi, 'एनसीएलटी'],
+  [/\bRaid\b/gi, 'रेड'],
+  [/\bTrap\b/gi, 'ट्रैप'],
+  [/\bBribe\b/gi, 'रिश्वत'],
+  [/\bScam\b/gi, 'स्कैम'],
+  [/\bFraud\b/gi, 'फ्रॉड'],
+  [/\bArrested\b/gi, 'गिरफ्तार'],
+  [/\bArrest\b/gi, 'गिरफ्तार'],
+  [/\bSuspended\b/gi, 'सस्पेंड'],
+  [/\bSuspend\b/gi, 'सस्पेंड'],
+  [/\bTransfer\b/gi, 'ट्रांसफर'],
+  [/\bNotice\b/gi, 'नोटिस'],
+  [/\bWarrant\b/gi, 'वारंट'],
+  [/\bBail\b/gi, 'जमानत'],
+  [/\bJail\b/gi, 'जेल'],
+  [/\bRemand\b/gi, 'रिमांड'],
+  [/\bChallan\b/gi, 'चालान'],
+  [/\bChargesheet\b/gi, 'चार्जशीट'],
+  [/\bPostmortem\b/gi, 'पोस्टमार्टम'],
+
+  // Exams, Education, Health & Science
+  [/\bUPSC\b/gi, 'यूपीएससी'],
+  [/\bMPPSC\b/gi, 'एमपीपीएससी'],
+  [/\bUPPSC\b/gi, 'यूपीपीएससी'],
+  [/\bBPSC\b/gi, 'बीपीएससी'],
+  [/\bRPSC\b/gi, 'आरपीएससी'],
+  [/\bCGPSC\b/gi, 'सीजीपीएससी'],
+  [/\bPSC\b/gi, 'पीएससी'],
+  [/\bSSC\b/gi, 'एसएससी'],
+  [/\bVYAPAM\b/gi, 'व्यापमं'],
+  [/\bMPESB\b/gi, 'एमपीईएसबी'],
+  [/\bESB\b/gi, 'ईएसबी'],
+  [/\bPEB\b/gi, 'पीईबी'],
+  [/\bIBPS\b/gi, 'आईबीपीएस'],
+  [/\bRRB\b/gi, 'आरआरबी'],
+  [/\bNEET\b/gi, 'नीट'],
+  [/\bJEE\b/gi, 'जेईई'],
+  [/\bCUET\b/gi, 'सीयूईटी'],
+  [/\bGATE\b/g, 'गेट'],
+  [/\bCBSE\b/gi, 'सीबीएसई'],
+  [/\bICSE\b/gi, 'आईसीएसई'],
+  [/\bMPBSE\b/gi, 'एमपीबीएसई'],
+  [/\bNCERT\b/gi, 'एनसीईआरटी'],
+  [/\bUGC\b/gi, 'यूजीसी'],
+  [/\bAICTE\b/gi, 'एआईसीटीई'],
+  [/\bIIT\b/gi, 'आईआईटी'],
+  [/\bIIM\b/gi, 'आईआईएम'],
+  [/\bNIT\b/gi, 'एनआईटी'],
+  [/\bIIIT\b/gi, 'ट्रिपल आईटी'],
+  [/\bAIIMS\b/gi, 'एम्स'],
+  [/\bICMR\b/gi, 'आईसीएमआर'],
+  [/\bWHO\b/gi, 'डब्ल्यूएचओ'],
+  [/\bOPD\b/gi, 'ओपीडी'],
+  [/\bICU\b/gi, 'आईसीयू'],
+  [/\bMRI\b/gi, 'एमआरआई'],
+  [/\bDNA\b/gi, 'डीएनए'],
+  [/\bRNA\b/gi, 'आरएनए'],
+  [/\bCOVID\b/gi, 'कोविड'],
+  [/\bCorona\b/gi, 'कोरोना'],
+  [/\bVirus\b/gi, 'वायरस'],
+  [/\bISRO\b/gi, 'इसरो'],
+  [/\bDRDO\b/gi, 'डीआरडीओ'],
+  [/\bNASA\b/gi, 'नासा'],
+
+  // Economy, Banking, Schemes, Weather, Transport & Tech
+  [/\bRBI\b/gi, 'आरबीआई'],
+  [/\bSBI\b/gi, 'एसबीआई'],
+  [/\bPNB\b/gi, 'पीएनबी'],
+  [/\bHDFC\b/gi, 'एचडीएफसी'],
+  [/\bICICI\b/gi, 'आईसीआईसीआई'],
+  [/\bLIC\b/gi, 'एलआईसी'],
+  [/\bSEBI\b/gi, 'सेबी'],
+  [/\bTRAI\b/gi, 'ट्राई'],
+  [/\bFSSAI\b/gi, 'एफएसएसएआई'],
+  [/\bIRDAI\b/gi, 'इरडा'],
+  [/\bNABARD\b/gi, 'नाबार्ड'],
+  [/\bEPFO\b/gi, 'ईपीएफओ'],
+  [/\bESIC\b/gi, 'ईएसआईसी'],
+  [/\bUIDAI\b/gi, 'यूआईडीएआई'],
+  [/\bAadhaar\b/gi, 'आधार'],
+  [/\bAadhar\b/gi, 'आधार'],
+  [/\bPAN\b/g, 'पैन'],
+  [/\bGST\b/gi, 'जीएसटी'],
+  [/\bCGST\b/gi, 'सीजीएसटी'],
+  [/\bSGST\b/gi, 'एसजीएसटी'],
+  [/\bITR\b/gi, 'आईटीआर'],
+  [/\bTDS\b/gi, 'टीडीएस'],
+  [/\bEMI\b/gi, 'ईएमआई'],
+  [/\bUPI\b/gi, 'यूपीआई'],
+  [/\bATM\b/gi, 'एटीएम'],
+  [/\bOTP\b/gi, 'ओटीपी'],
+  [/\b-?e-?KYC\b/gi, 'ई-केवाईसी'],
+  [/\bKYC\b/gi, 'केवाईसी'],
+  [/\bGDP\b/gi, 'जीडीपी'],
+  [/\bMSP\b/gi, 'एमएसपी'],
+  [/\bDBT\b/gi, 'डीबीटी'],
+  [/\bBPL\b/gi, 'बीपीएल'],
+  [/\bAPL\b/gi, 'एपीएल'],
+  [/\bEWS\b/gi, 'ईडब्ल्यूएस'],
+  [/\bOBC\b/gi, 'ओबीसी'],
+  [/\bSC\b/g, 'एससी'],
+  [/\bST\b/g, 'एसटी'],
+  [/\bMGNREGA\b/gi, 'मनरेगा'],
+  [/\bMNREGA\b/gi, 'मनरेगा'],
+  [/\bNREGA\b/gi, 'नरेगा'],
+  [/\bPMAY\b/gi, 'पीएम आवास'],
+  [/\bPMJAY\b/gi, 'आयुष्मान योजना'],
+  [/\bRERA\b/gi, 'रेरा'],
+  [/\bFSI\b/gi, 'एफएसआई'],
+  [/\bFAR\b/g, 'एफएआर'],
+  [/\bBHK\b/gi, 'बीएचके'],
+  [/\bPPP\b/gi, 'पीपीपी'],
+  [/\bCSR\b/gi, 'सीएसआर'],
+  [/\bMoU\b/gi, 'एमओयू'],
+  [/\bDPR\b/gi, 'डीपीआर'],
+  [/\bNH\b/g, 'एनएच'],
+  [/\bSH\b/g, 'एसएच'],
+  [/\bFASTag\b/gi, 'फास्टैग'],
+  [/\bIRCTC\b/gi, 'आईआरसीटीसी'],
+  [/\bMetro\b/gi, 'मेट्रो'],
+  [/\bIMD\b/gi, 'आईएमडी'],
+  [/\bAQI\b/gi, 'एक्यूआई'],
+  [/\bCPCB\b/gi, 'सीपीसीबी'],
+  [/\bBHEL\b/gi, 'भेल'],
+  [/\bNTPC\b/gi, 'एनटीपीसी'],
+  [/\bONGC\b/gi, 'ओएनजीसी'],
+  [/\bSAIL\b/g, 'सेल'],
+  [/\bGAIL\b/gi, 'गेल'],
+  [/\bIOCL\b/gi, 'आईओसीएल'],
+  [/\bBPCL\b/gi, 'बीपीसीएल'],
+  [/\bHPCL\b/gi, 'एचपीसीएल'],
+  [/\bBSNL\b/gi, 'बीएसएनएल'],
+  [/\bBCCI\b/gi, 'बीसीसीआई'],
+  [/\bICC\b/gi, 'आईसीसी'],
+  [/\bIPL\b/gi, 'आईपीएल'],
+  [/\bWPL\b/gi, 'डब्ल्यूपीएल'],
+  [/\bFIFA\b/gi, 'फीफा'],
+  [/\bUSA\b/gi, 'यूएसए'],
+  [/\bUK\b/g, 'यूके'],
+  [/\bUN\b/g, 'यूएन'],
+  [/\bAI\b/gi, 'एआई'],
+  [/\bIT\b/g, 'आईटी'],
+  [/\bAPK\b/gi, 'एपीके'],
+  [/\bPDF\b/gi, 'पीडीएफ'],
+  [/\bSIM\b/gi, 'सिम'],
+  [/\bURL\b/gi, 'यूआरएल'],
+  [/\bSMS\b/gi, 'एसएमएस'],
+  [/\bCCTV\b/gi, 'सीसीटीवी'],
+  [/\bLED\b/gi, 'एलईडी'],
+  [/\bLPG\b/gi, 'एलपीजी'],
+  [/\bCNG\b/gi, 'सीएनजी'],
+  [/\bPNG\b/gi, 'पीएनजी'],
+  [/\bEV\b/gi, 'ईवी'],
+  [/\b5G\b/gi, '5जी'],
+  [/\b4G\b/gi, '4जी'],
+  [/\bWi-?Fi\b/gi, 'वाई-फाई'],
+  [/\bGPS\b/gi, 'जीपीएस'],
+  [/\bQR\b/gi, 'क्यूआर'],
+  [/\bWhatsApp\b/gi, 'व्हाट्सएप'],
+  [/\bFacebook\b/gi, 'फेसबुक'],
+  [/\bInstagram\b/gi, 'इंस्टाग्राम'],
+  [/\bYouTube\b/gi, 'यूट्यूब'],
+  [/\bGoogle\b/gi, 'गूगल'],
+  [/\bCyber\b/gi, 'साइबर'],
+
+  // Compulsory Common News Action & Subject Words
+  [/\bAction\b/gi, 'एक्शन'],
+  [/\bAlert\b/gi, 'अलर्ट'],
+  [/\bReport\b/gi, 'रिपोर्ट'],
+  [/\bUpdate\b/gi, 'अपडेट'],
+  [/\bPolice\b/gi, 'पुलिस'],
+  [/\bTeam\b/gi, 'टीम'],
+  [/\bCourt\b/gi, 'कोर्ट'],
+  [/\bHospital\b/gi, 'अस्पताल'],
+  [/\bDoctor\b/gi, 'डॉक्टर'],
+  [/\bSchool\b/gi, 'स्कूल'],
+  [/\bCollege\b/gi, 'कॉलेज'],
+  [/\bUniversity\b/gi, 'यूनिवर्सिटी'],
+  [/\bExam\b/gi, 'परीक्षा'],
+  [/\bResult\b/gi, 'रिजल्ट'],
+  [/\bBudget\b/gi, 'बजट'],
+  [/\bTax\b/gi, 'टैक्स'],
+  [/\bLoan\b/gi, 'लोन'],
+  [/\bBank\b/gi, 'बैंक'],
+  [/\bTrain\b/gi, 'ट्रेन'],
+  [/\bExpress\b/gi, 'एक्सप्रेस'],
+  [/\bAirport\b/gi, 'एयरपोर्ट'],
+  [/\bFlight\b/gi, 'फ्लाइट'],
+  [/\bHighway\b/gi, 'हाईवे'],
+  [/\bAccident\b/gi, 'हादसा'],
+  [/\bCrime\b/gi, 'क्राइम'],
+  [/\bMurder\b/gi, 'हत्या'],
+  [/\bOnline\b/gi, 'ऑनलाइन'],
+  [/\bDigital\b/gi, 'डिजिटल'],
+  [/\bSmart\b/gi, 'स्मार्ट'],
+  [/\bVideo\b/gi, 'वीडियो'],
+  [/\bPhoto\b/gi, 'फोटो'],
+  [/\bViral\b/gi, 'वायरल'],
+  [/\bOfficer\b/gi, 'अफसर'],
+  [/\bEngineer\b/gi, 'इंजीनियर'],
+  [/\bClerk\b/gi, 'क्लर्क'],
+  [/\bPanchayat\b/gi, 'पंचायत'],
+  [/\bJanpad\b/gi, 'जनपद'],
+  [/\bBonus\b/gi, 'बोनस'],
+  [/\bPension\b/gi, 'पेंशन'],
+  [/\bSalary\b/gi, 'सैलरी'],
+
+  // Key Districts & Cities when written in English inside Hindi news
+  [/\bDindori\b/gi, 'डिंडोरी'],
+  [/\bBhopal\b/gi, 'भोपाल'],
+  [/\bIndore\b/gi, 'इंदौर'],
+  [/\bJabalpur\b/gi, 'जबलपुर'],
+  [/\bGwalior\b/gi, 'ग्वालियर'],
+  [/\bUjjain\b/gi, 'उज्जैन'],
+  [/\bRewa\b/gi, 'रीवा'],
+  [/\bSatna\b/gi, 'सतना'],
+  [/\bSagar\b/gi, 'सागर'],
+  [/\bShahdol\b/gi, 'शहडोल'],
+  [/\bMandla\b/gi, 'मंडला'],
+  [/\bBalaghat\b/gi, 'बालाघाट'],
+  [/\bChhindwara\b/gi, 'छिंदवाड़ा'],
+  [/\bKatni\b/gi, 'कटनी'],
+  [/\bUmaria\b/gi, 'उमरिया'],
+  [/\bAnuppur\b/gi, 'अनूपपुर'],
+  [/\bSeoni\b/gi, 'सिवनी'],
+  [/\bNarsinghpur\b/gi, 'नरसिंहपुर'],
+  [/\bBetul\b/gi, 'बैतूल'],
+  [/\bNarmadapuram\b/gi, 'नर्मदापुरम'],
+  [/\bHoshangabad\b/gi, 'नर्मदापुरम'],
+  [/\bHarda\b/gi, 'हरदा'],
+  [/\bVidisha\b/gi, 'विदिशा'],
+  [/\bRaisen\b/gi, 'रायसेन'],
+  [/\bSehore\b/gi, 'सीहोर'],
+  [/\bRajgarh\b/gi, 'राजगढ़'],
+  [/\bGuna\b/gi, 'गुना'],
+  [/\bAshoknagar\b/gi, 'अशोकनगर'],
+  [/\bShivpuri\b/gi, 'शिवपुरी'],
+  [/\bDatia\b/gi, 'दतिया'],
+  [/\bBhind\b/gi, 'भिंड'],
+  [/\bMorena\b/gi, 'मुरैना'],
+  [/\bSheopur\b/gi, 'श्योपुर'],
+  [/\bChhatarpur\b/gi, 'छतरपुर'],
+  [/\bTikamgarh\b/gi, 'टीकमगढ़'],
+  [/\bNiwari\b/gi, 'निवाड़ी'],
+  [/\bPanna\b/gi, 'पन्ना'],
+  [/\bDamoh\b/gi, 'दमोह'],
+  [/\bSingrauli\b/gi, 'सिंगरौली'],
+  [/\bSidhi\b/gi, 'सीधी'],
+  [/\bMaihar\b/gi, 'मैहर'],
+  [/\bMauganj\b/gi, 'मऊगंज'],
+  [/\bPandhurna\b/gi, 'पांढुर्णा'],
+  [/\bDewas\b/gi, 'देवास'],
+  [/\bRatlam\b/gi, 'रतलाम'],
+  [/\bMandsaur\b/gi, 'मंदसौर'],
+  [/\bNeemuch\b/gi, 'नीमच'],
+  [/\bShajapur\b/gi, 'शाजापुर'],
+  [/\bKhandwa\b/gi, 'खंडवा'],
+  [/\bKhargone\b/gi, 'खरगोन'],
+  [/\bBurhanpur\b/gi, 'बुरहानपुर'],
+  [/\bBarwani\b/gi, 'बड़वानी'],
+  [/\bDhar\b/gi, 'धार'],
+  [/\bJhabua\b/gi, 'झाबुआ'],
+  [/\bAlirajpur\b/gi, 'अलीराजपुर'],
+  [/\bRaipur\b/gi, 'रायपुर'],
+  [/\bBilaspur\b/gi, 'बिलासपुर'],
+  [/\bDurg\b/gi, 'दुर्ग'],
+  [/\bBhilai\b/gi, 'भिलाई'],
+  [/\bKorba\b/gi, 'कोरबा'],
+  [/\bRaigarh\b/gi, 'रायगढ़'],
+  [/\bJagdalpur\b/gi, 'जगदलपुर'],
+  [/\bBastar\b/gi, 'बस्तर'],
+  [/\bAmbikapur\b/gi, 'अंबिकापुर'],
+  [/\bSurguja\b/gi, 'सरगुजा'],
+  [/\bRajnandgaon\b/gi, 'राजनांदगांव'],
+  [/\bDelhi\b/gi, 'दिल्ली'],
+  [/\bLucknow\b/gi, 'लखनऊ'],
+  [/\bVaranasi\b/gi, 'वाराणसी'],
+  [/\bPrayagraj\b/gi, 'प्रयागराज'],
+  [/\bKanpur\b/gi, 'कानपुर'],
+  [/\bAgra\b/gi, 'आगरा'],
+  [/\bNoida\b/gi, 'नोएडा'],
+  [/\bGhaziabad\b/gi, 'गाजियाबाद'],
+  [/\bPatna\b/gi, 'पटना'],
+  [/\bRanchi\b/gi, 'रांची'],
+  [/\bJaipur\b/gi, 'जयपुर'],
+  [/\bJodhpur\b/gi, 'जोधपुर'],
+  [/\bUdaipur\b/gi, 'उदयपुर'],
+  [/\bKota\b/gi, 'कोटा'],
+  [/\bMumbai\b/gi, 'मुंबई'],
+  [/\bPune\b/gi, 'पुणे'],
+  [/\bNagpur\b/gi, 'नागपुर'],
+  [/\bAhmedabad\b/gi, 'अहमदाबाद'],
+  [/\bSurat\b/gi, 'सूरत'],
+  [/\bChandigarh\b/gi, 'चंडीगढ़'],
+  [/\bDehradun\b/gi, 'देहरादून'],
+  [/\bHaridwar\b/gi, 'हरिद्वार'],
+  [/\bChhattisgarh\b/gi, 'छत्तीसगढ़'],
+  [/\bRajasthan\b/gi, 'राजस्थान'],
+  [/\bBihar\b/gi, 'बिहार'],
+  [/\bJharkhand\b/gi, 'झारखंड'],
+  [/\bUttarakhand\b/gi, 'उत्तराखंड'],
+  [/\bHaryana\b/gi, 'हरियाणा'],
+  [/\bPunjab\b/gi, 'पंजाब'],
+  [/\bGujarat\b/gi, 'गुजरात'],
+  [/\bMaharashtra\b/gi, 'महाराष्ट्र'],
+];
+
+/**
+ * Transliterates compulsory English news acronyms (EOW, CBI, ED, ACB, Lokayukta, FIR, SDM, DSP, etc.),
+ * dotted abbreviations (E.O.W. -> ईओडब्ल्यू), places, and key action words into Devanagari Hindi.
+ * Also automatically transliterates any unlisted 2-6 letter uppercase acronym phonetically into Devanagari
+ * so essential English acronyms are NEVER stripped out of headlines or captions.
+ */
+export function transliterateEssentialEnglishTerms(input: string): string {
+  if (!input || typeof input !== 'string') return '';
+
+  // 1. Strip any leading full English SEO translation sentence (6+ words ending in . ! ? before Devanagari)
+  let s = stripLeadingEnglishProseSentence(input);
+
+  // 2. If the text has NO Devanagari characters at all and is a pure-English prose sentence (has English prose stopwords or >5 ASCII words),
+  // do NOT inject Devanagari into it so pure-English SEO sentences can be cleanly filtered out.
+  if (!/[\u0900-\u097F]/.test(s)) {
+    const asciiWords = s.trim().split(/\s+/).filter(Boolean);
+    const hasEnglishProseStopwords = /\b(?:the|has|have|had|was|were|is|are|been|being|will|would|could|should|for|with|from|that|this|these|those|which|into|under|after|before|between|during|through|about|against|among|formulated|workers|areas|according)\b/i.test(s);
+    if (hasEnglishProseStopwords || asciiWords.length > 5) {
+      return s;
+    }
+  }
+
+  // 3. Protect [yellow] and [highlight] tags from replacement
+  s = s.replace(/\[yellow\]/gi, '\uE001').replace(/\[\/yellow\]/gi, '\uE002');
+  s = s.replace(/\[highlight\]/gi, '\uE003').replace(/\[\/highlight\]/gi, '\uE004');
+
+  // 4. Normalize dotted acronyms like E.O.W. -> EOW, C.B.I. -> CBI, F.I.R. -> FIR, S.D.M. -> SDM
+  s = s.replace(/\b([A-Za-z])\.(?:([A-Za-z])\.)+([A-Za-z])?\.?/g, (match) =>
+    match.replace(/\./g, '').toUpperCase()
+  );
+
+  // 5. Apply dictionary of compulsory English acronyms, agencies, posts, schemes, places & news words
+  for (const [pattern, devanagari] of ESSENTIAL_ENGLISH_TO_HINDI_TERMS) {
+    s = s.replace(pattern, devanagari);
+  }
+
+  // 6. Automatic phonetic Devanagari fallback for any remaining 2-6 letter uppercase acronym (e.g. SECR, WCR, DRI, SFIO)
+  s = s.replace(/\b[A-Z]{2,6}\b/g, (acronym) => {
+    if (IGNORED_TECHNICAL_ACRONYMS.has(acronym)) return acronym;
+    return acronym
+      .split('')
+      .map((ch) => ENGLISH_LETTER_TO_DEVANAGARI[ch] || '')
+      .join('');
+  });
+
+  // 7. Restore highlight tags
+  s = s.replace(/\uE001/g, '[yellow]').replace(/\uE002/g, '[/yellow]');
+  s = s.replace(/\uE003/g, '[highlight]').replace(/\uE004/g, '[/highlight]');
+
+  return s;
+}
+
 /**
  * Professional News Headline Formatter:
  * - Strips UI loading/processing text like "लोड हो रहा है", "Loading...", "Please wait"
@@ -156,7 +709,7 @@ export function cleanHeadlineText(text: any): string {
       /\s+[|\-–—:]\s*(?:भोपाल\s*न्यूज़|इंदौर\s*न्यूज़|देवास\s*न्यूज़|जबलपुर\s*न्यूज़|ग्वालियर\s*न्यूज़|एमपी\s*न्यूज़|दैनिक\s*भास्कर|भास्कर|आज\s*तक|अमर\s*उजाला|पत्रिका|नवभारत(?:\s*टाइम्स)?|एनडीटीवी|बीबीसी\s*हिंदी|ताज़ा\s*अपडेट|लेटेस्ट\s*अपडेट|बड़ी\s*खबर).*$/i,
       ''
     )
-    .replace(/\s*[|\-–—:]\s*[A-Za-z\s]{3,30}$/, '')
+    .replace(/\s*[|\-–—]\s*[A-Za-z\s]*(?:News|Times|Express|Herald|Chronicle|Tribune|Post|Daily|Journal|Today|Live|Media|Network|Digital|Portal|Bureau|Bhaskar|Ujala|Patrika|Jagran|Hindustan|NDTV|Aaj\s*Tak)[A-Za-z\s]*$/i, '')
     .trim();
 
   // 4. Remove editorial fluff prefixes and option labels
@@ -197,79 +750,8 @@ export function cleanHeadlineText(text: any): string {
     .replace(/#[\w\u0900-\u097F]+/g, '')
     .replace(/@[\w\u0900-\u097F]+/g, '');
 
-  // 8. Transliterate common abbreviations and acronyms into Devanagari Hindi
-  const acronyms: [RegExp, string][] = [
-    [/\bAI\b/g, 'एआई'],
-    [/\bISRO\b/g, 'इसरो'],
-    [/\bNASA\b/g, 'नासा'],
-    [/\bFIR\b/g, 'एफआईआर'],
-    [/\bIT\b/g, 'आईटी'],
-    [/\bOPD\b/g, 'ओपीडी'],
-    [/\bVIP\b/g, 'वीआईपी'],
-    [/\bBJP\b/g, 'बीजेपी'],
-    [/\bPM\b/g, 'पीएम'],
-    [/\bCM\b/g, 'सीएम'],
-    [/\bDM\b/g, 'डीएम'],
-    [/\bSP\b/g, 'एसपी'],
-    [/\bSDM\b/g, 'एसडीएम'],
-    [/\bBHK\b/g, 'बीएचके'],
-    [/\bGST\b/g, 'जीएसटी'],
-    [/\bCBI\b/g, 'सीबीआई'],
-    [/\bED\b/g, 'ईडी'],
-    [/\bNIA\b/g, 'एनआईए'],
-    [/\bICU\b/g, 'आईसीयू'],
-    [/\bMP\b/g, 'एमपी'],
-    [/\bUP\b/g, 'यूपी'],
-    [/\bUSA\b/g, 'यूएसए'],
-    [/\bUK\b/g, 'यूके'],
-    [/\bCEO\b/g, 'सीईओ'],
-    [/\bRBI\b/g, 'आरबीआई'],
-    [/\bSBI\b/g, 'एसबीआई'],
-    [/\bIAS\b/g, 'आईएएस'],
-    [/\bIPS\b/g, 'आईपीएस'],
-    [/\bRERA\b/g, 'रेरा'],
-    [/\bNOC\b/g, 'एनओसी'],
-    [/\bFSI\b/g, 'एफएसआई'],
-    [/\bFAR\b/g, 'एफएआर'],
-    [/\bPWD\b/g, 'पीडब्ल्यूडी'],
-    [/\bNHAI\b/g, 'एनएचएआई'],
-    [/\bOTP\b/gi, 'ओटीपी'],
-    [/\bAPK\b/gi, 'एपीके'],
-    [/\bUPI\b/gi, 'यूपीआई'],
-    [/\bATM\b/gi, 'एटीएम'],
-    [/\bSIM\b/gi, 'सिम'],
-    [/\bKYC\b/gi, 'केवाईसी'],
-    [/\bPDF\b/gi, 'पीडीएफ'],
-    [/\bURL\b/gi, 'यूआरएल'],
-    [/\bSMS\b/gi, 'एसएमएस'],
-    [/\bPIL\b/gi, 'पीआईएल'],
-    [/\bDGP\b/gi, 'डीजीपी'],
-    [/\bDIG\b/gi, 'डीआईजी'],
-    [/\bIG\b/gi, 'आईजी'],
-    [/\bSHO\b/gi, 'एसएचओ'],
-    [/\bTI\b/gi, 'टीआई'],
-    [/\bMLA\b/gi, 'विधायक'],
-    [/\bBCCI\b/gi, 'बीसीसीआई'],
-    [/\bICC\b/gi, 'आईसीसी'],
-    [/\bIPL\b/gi, 'आईपीएल'],
-    [/\bWHO\b/gi, 'डब्ल्यूएचओ'],
-    [/\bUN\b/gi, 'यूएन'],
-    [/\bUPSC\b/gi, 'यूपीएससी'],
-    [/\bCBSE\b/gi, 'सीबीएसई'],
-    [/\bNEET\b/gi, 'नीट'],
-    [/\bJEE\b/gi, 'जेईई'],
-    [/\bIIT\b/gi, 'आईआईटी'],
-    [/\bIIM\b/gi, 'आईआईएम'],
-    [/\bSupreme Court\b/gi, 'सुप्रीम कोर्ट'],
-    [/\bHigh Court\b/gi, 'हाई कोर्ट'],
-    [/\bWhatsApp\b/gi, 'व्हाट्सएप'],
-    [/\bLPG\b/gi, 'एलपीजी'],
-    [/\bCNG\b/gi, 'सीएनजी'],
-    [/\bEV\b/gi, 'ईवी'],
-  ];
-  for (const [pattern, devanagari] of acronyms) {
-    cleaned = cleaned.replace(pattern, devanagari);
-  }
+  // 8. Transliterate compulsory English abbreviations, agencies (EOW, CBI, ED, ACB, etc.), posts, places, and news terms into Devanagari Hindi
+  cleaned = transliterateEssentialEnglishTerms(cleaned);
 
   // 9. Strict English character elimination (protecting [yellow] and [highlight] tags)
   cleaned = cleaned.replace(/\[(yellow|highlight)\]/g, '\uE001');
@@ -775,8 +1257,8 @@ export function formatAsJournalisticHeadline(raw: string): string {
   // 1. Strip conversational starter words that make it sound like spoken narrative
   h = h.replace(/^(?:अब|वहीं|इसके अलावा|साथ ही|प्राप्त जानकारी के अनुसार|सूत्रों के मुताबिक|गौरतलब है कि|बता दें कि|दरअसल|इस दौरान|इसके तहत|सभी|मामले में|इधर)[,\s]*/gi, '');
 
-  // 2. Strip leading English junk (without stripping numbers like 40 or 250)
-  h = h.replace(/^[A-Za-z\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, '');
+  // 2. Strip leading stray punctuation or separators (without stripping numbers, quotes, or transliterated terms)
+  h = h.replace(/^[\s,.\-–—:;\/&|!_]+(?=[\u0900-\u097F])/u, '');
 
   // 3. Strip trailing interrogative/question clauses
   h = h.replace(/[,;–—\-]?\s*(?:अब तक क्या-क्या पता है|क्या है पूरा मामला|जानिए पूरी बात|कौन था|क्यों हुआ|कैसे हुआ|क्या है वजह|क्या हुआ था|किसने किया)[?।.\s]*$/u, '');
@@ -1689,9 +2171,10 @@ export function fitHeadlinesTo5TierRanges(
   if (Array.isArray(baseOrContext)) rawSources.push(...baseOrContext.filter(Boolean).map(String));
   if (safeHeadlines.length > 0) rawSources.push(...safeHeadlines);
 
-  const baseText = typeof baseOrContext === 'string' && baseOrContext.trim()
+  const rawBaseText = typeof baseOrContext === 'string' && baseOrContext.trim()
     ? baseOrContext.trim()
     : (typeof contextOrBase === 'string' && contextOrBase.trim() ? contextOrBase.trim() : (safeHeadlines[0] || ''));
+  const baseText = sanitizeHeadlineClean(rawBaseText) || rawBaseText;
 
   const factsList = rawSources
     .flatMap((f: string) => f.split(/[।\n\.\r]+/))
@@ -1809,6 +2292,18 @@ export function generate5BalancedHeadlineOptions(
   if (!cleanBase) return [];
   const loc = location && location !== "विशेष कवरेज" ? location.trim() : "";
   const primaryLoc = loc ? loc.split(/[\/,]/)[0].trim() : "";
+  const baseCriticalEntities = CRITICAL_HEADLINE_ENTITIES.filter((ent) => cleanBase.includes(ent));
+
+  const ensureCriticalEntitiesPreserved = (candText: string): string => {
+    if (!candText || baseCriticalEntities.length === 0) return candText;
+    const missing = baseCriticalEntities.filter((ent) => !candText.includes(ent));
+    if (missing.length === 0) return candText;
+    // Anchor with cleanBase if it's concise, otherwise prepend the primary missing agency/entity
+    if (cleanBase.length <= 48 && !candText.includes(cleanBase)) {
+      return `${cleanBase}: ${candText}`;
+    }
+    return `${missing.join(' व ')} की कार्रवाई: ${candText}`;
+  };
 
   const uniqueOptions: string[] = [];
 
@@ -1830,7 +2325,8 @@ export function generate5BalancedHeadlineOptions(
 
   const addOptionIfDistinct = (cand: string, threshold: number = 0.88, maxWords: number = 32, maxChars: number = 200) => {
     if (!cand) return;
-    const formatted = clampToEditorialBounds(cand, maxWords, maxChars);
+    const withEntities = ensureCriticalEntitiesPreserved(cand);
+    const formatted = clampToEditorialBounds(withEntities, maxWords, maxChars);
     const wordsCount = formatted.split(/\s+/).filter(Boolean).length;
     if (!formatted || formatted.length < 15 || wordsCount < 4 || countHeadlineVisibleCharacters(formatted) > 200) return;
     if (uniqueOptions.includes(formatted)) return;
@@ -1841,7 +2337,7 @@ export function generate5BalancedHeadlineOptions(
   };
 
   // Angle 1: High-Impact Breaking News style (12-16 words, ~80-110 chars)
-  const angle1Base = primaryLoc && !cleanBase.startsWith(primaryLoc)
+  const angle1Base = primaryLoc && !cleanBase.includes(primaryLoc)
     ? `${primaryLoc} में बड़ी खबर: ${cleanBase}`
     : cleanBase;
   addOptionIfDistinct(angle1Base, 0.90, 18, 110);
@@ -1854,7 +2350,7 @@ export function generate5BalancedHeadlineOptions(
   // Angle 2: Factual & Informative style (14-18 words, ~100-130 chars)
   if (validFacts.length > 0) {
     addOptionIfDistinct(validFacts[0], 0.88, 22, 130);
-  } else if (primaryLoc && !cleanBase.startsWith(primaryLoc)) {
+  } else if (primaryLoc && !cleanBase.includes(primaryLoc)) {
     addOptionIfDistinct(`${primaryLoc}: ${cleanBase}`, 0.92, 22, 130);
   } else {
     addOptionIfDistinct(`${cleanBase} पर महत्वपूर्ण अपडेट`, 0.88, 22, 130);
@@ -1864,9 +2360,7 @@ export function generate5BalancedHeadlineOptions(
   if (validFacts.length > 1) {
     addOptionIfDistinct(validFacts[1], 0.88, 26, 150);
   } else {
-    const actionAngle = primaryLoc
-      ? `${primaryLoc} मामला: प्रशासन अलर्ट, जांच व आवश्यक कार्रवाई तेज`
-      : `${cleanBase}: प्रशासन स्तर पर जांच और आवश्यक कार्रवाई तेज`;
+    const actionAngle = `${cleanBase}: प्रशासनिक स्तर पर जांच और आवश्यक कार्रवाई तेज`;
     addOptionIfDistinct(actionAngle, 0.88, 26, 150);
   }
 
@@ -1874,9 +2368,7 @@ export function generate5BalancedHeadlineOptions(
   if (validFacts.length > 2) {
     addOptionIfDistinct(validFacts[2], 0.88, 28, 160);
   } else {
-    const impactAngle = primaryLoc
-      ? `${primaryLoc} में घटना के बाद स्थानीय स्तर पर चर्चाएं तेज, लोगों में रोष`
-      : `घटनाक्रम के बाद व्यवस्थाओं पर उठे सवाल, लोगों ने जताई गहरी चिंता`;
+    const impactAngle = `${cleanBase}, घटनाक्रम के बाद स्थानीय स्तर पर चर्चाएं तेज और जांच जारी`;
     addOptionIfDistinct(impactAngle, 0.88, 28, 160);
   }
 
@@ -1887,9 +2379,9 @@ export function generate5BalancedHeadlineOptions(
     const contextFact = validFacts.length > 1 ? validFacts[1] : '';
     angle5Candidate = contextFact
       ? `${cleanBase}: ${mainAction}, ${contextFact}`
-      : (primaryLoc ? `${primaryLoc} में ${cleanBase}: ${mainAction}` : `${cleanBase}: ${mainAction}`);
+      : (primaryLoc && !cleanBase.includes(primaryLoc) ? `${primaryLoc} में ${cleanBase}: ${mainAction}` : `${cleanBase}: ${mainAction}`);
   } else {
-    angle5Candidate = primaryLoc
+    angle5Candidate = primaryLoc && !cleanBase.includes(primaryLoc)
       ? `${primaryLoc} से विस्तृत रिपोर्ट: ${cleanBase}, घटनाक्रम को लेकर प्रशासन व अधिकारियों की समीक्षा बैठक में महत्वपूर्ण चर्चा`
       : `${cleanBase}: घटनाक्रम को लेकर प्रशासनिक स्तर पर समीक्षा, महत्वपूर्ण दिशा-निर्देश जारी किए गए`;
   }
@@ -1898,8 +2390,8 @@ export function generate5BalancedHeadlineOptions(
   // Diverse journalistic angles if still fewer than 5:
   if (uniqueOptions.length < 5) {
     const backupAngles = [
-      primaryLoc ? `${primaryLoc} से बड़ा अपडेट: ${cleanBase}` : `विशेष रिपोर्ट: ${cleanBase}`,
-      primaryLoc ? `${primaryLoc} में घटनाक्रम पर नजर, स्थिति का जायजा` : `पूरे मामले पर नजर: ${cleanBase}`,
+      primaryLoc && !cleanBase.includes(primaryLoc) ? `${primaryLoc} से बड़ा अपडेट: ${cleanBase}` : `विशेष रिपोर्ट: ${cleanBase}`,
+      `${cleanBase}, पूरे मामले पर उच्चाधिकारियों की नजर और स्थिति का जायजा`,
     ];
     for (const angle of backupAngles) {
       if (uniqueOptions.length >= 5) break;
@@ -1983,6 +2475,9 @@ export function ensureHashtagHierarchy(
 
   // Strip any lingering inline or trailing hashtags from body text so they never pollute paragraphs
   rawBody = rawBody.replace(/#[a-zA-Z0-9_\u0900-\u097F]+/g, '').trim();
+
+  // Transliterate compulsory English agencies/acronyms (EOW -> ईओडब्ल्यू, CBI -> सीबीआई, etc.) in caption body
+  rawBody = transliterateEssentialEnglishTerms(rawBody);
 
   // Strip leading headline duplicate only if sufficient article body remains
   if (headlineToStrip && headlineToStrip.trim()) {

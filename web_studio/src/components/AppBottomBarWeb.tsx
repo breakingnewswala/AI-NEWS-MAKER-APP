@@ -29,7 +29,7 @@ export const AppBottomBarWeb: React.FC<AppBottomBarWebProps> = ({
   return (
     <div
       id="app-permanent-fixed-bottom-bar"
-      className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/98 backdrop-blur-xl border-t border-slate-800 shadow-2xl xl:hidden select-none pointer-events-auto"
+      className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/98 backdrop-blur-xl border-t border-slate-800 shadow-2xl xl:hidden select-none pointer-events-auto pb-[env(safe-area-inset-bottom)]"
       style={{
         transform: 'translateZ(0)',
         WebkitTransform: 'translateZ(0)',
@@ -39,7 +39,7 @@ export const AppBottomBarWeb: React.FC<AppBottomBarWebProps> = ({
         right: 0,
       }}
     >
-      <div className="max-w-md sm:max-w-xl md:max-w-3xl mx-auto px-2 sm:px-6 md:px-8 h-16 md:h-18 flex items-center justify-between relative">
+      <div className="max-w-md sm:max-w-xl md:max-w-3xl mx-auto px-2 sm:px-6 md:px-8 h-16 flex items-center justify-between relative">
         {/* Tab 1: Home (होम) */}
         <button
           type="button"

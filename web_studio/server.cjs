@@ -6478,6 +6478,7 @@ __export(server_exports, {
   BLOCKED_MEDIA_BRANDS: () => BLOCKED_MEDIA_BRANDS,
   BYLINE_REGEX: () => BYLINE_REGEX,
   DISTRICT_STATE_LIST: () => DISTRICT_STATE_LIST,
+  ESSENTIAL_ENGLISH_TO_HINDI_TERMS: () => ESSENTIAL_ENGLISH_TO_HINDI_TERMS,
   GEMINI_NEWS_RESPONSE_SCHEMA: () => GEMINI_NEWS_RESPONSE_SCHEMA,
   HEADLINE_5_TIER_MAX_LIMITS: () => HEADLINE_5_TIER_MAX_LIMITS,
   HEADLINE_5_TIER_RANGES: () => HEADLINE_5_TIER_RANGES,
@@ -6556,7 +6557,9 @@ __export(server_exports, {
   saveDeletedNewsTombstone: () => saveDeletedNewsTombstone,
   scrapeNewsFromUrl: () => scrapeNewsFromUrl,
   stripAllUrlsAndHyperlinks: () => stripAllUrlsAndHyperlinks,
+  stripLeadingEnglishProseSentence: () => stripLeadingEnglishProseSentence,
   stripNewspaperBylines: () => stripNewspaperBylines,
+  transliterateEssentialEnglishTerms: () => transliterateEssentialEnglishTerms,
   validateGeneralHeadline: () => validateGeneralHeadline,
   validateHeadline: () => validateHeadline,
   validateHeadlineOption: () => validateHeadlineOption,
@@ -12671,9 +12674,75 @@ function validateHeadlinesBatch(headlines, sourcePublisherNames = []) {
     }
   };
 }
+var VALIDATOR_ACRONYM_MAP = [
+  [/\bEOW\b/gi, "\u0908\u0913\u0921\u092C\u094D\u0932\u094D\u092F\u0942"],
+  [/\bCBI\b/gi, "\u0938\u0940\u092C\u0940\u0906\u0908"],
+  [/\bED\b/gi, "\u0908\u0921\u0940"],
+  [/\bNIA\b/gi, "\u090F\u0928\u0906\u0908\u090F"],
+  [/\bACB\b/gi, "\u090F\u0938\u0940\u092C\u0940"],
+  [/\bSIT\b/gi, "\u090F\u0938\u0906\u0908\u091F\u0940"],
+  [/\bATS\b/gi, "\u090F\u091F\u0940\u090F\u0938"],
+  [/\bSTF\b/gi, "\u090F\u0938\u091F\u0940\u090F\u092B"],
+  [/\bNCB\b/gi, "\u090F\u0928\u0938\u0940\u092C\u0940"],
+  [/\bDRI\b/gi, "\u0921\u0940\u0906\u0930\u0906\u0908"],
+  [/\bLokayukta?\b/gi, "\u0932\u094B\u0915\u093E\u092F\u0941\u0915\u094D\u0924"],
+  [/\bNDRF\b/gi, "\u090F\u0928\u0921\u0940\u0906\u0930\u090F\u092B"],
+  [/\bSDRF\b/gi, "\u090F\u0938\u0921\u0940\u0906\u0930\u090F\u092B"],
+  [/\bSDERF\b/gi, "\u090F\u0938\u0921\u0940\u0908\u0906\u0930\u090F\u092B"],
+  [/\bFIR\b/gi, "\u090F\u092B\u0906\u0908\u0906\u0930"],
+  [/\bSDM\b/gi, "\u090F\u0938\u0921\u0940\u090F\u092E"],
+  [/\bDSP\b/gi, "\u0921\u0940\u090F\u0938\u092A\u0940"],
+  [/\bASP\b/gi, "\u090F\u090F\u0938\u092A\u0940"],
+  [/\bCSP\b/gi, "\u0938\u0940\u090F\u0938\u092A\u0940"],
+  [/\bSDOP\b/gi, "\u090F\u0938\u0921\u0940\u0913\u092A\u0940"],
+  [/\bDGP\b/gi, "\u0921\u0940\u091C\u0940\u092A\u0940"],
+  [/\bDIG\b/gi, "\u0921\u0940\u0906\u0908\u091C\u0940"],
+  [/\bIG\b/gi, "\u0906\u0908\u091C\u0940"],
+  [/\bSP\b/gi, "\u090F\u0938\u092A\u0940"],
+  [/\bDM\b/gi, "\u0921\u0940\u090F\u092E"],
+  [/\bCMHO\b/gi, "\u0938\u0940\u090F\u092E\u090F\u091A\u0913"],
+  [/\bCEO\b/gi, "\u0938\u0940\u0908\u0913"],
+  [/\bDFO\b/gi, "\u0921\u0940\u090F\u092B\u0913"],
+  [/\bRTO\b/gi, "\u0906\u0930\u091F\u0940\u0913"],
+  [/\bCollector\b/gi, "\u0915\u0932\u0947\u0915\u094D\u091F\u0930"],
+  [/\bRaid\b/gi, "\u0930\u0947\u0921"],
+  [/\bDindori\b/gi, "\u0921\u093F\u0902\u0921\u094B\u0930\u0940"]
+];
+var VALIDATOR_CRITICAL_ENTITIES = [
+  "\u0908\u0913\u0921\u092C\u094D\u0932\u094D\u092F\u0942",
+  "\u0938\u0940\u092C\u0940\u0906\u0908",
+  "\u0908\u0921\u0940",
+  "\u0932\u094B\u0915\u093E\u092F\u0941\u0915\u094D\u0924",
+  "\u090F\u0938\u0940\u092C\u0940",
+  "\u090F\u0928\u0906\u0908\u090F",
+  "\u090F\u0938\u0906\u0908\u091F\u0940",
+  "\u090F\u091F\u0940\u090F\u0938",
+  "\u090F\u0938\u091F\u0940\u090F\u092B",
+  "\u090F\u0928\u0938\u0940\u092C\u0940",
+  "\u0921\u0940\u0906\u0930\u0906\u0908",
+  "\u090F\u0928\u0921\u0940\u0906\u0930\u090F\u092B",
+  "\u090F\u0938\u0921\u0940\u0906\u0930\u090F\u092B",
+  "\u090F\u0938\u0921\u0940\u0908\u0906\u0930\u090F\u092B",
+  "\u0938\u0941\u092A\u094D\u0930\u0940\u092E \u0915\u094B\u0930\u094D\u091F",
+  "\u0939\u093E\u0908 \u0915\u094B\u0930\u094D\u091F",
+  "\u090F\u0928\u091C\u0940\u091F\u0940",
+  "\u091A\u0941\u0928\u093E\u0935 \u0906\u092F\u094B\u0917",
+  "\u0906\u0930\u092C\u0940\u0906\u0908",
+  "\u0938\u0947\u092C\u0940",
+  "\u0907\u0938\u0930\u094B",
+  "\u0921\u0940\u0906\u0930\u0921\u0940\u0913",
+  "\u090F\u092E\u094D\u0938",
+  "\u092F\u0942\u092A\u0940\u090F\u0938\u0938\u0940",
+  "\u090F\u092E\u092A\u0940\u092A\u0940\u090F\u0938\u0938\u0940"
+];
 function cleanCandidateClause(clause) {
   if (!clause || typeof clause !== "string") return "";
-  let text = clause.replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, "").replace(/\s+/g, " ").trim();
+  let text = clause.replace(/\b([A-Za-z])\.(?:([A-Za-z])\.)+([A-Za-z])?\.?/g, (m) => m.replace(/\./g, "").toUpperCase()).replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, "").replace(/\s+/g, " ").trim();
+  if (/[\u0900-\u097F]/.test(text)) {
+    for (const [pat, dev] of VALIDATOR_ACRONYM_MAP) {
+      text = text.replace(pat, dev);
+    }
+  }
   const sentenceEndingRegex = /(?:\s+(?:है|हैं|था|थी|थे|थीं|होगा|होगी|होंगे|होंगी|रहेगा|रहेगी|किया गया|किया गया है|किया जाएगा|की जाएगी|उपलब्ध कराई जाएगी|बैठक के दौरान लिया|लिया गया))$/u;
   const danglingRegex = /(?:\s+(?:और|तथा|एवं|व|या|अथवा|कि|जो|का|की|के|में|पर|से|को|ने|तक|हेतु|लिए|हो|हुए|कर|गया|गई|गए|भी|तो|ही|हुई|जारी|चलते|लेकर|कहा\s+कि|बताया\s+कि))$/u;
   let prev = "";
@@ -12728,6 +12797,16 @@ function regenerateHeadlineOptionFromFacts(arg1, arg2, arg3, arg4, arg5, arg6) {
   if (hasInvalidHeadlineEnding(cleanBase)) {
     cleanBase = cleanCandidateClause(cleanBase);
   }
+  const baseCriticalEntities = VALIDATOR_CRITICAL_ENTITIES.filter((ent) => cleanBase.includes(ent));
+  const ensureCriticalEntities = (cand) => {
+    if (!cand || baseCriticalEntities.length === 0) return cand;
+    const missing = baseCriticalEntities.filter((ent) => !cand.includes(ent));
+    if (missing.length === 0) return cand;
+    if (cleanBase && cleanBase.length <= 48 && !cand.includes(cleanBase)) {
+      return `${cleanBase}: ${cand}`;
+    }
+    return `${missing.join(" \u0935 ")} \u0915\u0940 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908: ${cand}`;
+  };
   const candidates = [];
   if (cleanBase) candidates.push(cleanBase);
   if (loc && cleanBase && !cleanBase.includes(loc)) {
@@ -12736,12 +12815,14 @@ function regenerateHeadlineOptionFromFacts(arg1, arg2, arg3, arg4, arg5, arg6) {
   }
   for (const f of cleanFacts) {
     if (f !== cleanBase) {
-      candidates.push(f);
-      if (loc && !f.includes(loc)) {
-        candidates.push(`${loc}: ${f}`);
-      }
-      if (cleanBase && checkHeadlineSimilarity(cleanBase, f) < 0.35) {
+      if (cleanBase && checkHeadlineSimilarity(cleanBase, f) < 0.65) {
         candidates.push(`${cleanBase}, ${f}`);
+        candidates.push(`${cleanBase}: ${f}`);
+      }
+      const anchoredF = ensureCriticalEntities(f);
+      candidates.push(anchoredF);
+      if (loc && !anchoredF.includes(loc)) {
+        candidates.push(`${loc}: ${anchoredF}`);
       }
     }
   }
@@ -12750,8 +12831,8 @@ function regenerateHeadlineOptionFromFacts(arg1, arg2, arg3, arg4, arg5, arg6) {
     for (let j = 0; j < cleanFacts.length; j++) {
       if (i !== j) {
         const fB = cleanFacts[j];
-        if (checkHeadlineSimilarity(fA, fB) < 0.35) {
-          const next = `${fA}, ${fB}`;
+        if (checkHeadlineSimilarity(fA, fB) < 0.45) {
+          const next = ensureCriticalEntities(`${fA}, ${fB}`);
           candidates.push(next);
           if (loc && !next.includes(loc)) {
             candidates.push(`${loc}: ${next}`);
@@ -12762,7 +12843,7 @@ function regenerateHeadlineOptionFromFacts(arg1, arg2, arg3, arg4, arg5, arg6) {
   }
   const validCandidates = [];
   for (const cand of candidates) {
-    let candidate = removeRedundantClauses(cleanCandidateClause(cand));
+    let candidate = removeRedundantClauses(cleanCandidateClause(ensureCriticalEntities(cand)));
     let charLen = countCharacters(candidate);
     if (charLen > target.max) {
       const sliced = candidate.substring(0, target.max);
@@ -12782,7 +12863,8 @@ function regenerateHeadlineOptionFromFacts(arg1, arg2, arg3, arg4, arg5, arg6) {
     });
     if (isDup) continue;
     const ideal = (target.min + target.max) / 2;
-    const diff = charLen >= target.min ? Math.abs(charLen - ideal) : (target.min - charLen) * 3;
+    const missingCriticalPenalty = baseCriticalEntities.some((ent) => !candidate.includes(ent)) ? 120 : 0;
+    const diff = (charLen >= target.min ? Math.abs(charLen - ideal) : (target.min - charLen) * 3) + missingCriticalPenalty;
     validCandidates.push({ text: candidate, len: charLen, diff });
   }
   validCandidates.sort((a, b) => a.diff - b.diff);
@@ -12870,6 +12952,552 @@ function extractPublisherFromDomain(rawUrl) {
 }
 
 // src/lib/speakerUtils.ts
+var ENGLISH_LETTER_TO_DEVANAGARI = {
+  A: "\u090F",
+  B: "\u092C\u0940",
+  C: "\u0938\u0940",
+  D: "\u0921\u0940",
+  E: "\u0908",
+  F: "\u090F\u092B",
+  G: "\u091C\u0940",
+  H: "\u090F\u091A",
+  I: "\u0906\u0908",
+  J: "\u091C\u0947",
+  K: "\u0915\u0947",
+  L: "\u090F\u0932",
+  M: "\u090F\u092E",
+  N: "\u090F\u0928",
+  O: "\u0913",
+  P: "\u092A\u0940",
+  Q: "\u0915\u094D\u092F\u0942",
+  R: "\u0906\u0930",
+  S: "\u090F\u0938",
+  T: "\u091F\u0940",
+  U: "\u092F\u0942",
+  V: "\u0935\u0940",
+  W: "\u0921\u092C\u094D\u0932\u094D\u092F\u0942",
+  X: "\u090F\u0915\u094D\u0938",
+  Y: "\u0935\u093E\u0908",
+  Z: "\u091C\u0947\u0921"
+};
+var IGNORED_TECHNICAL_ACRONYMS = /* @__PURE__ */ new Set([
+  "HTTP",
+  "HTTPS",
+  "HTML",
+  "JSON",
+  "UTF",
+  "WWW",
+  "COM",
+  "ORG",
+  "NET",
+  "IST",
+  "GMT",
+  "UTC",
+  "IMG",
+  "SRC",
+  "ALT",
+  "DIV",
+  "SPAN",
+  "HREF",
+  "NULL",
+  "TRUE",
+  "FALSE",
+  "NAN"
+]);
+function stripLeadingEnglishProseSentence(input) {
+  if (!input || typeof input !== "string") return "";
+  return input.replace(
+    /^(?:(?:[A-Za-z0-9,.\-–—:;'"()\/&|!_]+\s+){5,}[A-Za-z0-9,.\-–—:;'"()\/&|!_]+[.!?]\s+)+(?=[\u0900-\u097F])/u,
+    ""
+  );
+}
+var ESSENTIAL_ENGLISH_TO_HINDI_TERMS = [
+  // Multi-word compounds first
+  [/\bSupreme\s+Court\b/gi, "\u0938\u0941\u092A\u094D\u0930\u0940\u092E \u0915\u094B\u0930\u094D\u091F"],
+  [/\bHigh\s+Court\b/gi, "\u0939\u093E\u0908 \u0915\u094B\u0930\u094D\u091F"],
+  [/\bDistrict\s+Court\b/gi, "\u091C\u093F\u0932\u093E \u0915\u094B\u0930\u094D\u091F"],
+  [/\bSession\s+Court\b/gi, "\u0938\u0947\u0936\u0928 \u0915\u094B\u0930\u094D\u091F"],
+  [/\bZero\s+FIR\b/gi, "\u091C\u0940\u0930\u094B \u090F\u092B\u0906\u0908\u0906\u0930"],
+  [/\bDeputy\s+CM\b/gi, "\u0921\u093F\u092A\u094D\u091F\u0940 \u0938\u0940\u090F\u092E"],
+  [/\bDy\.?\s+CM\b/gi, "\u0921\u093F\u092A\u094D\u091F\u0940 \u0938\u0940\u090F\u092E"],
+  [/\bPaper\s+Leak\b/gi, "\u092A\u0947\u092A\u0930 \u0932\u0940\u0915"],
+  [/\bVande\s+Bharat\b/gi, "\u0935\u0902\u0926\u0947 \u092D\u093E\u0930\u0924"],
+  [/\bCT\s+Scan\b/gi, "\u0938\u0940\u091F\u0940 \u0938\u094D\u0915\u0948\u0928"],
+  [/\bHigh\s+Alert\b/gi, "\u0939\u093E\u0908 \u0905\u0932\u0930\u094D\u091F"],
+  [/\bRed\s+Alert\b/gi, "\u0930\u0947\u0921 \u0905\u0932\u0930\u094D\u091F"],
+  [/\bOrange\s+Alert\b/gi, "\u0911\u0930\u0947\u0902\u091C \u0905\u0932\u0930\u094D\u091F"],
+  [/\bYellow\s+Alert\b/gi, "\u092F\u0947\u0932\u094B \u0905\u0932\u0930\u094D\u091F"],
+  [/\bMadhya\s+Pradesh\b/gi, "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936"],
+  [/\bUttar\s+Pradesh\b/gi, "\u0909\u0924\u094D\u0924\u0930 \u092A\u094D\u0930\u0926\u0947\u0936"],
+  [/\bHimachal\s+Pradesh\b/gi, "\u0939\u093F\u092E\u093E\u091A\u0932 \u092A\u094D\u0930\u0926\u0947\u0936"],
+  [/\bAndhra\s+Pradesh\b/gi, "\u0906\u0902\u0927\u094D\u0930 \u092A\u094D\u0930\u0926\u0947\u0936"],
+  [/\bArunachal\s+Pradesh\b/gi, "\u0905\u0930\u0941\u0923\u093E\u091A\u0932 \u092A\u094D\u0930\u0926\u0947\u0936"],
+  [/\bNew\s+Delhi\b/gi, "\u0928\u0908 \u0926\u093F\u0932\u094D\u0932\u0940"],
+  // Investigating & Law Enforcement Agencies (Compulsory in crime/raid headlines)
+  [/\bEOW\b/gi, "\u0908\u0913\u0921\u092C\u094D\u0932\u094D\u092F\u0942"],
+  [/\bCBI\b/gi, "\u0938\u0940\u092C\u0940\u0906\u0908"],
+  [/\bED\b/gi, "\u0908\u0921\u0940"],
+  [/\bNIA\b/gi, "\u090F\u0928\u0906\u0908\u090F"],
+  [/\bACB\b/gi, "\u090F\u0938\u0940\u092C\u0940"],
+  [/\bSIT\b/gi, "\u090F\u0938\u0906\u0908\u091F\u0940"],
+  [/\bATS\b/gi, "\u090F\u091F\u0940\u090F\u0938"],
+  [/\bSTF\b/gi, "\u090F\u0938\u091F\u0940\u090F\u092B"],
+  [/\bNCB\b/gi, "\u090F\u0928\u0938\u0940\u092C\u0940"],
+  [/\bDRI\b/gi, "\u0921\u0940\u0906\u0930\u0906\u0908"],
+  [/\bCID\b/gi, "\u0938\u0940\u0906\u0908\u0921\u0940"],
+  [/\bRAW\b/g, "\u0930\u0949"],
+  [/\bIB\b/g, "\u0906\u0908\u092C\u0940"],
+  [/\bLokayukta\b/gi, "\u0932\u094B\u0915\u093E\u092F\u0941\u0915\u094D\u0924"],
+  [/\bLokayukt\b/gi, "\u0932\u094B\u0915\u093E\u092F\u0941\u0915\u094D\u0924"],
+  [/\bNDRF\b/gi, "\u090F\u0928\u0921\u0940\u0906\u0930\u090F\u092B"],
+  [/\bSDRF\b/gi, "\u090F\u0938\u0921\u0940\u0906\u0930\u090F\u092B"],
+  [/\bSDERF\b/gi, "\u090F\u0938\u0921\u0940\u0908\u0906\u0930\u090F\u092B"],
+  [/\bCRPF\b/gi, "\u0938\u0940\u0906\u0930\u092A\u0940\u090F\u092B"],
+  [/\bBSF\b/gi, "\u092C\u0940\u090F\u0938\u090F\u092B"],
+  [/\bCISF\b/gi, "\u0938\u0940\u0906\u0908\u090F\u0938\u090F\u092B"],
+  [/\bITBP\b/gi, "\u0906\u0908\u091F\u0940\u092C\u0940\u092A\u0940"],
+  [/\bSSB\b/gi, "\u090F\u0938\u090F\u0938\u092C\u0940"],
+  [/\bNSG\b/gi, "\u090F\u0928\u090F\u0938\u091C\u0940"],
+  [/\bRPF\b/gi, "\u0906\u0930\u092A\u0940\u090F\u092B"],
+  [/\bGRP\b/gi, "\u091C\u0940\u0906\u0930\u092A\u0940"],
+  [/\bPAC\b/gi, "\u092A\u0940\u090F\u0938\u0940"],
+  [/\bSAF\b/gi, "\u090F\u0938\u090F\u090F\u092B"],
+  [/\bPHQ\b/gi, "\u092A\u0940\u090F\u091A\u0915\u094D\u092F\u0942"],
+  // Administrative, Police & Departmental Ranks/Posts
+  [/\bDGP\b/gi, "\u0921\u0940\u091C\u0940\u092A\u0940"],
+  [/\bADG\b/gi, "\u090F\u0921\u0940\u091C\u0940"],
+  [/\bDIG\b/gi, "\u0921\u0940\u0906\u0908\u091C\u0940"],
+  [/\bIG\b/gi, "\u0906\u0908\u091C\u0940"],
+  [/\bSSP\b/gi, "\u090F\u0938\u090F\u0938\u092A\u0940"],
+  [/\bASP\b/gi, "\u090F\u090F\u0938\u092A\u0940"],
+  [/\bDSP\b/gi, "\u0921\u0940\u090F\u0938\u092A\u0940"],
+  [/\bCSP\b/gi, "\u0938\u0940\u090F\u0938\u092A\u0940"],
+  [/\bSDOP\b/gi, "\u090F\u0938\u0921\u0940\u0913\u092A\u0940"],
+  [/\bACP\b/gi, "\u090F\u0938\u0940\u092A\u0940"],
+  [/\bDCP\b/gi, "\u0921\u0940\u0938\u0940\u092A\u0940"],
+  [/\bCP\b/g, "\u0938\u0940\u092A\u0940"],
+  [/\bSP\b/gi, "\u090F\u0938\u092A\u0940"],
+  [/\bSHO\b/gi, "\u090F\u0938\u090F\u091A\u0913"],
+  [/\bTI\b/gi, "\u091F\u0940\u0906\u0908"],
+  [/\bASI\b/gi, "\u090F\u090F\u0938\u0906\u0908"],
+  [/\bSI\b/g, "\u090F\u0938\u0906\u0908"],
+  [/\bIAS\b/gi, "\u0906\u0908\u090F\u090F\u0938"],
+  [/\bIPS\b/gi, "\u0906\u0908\u092A\u0940\u090F\u0938"],
+  [/\bIFS\b/gi, "\u0906\u0908\u090F\u092B\u090F\u0938"],
+  [/\bIRS\b/gi, "\u0906\u0908\u0906\u0930\u090F\u0938"],
+  [/\bDM\b/gi, "\u0921\u0940\u090F\u092E"],
+  [/\bSDM\b/gi, "\u090F\u0938\u0921\u0940\u090F\u092E"],
+  [/\bADM\b/gi, "\u090F\u0921\u0940\u090F\u092E"],
+  [/\bSDO\b/gi, "\u090F\u0938\u0921\u0940\u0913"],
+  [/\bCEO\b/gi, "\u0938\u0940\u0908\u0913"],
+  [/\bCFO\b/gi, "\u0938\u0940\u090F\u092B\u0913"],
+  [/\bCOO\b/gi, "\u0938\u0940\u0913\u0913"],
+  [/\bCTO\b/gi, "\u0938\u0940\u091F\u0940\u0913"],
+  [/\bCMD\b/gi, "\u0938\u0940\u090F\u092E\u0921\u0940"],
+  [/\bCMHO\b/gi, "\u0938\u0940\u090F\u092E\u090F\u091A\u0913"],
+  [/\bCMO\b/gi, "\u0938\u0940\u090F\u092E\u0913"],
+  [/\bPMO\b/gi, "\u092A\u0940\u090F\u092E\u0913"],
+  [/\bBMO\b/gi, "\u092C\u0940\u090F\u092E\u0913"],
+  [/\bBEO\b/gi, "\u092C\u0940\u0908\u0913"],
+  [/\bDEO\b/gi, "\u0921\u0940\u0908\u0913"],
+  [/\bDPO\b/gi, "\u0921\u0940\u092A\u0940\u0913"],
+  [/\bCDPO\b/gi, "\u0938\u0940\u0921\u0940\u092A\u0940\u0913"],
+  [/\bDFO\b/gi, "\u0921\u0940\u090F\u092B\u0913"],
+  [/\bRTO\b/gi, "\u0906\u0930\u091F\u0940\u0913"],
+  [/\bARTO\b/gi, "\u090F\u0906\u0930\u091F\u0940\u0913"],
+  [/\bDTO\b/gi, "\u0921\u0940\u091F\u0940\u0913"],
+  [/\bPRO\b/gi, "\u092A\u0940\u0906\u0930\u0913"],
+  [/\bPWD\b/gi, "\u092A\u0940\u0921\u092C\u094D\u0932\u094D\u092F\u0942\u0921\u0940"],
+  [/\bPHE\b/gi, "\u092A\u0940\u090F\u091A\u0908"],
+  [/\bRES\b/g, "\u0906\u0930\u0908\u090F\u0938"],
+  [/\bWCD\b/gi, "\u0921\u092C\u094D\u0932\u094D\u092F\u0942\u0938\u0940\u0921\u0940"],
+  [/\bNHAI\b/gi, "\u090F\u0928\u090F\u091A\u090F\u0906\u0908"],
+  [/\bMPEB\b/gi, "\u090F\u092E\u092A\u0940\u0908\u092C\u0940"],
+  [/\bCollector\b/gi, "\u0915\u0932\u0947\u0915\u094D\u091F\u0930"],
+  [/\bCommissioner\b/gi, "\u0915\u092E\u093F\u0936\u094D\u0928\u0930"],
+  [/\bTehsildar\b/gi, "\u0924\u0939\u0938\u0940\u0932\u0926\u093E\u0930"],
+  [/\bTahsildar\b/gi, "\u0924\u0939\u0938\u0940\u0932\u0926\u093E\u0930"],
+  [/\bPatwari\b/gi, "\u092A\u091F\u0935\u093E\u0930\u0940"],
+  [/\bSarpanch\b/gi, "\u0938\u0930\u092A\u0902\u091A"],
+  [/\bSachiv\b/gi, "\u0938\u091A\u093F\u0935"],
+  [/\bParshad\b/gi, "\u092A\u093E\u0930\u094D\u0937\u0926"],
+  [/\bMayor\b/gi, "\u092E\u0939\u093E\u092A\u094C\u0930"],
+  // Constitutional, Political & Governance Terms
+  [/\bPM\b/gi, "\u092A\u0940\u090F\u092E"],
+  [/\bCM\b/gi, "\u0938\u0940\u090F\u092E"],
+  [/\bMLA\b/gi, "\u0935\u093F\u0927\u093E\u092F\u0915"],
+  [/\bMLC\b/gi, "\u090F\u092E\u090F\u0932\u0938\u0940"],
+  [/\bMP\b/gi, "\u090F\u092E\u092A\u0940"],
+  [/\bUP\b/g, "\u092F\u0942\u092A\u0940"],
+  [/\bCJI\b/gi, "\u0938\u0940\u091C\u0947\u0906\u0908"],
+  [/\bBJP\b/gi, "\u092C\u0940\u091C\u0947\u092A\u0940"],
+  [/\bNDA\b/gi, "\u090F\u0928\u0921\u0940\u090F"],
+  [/\bCongress\b/gi, "\u0915\u093E\u0902\u0917\u094D\u0930\u0947\u0938"],
+  [/\bAAP\b/g, "\u0906\u092A"],
+  [/\bBSP\b/gi, "\u092C\u0938\u092A\u093E"],
+  [/\bRJD\b/gi, "\u0906\u0930\u091C\u0947\u0921\u0940"],
+  [/\bJDU\b/gi, "\u091C\u0947\u0921\u0940\u092F\u0942"],
+  [/\bTMC\b/gi, "\u091F\u0940\u090F\u092E\u0938\u0940"],
+  [/\bNCP\b/gi, "\u090F\u0928\u0938\u0940\u092A\u0940"],
+  [/\bRSS\b/gi, "\u0906\u0930\u090F\u0938\u090F\u0938"],
+  [/\bVHP\b/gi, "\u0935\u093F\u0939\u093F\u092A"],
+  [/\bABVP\b/gi, "\u090F\u092C\u0940\u0935\u0940\u092A\u0940"],
+  [/\bNSUI\b/gi, "\u090F\u0928\u090F\u0938\u092F\u0942\u0906\u0908"],
+  [/\bECI\b/gi, "\u091A\u0941\u0928\u093E\u0935 \u0906\u092F\u094B\u0917"],
+  [/\bEVM\b/gi, "\u0908\u0935\u0940\u090F\u092E"],
+  [/\bVVPAT\b/gi, "\u0935\u0940\u0935\u0940\u092A\u0948\u091F"],
+  [/\bNOTA\b/gi, "\u0928\u094B\u091F\u093E"],
+  [/\bSIR\b/g, "\u090F\u0938\u0906\u0908\u0906\u0930"],
+  [/\bBLO\b/gi, "\u092C\u0940\u090F\u0932\u0913"],
+  [/\bVIP\b/gi, "\u0935\u0940\u0906\u0908\u092A\u0940"],
+  [/\bVVIP\b/gi, "\u0935\u0940\u0935\u0940\u0906\u0908\u092A\u0940"],
+  // Legal, Crime & Action Terms
+  [/\bFIR\b/gi, "\u090F\u092B\u0906\u0908\u0906\u0930"],
+  [/\bPOCSO\b/gi, "\u092A\u0949\u0915\u094D\u0938\u094B"],
+  [/\bPOSCO\b/gi, "\u092A\u0949\u0915\u094D\u0938\u094B"],
+  [/\bPMLA\b/gi, "\u092A\u0940\u090F\u092E\u090F\u0932\u090F"],
+  [/\bUAPA\b/gi, "\u092F\u0942\u090F\u092A\u0940\u090F"],
+  [/\bNSA\b/gi, "\u090F\u0928\u090F\u0938\u090F"],
+  [/\bBNS\b/gi, "\u092C\u0940\u090F\u0928\u090F\u0938"],
+  [/\bBNSS\b/gi, "\u092C\u0940\u090F\u0928\u090F\u0938\u090F\u0938"],
+  [/\bIPC\b/gi, "\u0906\u0908\u092A\u0940\u0938\u0940"],
+  [/\bCrPC\b/gi, "\u0938\u0940\u0906\u0930\u092A\u0940\u0938\u0940"],
+  [/\bCAA\b/gi, "\u0938\u0940\u090F\u090F"],
+  [/\bNRC\b/gi, "\u090F\u0928\u0906\u0930\u0938\u0940"],
+  [/\bNPR\b/gi, "\u090F\u0928\u092A\u0940\u0906\u0930"],
+  [/\bUCC\b/gi, "\u092F\u0942\u0938\u0940\u0938\u0940"],
+  [/\bPIL\b/gi, "\u092A\u0940\u0906\u0908\u090F\u0932"],
+  [/\bNOC\b/gi, "\u090F\u0928\u0913\u0938\u0940"],
+  [/\bNGT\b/gi, "\u090F\u0928\u091C\u0940\u091F\u0940"],
+  [/\bNCLT\b/gi, "\u090F\u0928\u0938\u0940\u090F\u0932\u091F\u0940"],
+  [/\bRaid\b/gi, "\u0930\u0947\u0921"],
+  [/\bTrap\b/gi, "\u091F\u094D\u0930\u0948\u092A"],
+  [/\bBribe\b/gi, "\u0930\u093F\u0936\u094D\u0935\u0924"],
+  [/\bScam\b/gi, "\u0938\u094D\u0915\u0948\u092E"],
+  [/\bFraud\b/gi, "\u092B\u094D\u0930\u0949\u0921"],
+  [/\bArrested\b/gi, "\u0917\u093F\u0930\u092B\u094D\u0924\u093E\u0930"],
+  [/\bArrest\b/gi, "\u0917\u093F\u0930\u092B\u094D\u0924\u093E\u0930"],
+  [/\bSuspended\b/gi, "\u0938\u0938\u094D\u092A\u0947\u0902\u0921"],
+  [/\bSuspend\b/gi, "\u0938\u0938\u094D\u092A\u0947\u0902\u0921"],
+  [/\bTransfer\b/gi, "\u091F\u094D\u0930\u093E\u0902\u0938\u092B\u0930"],
+  [/\bNotice\b/gi, "\u0928\u094B\u091F\u093F\u0938"],
+  [/\bWarrant\b/gi, "\u0935\u093E\u0930\u0902\u091F"],
+  [/\bBail\b/gi, "\u091C\u092E\u093E\u0928\u0924"],
+  [/\bJail\b/gi, "\u091C\u0947\u0932"],
+  [/\bRemand\b/gi, "\u0930\u093F\u092E\u093E\u0902\u0921"],
+  [/\bChallan\b/gi, "\u091A\u093E\u0932\u093E\u0928"],
+  [/\bChargesheet\b/gi, "\u091A\u093E\u0930\u094D\u091C\u0936\u0940\u091F"],
+  [/\bPostmortem\b/gi, "\u092A\u094B\u0938\u094D\u091F\u092E\u093E\u0930\u094D\u091F\u092E"],
+  // Exams, Education, Health & Science
+  [/\bUPSC\b/gi, "\u092F\u0942\u092A\u0940\u090F\u0938\u0938\u0940"],
+  [/\bMPPSC\b/gi, "\u090F\u092E\u092A\u0940\u092A\u0940\u090F\u0938\u0938\u0940"],
+  [/\bUPPSC\b/gi, "\u092F\u0942\u092A\u0940\u092A\u0940\u090F\u0938\u0938\u0940"],
+  [/\bBPSC\b/gi, "\u092C\u0940\u092A\u0940\u090F\u0938\u0938\u0940"],
+  [/\bRPSC\b/gi, "\u0906\u0930\u092A\u0940\u090F\u0938\u0938\u0940"],
+  [/\bCGPSC\b/gi, "\u0938\u0940\u091C\u0940\u092A\u0940\u090F\u0938\u0938\u0940"],
+  [/\bPSC\b/gi, "\u092A\u0940\u090F\u0938\u0938\u0940"],
+  [/\bSSC\b/gi, "\u090F\u0938\u090F\u0938\u0938\u0940"],
+  [/\bVYAPAM\b/gi, "\u0935\u094D\u092F\u093E\u092A\u092E\u0902"],
+  [/\bMPESB\b/gi, "\u090F\u092E\u092A\u0940\u0908\u090F\u0938\u092C\u0940"],
+  [/\bESB\b/gi, "\u0908\u090F\u0938\u092C\u0940"],
+  [/\bPEB\b/gi, "\u092A\u0940\u0908\u092C\u0940"],
+  [/\bIBPS\b/gi, "\u0906\u0908\u092C\u0940\u092A\u0940\u090F\u0938"],
+  [/\bRRB\b/gi, "\u0906\u0930\u0906\u0930\u092C\u0940"],
+  [/\bNEET\b/gi, "\u0928\u0940\u091F"],
+  [/\bJEE\b/gi, "\u091C\u0947\u0908\u0908"],
+  [/\bCUET\b/gi, "\u0938\u0940\u092F\u0942\u0908\u091F\u0940"],
+  [/\bGATE\b/g, "\u0917\u0947\u091F"],
+  [/\bCBSE\b/gi, "\u0938\u0940\u092C\u0940\u090F\u0938\u0908"],
+  [/\bICSE\b/gi, "\u0906\u0908\u0938\u0940\u090F\u0938\u0908"],
+  [/\bMPBSE\b/gi, "\u090F\u092E\u092A\u0940\u092C\u0940\u090F\u0938\u0908"],
+  [/\bNCERT\b/gi, "\u090F\u0928\u0938\u0940\u0908\u0906\u0930\u091F\u0940"],
+  [/\bUGC\b/gi, "\u092F\u0942\u091C\u0940\u0938\u0940"],
+  [/\bAICTE\b/gi, "\u090F\u0906\u0908\u0938\u0940\u091F\u0940\u0908"],
+  [/\bIIT\b/gi, "\u0906\u0908\u0906\u0908\u091F\u0940"],
+  [/\bIIM\b/gi, "\u0906\u0908\u0906\u0908\u090F\u092E"],
+  [/\bNIT\b/gi, "\u090F\u0928\u0906\u0908\u091F\u0940"],
+  [/\bIIIT\b/gi, "\u091F\u094D\u0930\u093F\u092A\u0932 \u0906\u0908\u091F\u0940"],
+  [/\bAIIMS\b/gi, "\u090F\u092E\u094D\u0938"],
+  [/\bICMR\b/gi, "\u0906\u0908\u0938\u0940\u090F\u092E\u0906\u0930"],
+  [/\bWHO\b/gi, "\u0921\u092C\u094D\u0932\u094D\u092F\u0942\u090F\u091A\u0913"],
+  [/\bOPD\b/gi, "\u0913\u092A\u0940\u0921\u0940"],
+  [/\bICU\b/gi, "\u0906\u0908\u0938\u0940\u092F\u0942"],
+  [/\bMRI\b/gi, "\u090F\u092E\u0906\u0930\u0906\u0908"],
+  [/\bDNA\b/gi, "\u0921\u0940\u090F\u0928\u090F"],
+  [/\bRNA\b/gi, "\u0906\u0930\u090F\u0928\u090F"],
+  [/\bCOVID\b/gi, "\u0915\u094B\u0935\u093F\u0921"],
+  [/\bCorona\b/gi, "\u0915\u094B\u0930\u094B\u0928\u093E"],
+  [/\bVirus\b/gi, "\u0935\u093E\u092F\u0930\u0938"],
+  [/\bISRO\b/gi, "\u0907\u0938\u0930\u094B"],
+  [/\bDRDO\b/gi, "\u0921\u0940\u0906\u0930\u0921\u0940\u0913"],
+  [/\bNASA\b/gi, "\u0928\u093E\u0938\u093E"],
+  // Economy, Banking, Schemes, Weather, Transport & Tech
+  [/\bRBI\b/gi, "\u0906\u0930\u092C\u0940\u0906\u0908"],
+  [/\bSBI\b/gi, "\u090F\u0938\u092C\u0940\u0906\u0908"],
+  [/\bPNB\b/gi, "\u092A\u0940\u090F\u0928\u092C\u0940"],
+  [/\bHDFC\b/gi, "\u090F\u091A\u0921\u0940\u090F\u092B\u0938\u0940"],
+  [/\bICICI\b/gi, "\u0906\u0908\u0938\u0940\u0906\u0908\u0938\u0940\u0906\u0908"],
+  [/\bLIC\b/gi, "\u090F\u0932\u0906\u0908\u0938\u0940"],
+  [/\bSEBI\b/gi, "\u0938\u0947\u092C\u0940"],
+  [/\bTRAI\b/gi, "\u091F\u094D\u0930\u093E\u0908"],
+  [/\bFSSAI\b/gi, "\u090F\u092B\u090F\u0938\u090F\u0938\u090F\u0906\u0908"],
+  [/\bIRDAI\b/gi, "\u0907\u0930\u0921\u093E"],
+  [/\bNABARD\b/gi, "\u0928\u093E\u092C\u093E\u0930\u094D\u0921"],
+  [/\bEPFO\b/gi, "\u0908\u092A\u0940\u090F\u092B\u0913"],
+  [/\bESIC\b/gi, "\u0908\u090F\u0938\u0906\u0908\u0938\u0940"],
+  [/\bUIDAI\b/gi, "\u092F\u0942\u0906\u0908\u0921\u0940\u090F\u0906\u0908"],
+  [/\bAadhaar\b/gi, "\u0906\u0927\u093E\u0930"],
+  [/\bAadhar\b/gi, "\u0906\u0927\u093E\u0930"],
+  [/\bPAN\b/g, "\u092A\u0948\u0928"],
+  [/\bGST\b/gi, "\u091C\u0940\u090F\u0938\u091F\u0940"],
+  [/\bCGST\b/gi, "\u0938\u0940\u091C\u0940\u090F\u0938\u091F\u0940"],
+  [/\bSGST\b/gi, "\u090F\u0938\u091C\u0940\u090F\u0938\u091F\u0940"],
+  [/\bITR\b/gi, "\u0906\u0908\u091F\u0940\u0906\u0930"],
+  [/\bTDS\b/gi, "\u091F\u0940\u0921\u0940\u090F\u0938"],
+  [/\bEMI\b/gi, "\u0908\u090F\u092E\u0906\u0908"],
+  [/\bUPI\b/gi, "\u092F\u0942\u092A\u0940\u0906\u0908"],
+  [/\bATM\b/gi, "\u090F\u091F\u0940\u090F\u092E"],
+  [/\bOTP\b/gi, "\u0913\u091F\u0940\u092A\u0940"],
+  [/\b-?e-?KYC\b/gi, "\u0908-\u0915\u0947\u0935\u093E\u0908\u0938\u0940"],
+  [/\bKYC\b/gi, "\u0915\u0947\u0935\u093E\u0908\u0938\u0940"],
+  [/\bGDP\b/gi, "\u091C\u0940\u0921\u0940\u092A\u0940"],
+  [/\bMSP\b/gi, "\u090F\u092E\u090F\u0938\u092A\u0940"],
+  [/\bDBT\b/gi, "\u0921\u0940\u092C\u0940\u091F\u0940"],
+  [/\bBPL\b/gi, "\u092C\u0940\u092A\u0940\u090F\u0932"],
+  [/\bAPL\b/gi, "\u090F\u092A\u0940\u090F\u0932"],
+  [/\bEWS\b/gi, "\u0908\u0921\u092C\u094D\u0932\u094D\u092F\u0942\u090F\u0938"],
+  [/\bOBC\b/gi, "\u0913\u092C\u0940\u0938\u0940"],
+  [/\bSC\b/g, "\u090F\u0938\u0938\u0940"],
+  [/\bST\b/g, "\u090F\u0938\u091F\u0940"],
+  [/\bMGNREGA\b/gi, "\u092E\u0928\u0930\u0947\u0917\u093E"],
+  [/\bMNREGA\b/gi, "\u092E\u0928\u0930\u0947\u0917\u093E"],
+  [/\bNREGA\b/gi, "\u0928\u0930\u0947\u0917\u093E"],
+  [/\bPMAY\b/gi, "\u092A\u0940\u090F\u092E \u0906\u0935\u093E\u0938"],
+  [/\bPMJAY\b/gi, "\u0906\u092F\u0941\u0937\u094D\u092E\u093E\u0928 \u092F\u094B\u091C\u0928\u093E"],
+  [/\bRERA\b/gi, "\u0930\u0947\u0930\u093E"],
+  [/\bFSI\b/gi, "\u090F\u092B\u090F\u0938\u0906\u0908"],
+  [/\bFAR\b/g, "\u090F\u092B\u090F\u0906\u0930"],
+  [/\bBHK\b/gi, "\u092C\u0940\u090F\u091A\u0915\u0947"],
+  [/\bPPP\b/gi, "\u092A\u0940\u092A\u0940\u092A\u0940"],
+  [/\bCSR\b/gi, "\u0938\u0940\u090F\u0938\u0906\u0930"],
+  [/\bMoU\b/gi, "\u090F\u092E\u0913\u092F\u0942"],
+  [/\bDPR\b/gi, "\u0921\u0940\u092A\u0940\u0906\u0930"],
+  [/\bNH\b/g, "\u090F\u0928\u090F\u091A"],
+  [/\bSH\b/g, "\u090F\u0938\u090F\u091A"],
+  [/\bFASTag\b/gi, "\u092B\u093E\u0938\u094D\u091F\u0948\u0917"],
+  [/\bIRCTC\b/gi, "\u0906\u0908\u0906\u0930\u0938\u0940\u091F\u0940\u0938\u0940"],
+  [/\bMetro\b/gi, "\u092E\u0947\u091F\u094D\u0930\u094B"],
+  [/\bIMD\b/gi, "\u0906\u0908\u090F\u092E\u0921\u0940"],
+  [/\bAQI\b/gi, "\u090F\u0915\u094D\u092F\u0942\u0906\u0908"],
+  [/\bCPCB\b/gi, "\u0938\u0940\u092A\u0940\u0938\u0940\u092C\u0940"],
+  [/\bBHEL\b/gi, "\u092D\u0947\u0932"],
+  [/\bNTPC\b/gi, "\u090F\u0928\u091F\u0940\u092A\u0940\u0938\u0940"],
+  [/\bONGC\b/gi, "\u0913\u090F\u0928\u091C\u0940\u0938\u0940"],
+  [/\bSAIL\b/g, "\u0938\u0947\u0932"],
+  [/\bGAIL\b/gi, "\u0917\u0947\u0932"],
+  [/\bIOCL\b/gi, "\u0906\u0908\u0913\u0938\u0940\u090F\u0932"],
+  [/\bBPCL\b/gi, "\u092C\u0940\u092A\u0940\u0938\u0940\u090F\u0932"],
+  [/\bHPCL\b/gi, "\u090F\u091A\u092A\u0940\u0938\u0940\u090F\u0932"],
+  [/\bBSNL\b/gi, "\u092C\u0940\u090F\u0938\u090F\u0928\u090F\u0932"],
+  [/\bBCCI\b/gi, "\u092C\u0940\u0938\u0940\u0938\u0940\u0906\u0908"],
+  [/\bICC\b/gi, "\u0906\u0908\u0938\u0940\u0938\u0940"],
+  [/\bIPL\b/gi, "\u0906\u0908\u092A\u0940\u090F\u0932"],
+  [/\bWPL\b/gi, "\u0921\u092C\u094D\u0932\u094D\u092F\u0942\u092A\u0940\u090F\u0932"],
+  [/\bFIFA\b/gi, "\u092B\u0940\u092B\u093E"],
+  [/\bUSA\b/gi, "\u092F\u0942\u090F\u0938\u090F"],
+  [/\bUK\b/g, "\u092F\u0942\u0915\u0947"],
+  [/\bUN\b/g, "\u092F\u0942\u090F\u0928"],
+  [/\bAI\b/gi, "\u090F\u0906\u0908"],
+  [/\bIT\b/g, "\u0906\u0908\u091F\u0940"],
+  [/\bAPK\b/gi, "\u090F\u092A\u0940\u0915\u0947"],
+  [/\bPDF\b/gi, "\u092A\u0940\u0921\u0940\u090F\u092B"],
+  [/\bSIM\b/gi, "\u0938\u093F\u092E"],
+  [/\bURL\b/gi, "\u092F\u0942\u0906\u0930\u090F\u0932"],
+  [/\bSMS\b/gi, "\u090F\u0938\u090F\u092E\u090F\u0938"],
+  [/\bCCTV\b/gi, "\u0938\u0940\u0938\u0940\u091F\u0940\u0935\u0940"],
+  [/\bLED\b/gi, "\u090F\u0932\u0908\u0921\u0940"],
+  [/\bLPG\b/gi, "\u090F\u0932\u092A\u0940\u091C\u0940"],
+  [/\bCNG\b/gi, "\u0938\u0940\u090F\u0928\u091C\u0940"],
+  [/\bPNG\b/gi, "\u092A\u0940\u090F\u0928\u091C\u0940"],
+  [/\bEV\b/gi, "\u0908\u0935\u0940"],
+  [/\b5G\b/gi, "5\u091C\u0940"],
+  [/\b4G\b/gi, "4\u091C\u0940"],
+  [/\bWi-?Fi\b/gi, "\u0935\u093E\u0908-\u092B\u093E\u0908"],
+  [/\bGPS\b/gi, "\u091C\u0940\u092A\u0940\u090F\u0938"],
+  [/\bQR\b/gi, "\u0915\u094D\u092F\u0942\u0906\u0930"],
+  [/\bWhatsApp\b/gi, "\u0935\u094D\u0939\u093E\u091F\u094D\u0938\u090F\u092A"],
+  [/\bFacebook\b/gi, "\u092B\u0947\u0938\u092C\u0941\u0915"],
+  [/\bInstagram\b/gi, "\u0907\u0902\u0938\u094D\u091F\u093E\u0917\u094D\u0930\u093E\u092E"],
+  [/\bYouTube\b/gi, "\u092F\u0942\u091F\u094D\u092F\u0942\u092C"],
+  [/\bGoogle\b/gi, "\u0917\u0942\u0917\u0932"],
+  [/\bCyber\b/gi, "\u0938\u093E\u0907\u092C\u0930"],
+  // Compulsory Common News Action & Subject Words
+  [/\bAction\b/gi, "\u090F\u0915\u094D\u0936\u0928"],
+  [/\bAlert\b/gi, "\u0905\u0932\u0930\u094D\u091F"],
+  [/\bReport\b/gi, "\u0930\u093F\u092A\u094B\u0930\u094D\u091F"],
+  [/\bUpdate\b/gi, "\u0905\u092A\u0921\u0947\u091F"],
+  [/\bPolice\b/gi, "\u092A\u0941\u0932\u093F\u0938"],
+  [/\bTeam\b/gi, "\u091F\u0940\u092E"],
+  [/\bCourt\b/gi, "\u0915\u094B\u0930\u094D\u091F"],
+  [/\bHospital\b/gi, "\u0905\u0938\u094D\u092A\u0924\u093E\u0932"],
+  [/\bDoctor\b/gi, "\u0921\u0949\u0915\u094D\u091F\u0930"],
+  [/\bSchool\b/gi, "\u0938\u094D\u0915\u0942\u0932"],
+  [/\bCollege\b/gi, "\u0915\u0949\u0932\u0947\u091C"],
+  [/\bUniversity\b/gi, "\u092F\u0942\u0928\u093F\u0935\u0930\u094D\u0938\u093F\u091F\u0940"],
+  [/\bExam\b/gi, "\u092A\u0930\u0940\u0915\u094D\u0937\u093E"],
+  [/\bResult\b/gi, "\u0930\u093F\u091C\u0932\u094D\u091F"],
+  [/\bBudget\b/gi, "\u092C\u091C\u091F"],
+  [/\bTax\b/gi, "\u091F\u0948\u0915\u094D\u0938"],
+  [/\bLoan\b/gi, "\u0932\u094B\u0928"],
+  [/\bBank\b/gi, "\u092C\u0948\u0902\u0915"],
+  [/\bTrain\b/gi, "\u091F\u094D\u0930\u0947\u0928"],
+  [/\bExpress\b/gi, "\u090F\u0915\u094D\u0938\u092A\u094D\u0930\u0947\u0938"],
+  [/\bAirport\b/gi, "\u090F\u092F\u0930\u092A\u094B\u0930\u094D\u091F"],
+  [/\bFlight\b/gi, "\u092B\u094D\u0932\u093E\u0907\u091F"],
+  [/\bHighway\b/gi, "\u0939\u093E\u0908\u0935\u0947"],
+  [/\bAccident\b/gi, "\u0939\u093E\u0926\u0938\u093E"],
+  [/\bCrime\b/gi, "\u0915\u094D\u0930\u093E\u0907\u092E"],
+  [/\bMurder\b/gi, "\u0939\u0924\u094D\u092F\u093E"],
+  [/\bOnline\b/gi, "\u0911\u0928\u0932\u093E\u0907\u0928"],
+  [/\bDigital\b/gi, "\u0921\u093F\u091C\u093F\u091F\u0932"],
+  [/\bSmart\b/gi, "\u0938\u094D\u092E\u093E\u0930\u094D\u091F"],
+  [/\bVideo\b/gi, "\u0935\u0940\u0921\u093F\u092F\u094B"],
+  [/\bPhoto\b/gi, "\u092B\u094B\u091F\u094B"],
+  [/\bViral\b/gi, "\u0935\u093E\u092F\u0930\u0932"],
+  [/\bOfficer\b/gi, "\u0905\u092B\u0938\u0930"],
+  [/\bEngineer\b/gi, "\u0907\u0902\u091C\u0940\u0928\u093F\u092F\u0930"],
+  [/\bClerk\b/gi, "\u0915\u094D\u0932\u0930\u094D\u0915"],
+  [/\bPanchayat\b/gi, "\u092A\u0902\u091A\u093E\u092F\u0924"],
+  [/\bJanpad\b/gi, "\u091C\u0928\u092A\u0926"],
+  [/\bBonus\b/gi, "\u092C\u094B\u0928\u0938"],
+  [/\bPension\b/gi, "\u092A\u0947\u0902\u0936\u0928"],
+  [/\bSalary\b/gi, "\u0938\u0948\u0932\u0930\u0940"],
+  // Key Districts & Cities when written in English inside Hindi news
+  [/\bDindori\b/gi, "\u0921\u093F\u0902\u0921\u094B\u0930\u0940"],
+  [/\bBhopal\b/gi, "\u092D\u094B\u092A\u093E\u0932"],
+  [/\bIndore\b/gi, "\u0907\u0902\u0926\u094C\u0930"],
+  [/\bJabalpur\b/gi, "\u091C\u092C\u0932\u092A\u0941\u0930"],
+  [/\bGwalior\b/gi, "\u0917\u094D\u0935\u093E\u0932\u093F\u092F\u0930"],
+  [/\bUjjain\b/gi, "\u0909\u091C\u094D\u091C\u0948\u0928"],
+  [/\bRewa\b/gi, "\u0930\u0940\u0935\u093E"],
+  [/\bSatna\b/gi, "\u0938\u0924\u0928\u093E"],
+  [/\bSagar\b/gi, "\u0938\u093E\u0917\u0930"],
+  [/\bShahdol\b/gi, "\u0936\u0939\u0921\u094B\u0932"],
+  [/\bMandla\b/gi, "\u092E\u0902\u0921\u0932\u093E"],
+  [/\bBalaghat\b/gi, "\u092C\u093E\u0932\u093E\u0918\u093E\u091F"],
+  [/\bChhindwara\b/gi, "\u091B\u093F\u0902\u0926\u0935\u093E\u0921\u093C\u093E"],
+  [/\bKatni\b/gi, "\u0915\u091F\u0928\u0940"],
+  [/\bUmaria\b/gi, "\u0909\u092E\u0930\u093F\u092F\u093E"],
+  [/\bAnuppur\b/gi, "\u0905\u0928\u0942\u092A\u092A\u0941\u0930"],
+  [/\bSeoni\b/gi, "\u0938\u093F\u0935\u0928\u0940"],
+  [/\bNarsinghpur\b/gi, "\u0928\u0930\u0938\u093F\u0902\u0939\u092A\u0941\u0930"],
+  [/\bBetul\b/gi, "\u092C\u0948\u0924\u0942\u0932"],
+  [/\bNarmadapuram\b/gi, "\u0928\u0930\u094D\u092E\u0926\u093E\u092A\u0941\u0930\u092E"],
+  [/\bHoshangabad\b/gi, "\u0928\u0930\u094D\u092E\u0926\u093E\u092A\u0941\u0930\u092E"],
+  [/\bHarda\b/gi, "\u0939\u0930\u0926\u093E"],
+  [/\bVidisha\b/gi, "\u0935\u093F\u0926\u093F\u0936\u093E"],
+  [/\bRaisen\b/gi, "\u0930\u093E\u092F\u0938\u0947\u0928"],
+  [/\bSehore\b/gi, "\u0938\u0940\u0939\u094B\u0930"],
+  [/\bRajgarh\b/gi, "\u0930\u093E\u091C\u0917\u0922\u093C"],
+  [/\bGuna\b/gi, "\u0917\u0941\u0928\u093E"],
+  [/\bAshoknagar\b/gi, "\u0905\u0936\u094B\u0915\u0928\u0917\u0930"],
+  [/\bShivpuri\b/gi, "\u0936\u093F\u0935\u092A\u0941\u0930\u0940"],
+  [/\bDatia\b/gi, "\u0926\u0924\u093F\u092F\u093E"],
+  [/\bBhind\b/gi, "\u092D\u093F\u0902\u0921"],
+  [/\bMorena\b/gi, "\u092E\u0941\u0930\u0948\u0928\u093E"],
+  [/\bSheopur\b/gi, "\u0936\u094D\u092F\u094B\u092A\u0941\u0930"],
+  [/\bChhatarpur\b/gi, "\u091B\u0924\u0930\u092A\u0941\u0930"],
+  [/\bTikamgarh\b/gi, "\u091F\u0940\u0915\u092E\u0917\u0922\u093C"],
+  [/\bNiwari\b/gi, "\u0928\u093F\u0935\u093E\u0921\u093C\u0940"],
+  [/\bPanna\b/gi, "\u092A\u0928\u094D\u0928\u093E"],
+  [/\bDamoh\b/gi, "\u0926\u092E\u094B\u0939"],
+  [/\bSingrauli\b/gi, "\u0938\u093F\u0902\u0917\u0930\u094C\u0932\u0940"],
+  [/\bSidhi\b/gi, "\u0938\u0940\u0927\u0940"],
+  [/\bMaihar\b/gi, "\u092E\u0948\u0939\u0930"],
+  [/\bMauganj\b/gi, "\u092E\u090A\u0917\u0902\u091C"],
+  [/\bPandhurna\b/gi, "\u092A\u093E\u0902\u0922\u0941\u0930\u094D\u0923\u093E"],
+  [/\bDewas\b/gi, "\u0926\u0947\u0935\u093E\u0938"],
+  [/\bRatlam\b/gi, "\u0930\u0924\u0932\u093E\u092E"],
+  [/\bMandsaur\b/gi, "\u092E\u0902\u0926\u0938\u094C\u0930"],
+  [/\bNeemuch\b/gi, "\u0928\u0940\u092E\u091A"],
+  [/\bShajapur\b/gi, "\u0936\u093E\u091C\u093E\u092A\u0941\u0930"],
+  [/\bKhandwa\b/gi, "\u0916\u0902\u0921\u0935\u093E"],
+  [/\bKhargone\b/gi, "\u0916\u0930\u0917\u094B\u0928"],
+  [/\bBurhanpur\b/gi, "\u092C\u0941\u0930\u0939\u093E\u0928\u092A\u0941\u0930"],
+  [/\bBarwani\b/gi, "\u092C\u0921\u093C\u0935\u093E\u0928\u0940"],
+  [/\bDhar\b/gi, "\u0927\u093E\u0930"],
+  [/\bJhabua\b/gi, "\u091D\u093E\u092C\u0941\u0906"],
+  [/\bAlirajpur\b/gi, "\u0905\u0932\u0940\u0930\u093E\u091C\u092A\u0941\u0930"],
+  [/\bRaipur\b/gi, "\u0930\u093E\u092F\u092A\u0941\u0930"],
+  [/\bBilaspur\b/gi, "\u092C\u093F\u0932\u093E\u0938\u092A\u0941\u0930"],
+  [/\bDurg\b/gi, "\u0926\u0941\u0930\u094D\u0917"],
+  [/\bBhilai\b/gi, "\u092D\u093F\u0932\u093E\u0908"],
+  [/\bKorba\b/gi, "\u0915\u094B\u0930\u092C\u093E"],
+  [/\bRaigarh\b/gi, "\u0930\u093E\u092F\u0917\u0922\u093C"],
+  [/\bJagdalpur\b/gi, "\u091C\u0917\u0926\u0932\u092A\u0941\u0930"],
+  [/\bBastar\b/gi, "\u092C\u0938\u094D\u0924\u0930"],
+  [/\bAmbikapur\b/gi, "\u0905\u0902\u092C\u093F\u0915\u093E\u092A\u0941\u0930"],
+  [/\bSurguja\b/gi, "\u0938\u0930\u0917\u0941\u091C\u093E"],
+  [/\bRajnandgaon\b/gi, "\u0930\u093E\u091C\u0928\u093E\u0902\u0926\u0917\u093E\u0902\u0935"],
+  [/\bDelhi\b/gi, "\u0926\u093F\u0932\u094D\u0932\u0940"],
+  [/\bLucknow\b/gi, "\u0932\u0916\u0928\u090A"],
+  [/\bVaranasi\b/gi, "\u0935\u093E\u0930\u093E\u0923\u0938\u0940"],
+  [/\bPrayagraj\b/gi, "\u092A\u094D\u0930\u092F\u093E\u0917\u0930\u093E\u091C"],
+  [/\bKanpur\b/gi, "\u0915\u093E\u0928\u092A\u0941\u0930"],
+  [/\bAgra\b/gi, "\u0906\u0917\u0930\u093E"],
+  [/\bNoida\b/gi, "\u0928\u094B\u090F\u0921\u093E"],
+  [/\bGhaziabad\b/gi, "\u0917\u093E\u091C\u093F\u092F\u093E\u092C\u093E\u0926"],
+  [/\bPatna\b/gi, "\u092A\u091F\u0928\u093E"],
+  [/\bRanchi\b/gi, "\u0930\u093E\u0902\u091A\u0940"],
+  [/\bJaipur\b/gi, "\u091C\u092F\u092A\u0941\u0930"],
+  [/\bJodhpur\b/gi, "\u091C\u094B\u0927\u092A\u0941\u0930"],
+  [/\bUdaipur\b/gi, "\u0909\u0926\u092F\u092A\u0941\u0930"],
+  [/\bKota\b/gi, "\u0915\u094B\u091F\u093E"],
+  [/\bMumbai\b/gi, "\u092E\u0941\u0902\u092C\u0908"],
+  [/\bPune\b/gi, "\u092A\u0941\u0923\u0947"],
+  [/\bNagpur\b/gi, "\u0928\u093E\u0917\u092A\u0941\u0930"],
+  [/\bAhmedabad\b/gi, "\u0905\u0939\u092E\u0926\u093E\u092C\u093E\u0926"],
+  [/\bSurat\b/gi, "\u0938\u0942\u0930\u0924"],
+  [/\bChandigarh\b/gi, "\u091A\u0902\u0921\u0940\u0917\u0922\u093C"],
+  [/\bDehradun\b/gi, "\u0926\u0947\u0939\u0930\u093E\u0926\u0942\u0928"],
+  [/\bHaridwar\b/gi, "\u0939\u0930\u093F\u0926\u094D\u0935\u093E\u0930"],
+  [/\bChhattisgarh\b/gi, "\u091B\u0924\u094D\u0924\u0940\u0938\u0917\u0922\u093C"],
+  [/\bRajasthan\b/gi, "\u0930\u093E\u091C\u0938\u094D\u0925\u093E\u0928"],
+  [/\bBihar\b/gi, "\u092C\u093F\u0939\u093E\u0930"],
+  [/\bJharkhand\b/gi, "\u091D\u093E\u0930\u0916\u0902\u0921"],
+  [/\bUttarakhand\b/gi, "\u0909\u0924\u094D\u0924\u0930\u093E\u0916\u0902\u0921"],
+  [/\bHaryana\b/gi, "\u0939\u0930\u093F\u092F\u093E\u0923\u093E"],
+  [/\bPunjab\b/gi, "\u092A\u0902\u091C\u093E\u092C"],
+  [/\bGujarat\b/gi, "\u0917\u0941\u091C\u0930\u093E\u0924"],
+  [/\bMaharashtra\b/gi, "\u092E\u0939\u093E\u0930\u093E\u0937\u094D\u091F\u094D\u0930"]
+];
+function transliterateEssentialEnglishTerms(input) {
+  if (!input || typeof input !== "string") return "";
+  let s = stripLeadingEnglishProseSentence(input);
+  if (!/[\u0900-\u097F]/.test(s)) {
+    const asciiWords = s.trim().split(/\s+/).filter(Boolean);
+    const hasEnglishProseStopwords = /\b(?:the|has|have|had|was|were|is|are|been|being|will|would|could|should|for|with|from|that|this|these|those|which|into|under|after|before|between|during|through|about|against|among|formulated|workers|areas|according)\b/i.test(s);
+    if (hasEnglishProseStopwords || asciiWords.length > 5) {
+      return s;
+    }
+  }
+  s = s.replace(/\[yellow\]/gi, "\uE001").replace(/\[\/yellow\]/gi, "\uE002");
+  s = s.replace(/\[highlight\]/gi, "\uE003").replace(/\[\/highlight\]/gi, "\uE004");
+  s = s.replace(
+    /\b([A-Za-z])\.(?:([A-Za-z])\.)+([A-Za-z])?\.?/g,
+    (match) => match.replace(/\./g, "").toUpperCase()
+  );
+  for (const [pattern, devanagari] of ESSENTIAL_ENGLISH_TO_HINDI_TERMS) {
+    s = s.replace(pattern, devanagari);
+  }
+  s = s.replace(/\b[A-Z]{2,6}\b/g, (acronym) => {
+    if (IGNORED_TECHNICAL_ACRONYMS.has(acronym)) return acronym;
+    return acronym.split("").map((ch) => ENGLISH_LETTER_TO_DEVANAGARI[ch] || "").join("");
+  });
+  s = s.replace(/\uE001/g, "[yellow]").replace(/\uE002/g, "[/yellow]");
+  s = s.replace(/\uE003/g, "[highlight]").replace(/\uE004/g, "[/highlight]");
+  return s;
+}
 var hindiGraphemeSegmenter = null;
 try {
   if (typeof Intl !== "undefined" && typeof Intl.Segmenter === "function") {
@@ -13313,6 +13941,9 @@ if (cloudStorage) {
 app.use("/uploads", import_express.default.static(publicUploadsDir, {
   setHeaders: (res) => {
     res.setHeader("Cache-Control", "public, max-age=2592000, immutable");
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.setHeader("Accept-Ranges", "bytes");
   }
 }));
 function initializeAuthSecret() {
@@ -13320,10 +13951,15 @@ function initializeAuthSecret() {
   if (secret && typeof secret === "string" && secret.trim().length >= 32) {
     return secret.trim();
   }
-  const isCloudProduction = Boolean(process.env.K_SERVICE || process.env.FIREBASE_APP_HOSTING) && process.env.IS_TEST_ENV !== "true";
+  const kService = (process.env.K_SERVICE || "").trim();
+  const isAiStudioPreview = /^ais-(dev|pre)-/i.test(kService) && !process.env.FIREBASE_APP_HOSTING;
+  const isCloudProduction = Boolean(kService && !isAiStudioPreview || process.env.FIREBASE_APP_HOSTING) && process.env.IS_TEST_ENV !== "true";
   if (isCloudProduction) {
     console.error("[SECURITY CRITICAL] SESSION_SECRET is missing or invalid in production! Refusing to start with insecure session secret.");
     throw new Error("[SECURITY CRITICAL] SESSION_SECRET environment variable (minimum 32 characters) must be configured in Secret Manager / Production environment.");
+  }
+  if (isAiStudioPreview) {
+    console.warn("[AUTH WARNING] Running in AI Studio preview container without SESSION_SECRET; using deterministic dev fallback secret.");
   }
   return import_crypto2.default.createHmac("sha256", "ai-news-maker-stable-dev-salt").update(process.cwd()).digest("hex");
 }
@@ -23654,8 +24290,9 @@ async function executeRssSynchronization() {
     };
     lastRssSyncResult = result;
     if (newArticlesCount > 0 || failedSourcesCount > 0) {
+      const failedSuffix = failedSourcesCount > 0 ? `, ${failedSourcesCount} failed` : "";
       console.log(
-        `[RSS Auto-Sync Completed] Fetched ${activeSources.length} sources: ${newArticlesCount} new, ${skippedDuplicatesCount} duplicates skipped, ${failedSourcesCount} failed in ${durationMs}ms`
+        `[RSS Auto-Sync Completed] Fetched ${activeSources.length} sources: ${newArticlesCount} new, ${skippedDuplicatesCount} duplicates skipped${failedSuffix} in ${durationMs}ms`
       );
     }
     return result;
@@ -28769,9 +29406,111 @@ app.get("/api/proxy-image", proxyRateLimiter, async (req, res) => {
     res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     return res.send(buffer);
   } catch (err) {
     return res.status(500).send("Error proxying image");
+  }
+});
+app.get("/api/proxy-video", proxyRateLimiter, async (req, res) => {
+  try {
+    let mediaUrl = String(req.query.url || "").trim();
+    if (!mediaUrl) {
+      return res.status(400).json({ error: "Missing url parameter" });
+    }
+    while (mediaUrl.includes("/api/proxy-video?url=")) {
+      const parts = mediaUrl.split("/api/proxy-video?url=");
+      mediaUrl = decodeURIComponent(parts[parts.length - 1]);
+    }
+    if (mediaUrl.startsWith("/uploads/")) {
+      const safeRel = import_path2.default.normalize(mediaUrl).replace(/^(\.\.(\/|\\|$))+/, "");
+      const localPath = import_path2.default.join(process.cwd(), "public", safeRel);
+      const resolvedUploads = import_path2.default.resolve(publicUploadsDir);
+      const resolvedTarget = import_path2.default.resolve(localPath);
+      if (resolvedTarget.startsWith(resolvedUploads) && import_fs2.default.existsSync(resolvedTarget)) {
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        res.setHeader("Accept-Ranges", "bytes");
+        return res.sendFile(resolvedTarget);
+      }
+    }
+    const urlValidation = isSafePublicUrl(mediaUrl);
+    if (!urlValidation.safe || !urlValidation.parsedUrl) {
+      return res.status(403).json({ error: "\u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u0932\u093F\u0902\u0915 (SSRF Protection): " + (urlValidation.error || "\u0905\u092E\u093E\u0928\u094D\u092F URL") });
+    }
+    const fetchHeaders = {
+      "User-Agent": "Mozilla/5.0 (compatible; AINewsMakerVideoProxy/1.0)"
+    };
+    if (req.headers.range) {
+      fetchHeaders["Range"] = String(req.headers.range);
+    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25e3);
+    let upstream;
+    try {
+      upstream = await fetch(urlValidation.parsedUrl.toString(), {
+        method: "GET",
+        headers: fetchHeaders,
+        redirect: "follow",
+        signal: controller.signal
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    if (upstream.url) {
+      const finalCheck = isSafePublicUrl(upstream.url);
+      if (!finalCheck.safe) {
+        return res.status(403).json({ error: "\u092A\u094D\u0930\u0924\u093F\u092C\u0902\u0927\u093F\u0924 \u0930\u0940\u0921\u093E\u092F\u0930\u0947\u0915\u094D\u091F \u0932\u093F\u0902\u0915 (SSRF Protection)" });
+      }
+    }
+    if (!upstream.ok && upstream.status !== 206) {
+      return res.status(upstream.status).send("Upstream video fetch failed");
+    }
+    const contentType = upstream.headers.get("content-type") || "video/mp4";
+    const allowedMedia = contentType.startsWith("video/") || contentType.startsWith("audio/") || contentType.includes("octet-stream") || contentType.includes("mp4") || contentType.includes("webm");
+    if (!allowedMedia) {
+      return res.status(415).send("Unsupported media content type");
+    }
+    res.status(upstream.status);
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges, Content-Type");
+    res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+    res.setHeader("Accept-Ranges", upstream.headers.get("accept-ranges") || "bytes");
+    const contentLength = upstream.headers.get("content-length");
+    if (contentLength) res.setHeader("Content-Length", contentLength);
+    const contentRange = upstream.headers.get("content-range");
+    if (contentRange) res.setHeader("Content-Range", contentRange);
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    if (!upstream.body) {
+      return res.end();
+    }
+    const reader = upstream.body.getReader();
+    req.on("close", () => {
+      try {
+        reader.cancel();
+      } catch {
+      }
+    });
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        const canContinue = res.write(Buffer.from(value));
+        if (!canContinue) {
+          await new Promise((resolve) => res.once("drain", resolve));
+        }
+      }
+    }
+    return res.end();
+  } catch (err) {
+    if (!res.headersSent) {
+      return res.status(500).send("Error proxying video");
+    }
+    try {
+      res.end();
+    } catch {
+    }
   }
 });
 var aiClient = null;
@@ -29425,8 +30164,10 @@ async function saveApiKeysVault(vault) {
   }
   let firestoreSuccess = false;
   let firestoreError;
+  const kService = (process.env.K_SERVICE || "").trim();
+  const isAiStudioPreview = /^ais-(dev|pre)-/i.test(kService) && !process.env.FIREBASE_APP_HOSTING;
   const isProduction = Boolean(
-    process.env.K_SERVICE || process.env.FIREBASE_APP_HOSTING || process.env.USE_FIRESTORE === "true"
+    kService && !isAiStudioPreview || process.env.FIREBASE_APP_HOSTING || process.env.USE_FIRESTORE === "true"
   );
   try {
     const adapter = require_server_firestore_adapter();
@@ -31038,13 +31779,15 @@ function parseArticleHtml(html, pageUrl) {
     ogDescMatch && ogDescMatch[1]?.trim() || metaDescMatch && metaDescMatch[1]?.trim() || twitterDescMatch && twitterDescMatch[1]?.trim() || ""
   );
   if (rawDesc) {
-    rawDesc = rawDesc.replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "").replace(
-      /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
-      " "
-    ).replace(
-      /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
-      " "
-    ).replace(/\s+/g, " ").trim();
+    rawDesc = transliterateEssentialEnglishTerms(
+      stripLeadingEnglishProseSentence(rawDesc).replace(
+        /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+        " "
+      ).replace(
+        /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
+        " "
+      ).replace(/\s+/g, " ").trim()
+    );
   }
   let jsonLdContent = "";
   const foundImages = [];
@@ -31060,22 +31803,26 @@ function parseArticleHtml(html, pageUrl) {
               rawTitle = stripNewsSiteBranding(cleanHeadlineText(cleanHtmlEntities(String(item.headline))));
             }
             if (!rawDesc && item.description) {
-              rawDesc = cleanHtmlEntities(String(item.description)).replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "").replace(
-                /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
-                " "
-              ).replace(
-                /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
-                " "
-              ).replace(/\s+/g, " ").trim();
+              rawDesc = transliterateEssentialEnglishTerms(
+                stripLeadingEnglishProseSentence(cleanHtmlEntities(String(item.description))).replace(
+                  /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+                  " "
+                ).replace(
+                  /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
+                  " "
+                ).replace(/\s+/g, " ").trim()
+              );
             }
             if (item.articleBody) {
-              const bodyStr = cleanHtmlEntities(String(item.articleBody)).replace(
-                /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
-                " "
-              ).replace(
-                /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
-                " "
-              ).replace(/\s+/g, " ").trim();
+              const bodyStr = transliterateEssentialEnglishTerms(
+                stripLeadingEnglishProseSentence(cleanHtmlEntities(String(item.articleBody))).replace(
+                  /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+                  " "
+                ).replace(
+                  /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
+                  " "
+                ).replace(/\s+/g, " ").trim()
+              );
               if (bodyStr.length > jsonLdContent.length) {
                 jsonLdContent = bodyStr.slice(0, 6e3);
               }
@@ -31133,13 +31880,15 @@ function parseArticleHtml(html, pageUrl) {
   const extractedParagraphs = [];
   for (const pMatch of pMatches) {
     let pClean = cleanHtmlEntities(pMatch[1].replace(/<[^>]+>/g, " ")).trim();
-    pClean = pClean.replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "").replace(/(?:लोड हो रहा है[\s\.]*)+/gi, "").replace(/(?:loading[\s\.]*)+/gi, "").replace(/(?:please wait[\s\.]*)+/gi, "").replace(/^(?:नईदुनिया प्रतिनिधि|दैनिक भास्कर|अमर उजाला|पत्रिका|नवभारत टाइम्स|हिंदुस्तान ब्यूरो|विशेष संवाददाता|ब्यूरो|भाषा|आईएएनएस|पीटीआई|वार्ता)[,\s]*[^\n।]+[।\n]?/gi, "").replace(
-      /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|ये\s*भी\s*पढ़ें|और\s*पढ़ें|संबंधित\s*खबरें|फोटो साभार[:\s]*|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*|read\s*also|also\s*read|must\s*read)/gi,
-      " "
-    ).replace(
-      /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
-      " "
-    ).replace(/\s+/g, " ").trim();
+    pClean = transliterateEssentialEnglishTerms(
+      stripLeadingEnglishProseSentence(pClean).replace(/(?:लोड हो रहा है[\s\.]*)+/gi, "").replace(/(?:loading[\s\.]*)+/gi, "").replace(/(?:please wait[\s\.]*)+/gi, "").replace(/^(?:नईदुनिया प्रतिनिधि|दैनिक भास्कर|अमर उजाला|पत्रिका|नवभारत टाइम्स|हिंदुस्तान ब्यूरो|विशेष संवाददाता|ब्यूरो|भाषा|आईएएनएस|पीटीआई|वार्ता)[,\s]*[^\n।]+[।\n]?/gi, "").replace(
+        /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|प्रतीकात्मक\s*(?:चित्र|फोटो|तस्वीर)\s*\d*[\.:\-–—]*|तस्वीर\s*\d*[\.:\-–—]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|ये\s*भी\s*पढ़ें|और\s*पढ़ें|संबंधित\s*खबरें|फोटो साभार[:\s]*|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*|read\s*also|also\s*read|must\s*read)/gi,
+        " "
+      ).replace(
+        /(?:नई\s*दिल्ली|दिल्ली|भोपाल|इंदौर|रायपुर|बिलासपुर|अंबिकापुर|लखनऊ|पटना|जयपुर|मुंबई|चंडीगढ़|रांची|देहरादून|जबलपुर|ग्वालियर|रीवा|सतना|सागर|उज्जैन)?\s*\d+\s*(?:घंटे|मिनट|दिन|सेकंड|सप्ताह|माह|महीने)\s*पहले\s*/gu,
+        " "
+      ).replace(/\s+/g, " ").trim()
+    );
     if (pClean.length > 25 && !extractedParagraphs.includes(pClean)) {
       if (!/cookie|subscribe|newsletter|advertisement|বিজ্ঞাপন|विज्ञापन|कॉपीराइट|rights reserved|Updated\s+\d+:\d+|\bIST\b|होमवीडियो|ई-पेपर|वेब स्टोरीज|टॉप न्यूज़|^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tue|Wed|Thu|Fri|Sat|Sun)[,\s]+|read\s*also|also\s*read|must\s*read|click\s*here/i.test(pClean)) {
         extractedParagraphs.push(pClean);
@@ -32017,7 +32766,7 @@ function formatAsJournalisticHeadline(raw) {
   if (!raw) return "";
   let h = cleanHeadlineText(raw);
   h = h.replace(/^(?:अब|वहीं|इसके अलावा|साथ ही|प्राप्त जानकारी के अनुसार|सूत्रों के मुताबिक|गौरतलब है कि|बता दें कि|दरअसल|इस दौरान|इसके तहत|सभी|मामले में|इधर)[,\s]*/gi, "");
-  h = h.replace(/^[A-Za-z\s,.\-–—:;'"()\/&|!_]+(?=[\u0900-\u097F])/u, "");
+  h = h.replace(/^[\s,.\-–—:;\/&|!_]+(?=[\u0900-\u097F])/u, "");
   h = h.replace(/(?:अब\s+)?नहीं\s*(?:बनेंगे|बनेगा|बन सकेंगे)\s+([^,:।\n]+)/gu, "$1 \u092A\u0930 \u0930\u094B\u0915");
   h = h.replace(/(?:अब\s+)?नहीं\s*(?:होगा|होंगे)\s+([^,:।\n]+)/gu, "$1 \u092A\u0930 \u092A\u093E\u092C\u0902\u0926\u0940");
   h = h.replace(/(?:अब\s+)?नहीं\s*(?:बनेंगे|बनेगा|बन सकेंगे|होगा|होंगे)(?:\s*हैं|\s*है)?$/u, " \u092A\u0930 \u0930\u094B\u0915").replace(/(?:की\s*अनुमति\s*होगी|अनुमति\s*दी\s*गई|अनुमति\s*होगी|मंजूरी\s*दी\s*गई|मंजूर\s*किया\s*गया|मंजूरी\s*मिली|को\s*मंजूरी\s*दी\s*है)(?:\s*हैं|\s*है)?$/u, " \u0915\u094B \u092E\u0902\u091C\u0942\u0930\u0940").replace(/(?:का\s+)?(?:तय\s*की\s*गई\s*है|तय\s*किए\s*गए|तय\s*किया\s*गया)(?:\s*हैं|\s*है)?$/u, " \u0924\u092F").replace(/(?:का\s+)?(?:निर्णय\s*लिया\s*गया|फैसला\s*लिया\s*गया)(?:\s*हैं|\s*है)?$/u, " \u0915\u093E \u0928\u093F\u0930\u094D\u0923\u092F").replace(/(?:लागू\s*किए\s*गए\s*हैं|लागू\s*किया\s*गया|लागू\s*होगा)(?:\s*हैं|\s*है)?$/u, " \u0932\u093E\u0917\u0942").replace(/(?:\s*अतिरिक्त)?\s*(?:सहायता|छूट|राहत)\s*(?:दी\s*जाएगी|मिलेगी|का\s*प्रावधान)(?:\s*हैं|\s*है)?$/u, " \u0915\u093E \u0910\u0932\u093E\u0928").replace(/(?:दी\s*जाएगी|छूट\s*मिलेगी|प्रावधान\s*किया\s*गया)(?:\s*हैं|\s*है)?$/u, " \u0915\u093E \u0910\u0932\u093E\u0928").replace(/(?:\s*सीधा)?\s*(?:लाभ|फायदा)\s*(?:मिलेगा|होगा)(?:\s*हैं|\s*है)?$/u, " \u0915\u094B \u0938\u0940\u0927\u093E \u092B\u093E\u092F\u0926\u093E").replace(/(?:पूरे\s*किए|रन\s*बनाए)(?:\s*हैं|\s*है)?$/u, " \u0920\u094B\u0915\u0947").replace(/(?:शतक|अर्धशतक)\s*(?:लगाया|जड़ा|बनाया)(?:\s*हैं|\s*है)?$/u, " \u091C\u0921\u093C\u093E").replace(/(?:बनाए\s*जा\s*सकेंगे|बनाए\s*जाएंगे)(?:\s*हैं|\s*है)?$/u, " \u0915\u094B \u0939\u0930\u0940 \u091D\u0902\u0921\u0940").replace(/(?:गिरफ्तार\s*किया\s*गया|गिरफ्तार\s*किया)(?:\s*हैं|\s*है)?$/u, " \u0917\u093F\u0930\u092B\u094D\u0924\u093E\u0930").replace(/(?:बरामद\s*की\s*गई|बरामद\s*किए\s*गए|बरामद\s*हुए)(?:\s*हैं|\s*है)?$/u, " \u092C\u0930\u093E\u092E\u0926").replace(/(?:\s*की)?\s*(?:मौत\s*हो\s*गई|जान\s*गंवाई|दम\s*तोड़\s*दिया)(?:\s*हैं|\s*है)?$/u, " \u0915\u0940 \u092E\u094C\u0924").replace(/(?:घायल\s*हो\s*गए|घायल\s*हुए)(?:\s*हैं|\s*है)?$/u, " \u0918\u093E\u092F\u0932").replace(/(?:आदेश\s*दिए\s*गए|आदेश\s*जारी\s*किए)(?:\s*हैं|\s*है)?$/u, " \u0906\u0926\u0947\u0936 \u0926\u093F\u090F \u0917\u090F").replace(/(?:निधन\s*हो\s*गया)(?:\s*हैं|\s*है)?$/u, " \u0915\u093E \u0928\u093F\u0927\u0928").replace(/(?:जांच\s*शुरू\s*कर\s*दी\s*गई|जांच\s*के\s*निर्देश\s*दिए)(?:\s*हैं|\s*है)?$/u, " \u0915\u0940 \u091C\u093E\u0902\u091A \u0936\u0941\u0930\u0942").replace(/(?:घोषणा\s*की\s*गई|ऐलान\s*किया\s*गया|ऐलान\s*किया)(?:\s*हैं|\s*है)?$/u, " \u0915\u093E \u0910\u0932\u093E\u0928").replace(/(?:के\s*तहत\s*होगा|के\s*तहत\s*होंगे)$/u, " \u0915\u0947 \u0928\u090F \u0928\u093F\u092F\u092E").replace(/(?:के\s+सख्त\s+)+/gu, "\u0915\u0947 \u0938\u0916\u094D\u0924 ");
@@ -32169,6 +32918,7 @@ function ensureHashtagHierarchy(summaryText, location = "", username = "", mode 
   rawBody = rawBody.replace(/^(?:पैराग्राफ|Paragraph|पैरा)\s*\d+[\s:\-–—.]*/gim, "");
   rawBody = rawBody.replace(/^(?:मुख्य बिंदु|विवरण|घटनाक्रम|अपडेट|Key Points|Bullet Points)[\s:\-–—.]*/gim, "");
   rawBody = rawBody.replace(/#[a-zA-Z0-9_\u0900-\u097F]+/g, "").trim();
+  rawBody = transliterateEssentialEnglishTerms(stripLeadingEnglishProseSentence(rawBody));
   rawBody = sanitizePressNoteFlattery(rawBody, false);
   rawBody = sanitizeFlattery(rawBody);
   if (headlineToStrip && headlineToStrip.trim()) {
@@ -32378,9 +33128,7 @@ function sanitizeCaptionText(caption, headline = "", location = "", username = "
     /(?:नईदुनिया प्रतिनिधि[,\s]*[^\n।]+[।\n]?|दैनिक भास्कर[,\s]*[^\n।]+[।\n]?|अमर उजाला[,\s]*[^\n।]+[।\n]?|पत्रिका[,\s]*[^\n।]+[।\n]?)/gi,
     " "
   );
-  text = text.replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\\/&|!_]+[.!?।]\\s*)+(?=[\\u0900-\\u097F])/u, "");
-  text = text.replace(/^[A-Za-z0-9\s,.\-–—:;'"()\\/&|!_]{12,}?[.!?।]\\s*(?=[\\u0900-\\u097F])/u, "");
-  text = text.replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, "");
+  text = transliterateEssentialEnglishTerms(stripLeadingEnglishProseSentence(text));
   const bodyWithoutHashtags = text.replace(/#[\w\u0900-\u097F]+/g, "").trim();
   const paragraphs = bodyWithoutHashtags.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
   const cleanParagraphs = [];
@@ -32448,10 +33196,14 @@ function createLocalNewsFallback(input, linkUrl, targetMaxLines = 3, articleMeta
     }
   }
   if (extractedDesc) {
-    extractedDesc = extractedDesc.replace(
-      /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
-      " "
-    ).replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\\/&]+[.!?।]\\s*)+(?=[\\u0900-\\u097F])/u, "").replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&]{15,}?\.\s*(?=[\u0900-\u097F])/u, "").replace(/\s+/g, " ").trim();
+    extractedDesc = transliterateEssentialEnglishTerms(
+      stripLeadingEnglishProseSentence(
+        extractedDesc.replace(
+          /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+          " "
+        )
+      )
+    ).replace(/\s+/g, " ").trim();
   }
   let extractedContent = articleMeta?.content && !isBoilerplate(articleMeta.content) ? articleMeta.content : "";
   if (!extractedContent) {
@@ -32461,9 +33213,13 @@ function createLocalNewsFallback(input, linkUrl, targetMaxLines = 3, articleMeta
     }
   }
   if (extractedContent) {
-    extractedContent = extractedContent.replace(
-      /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
-      " "
+    extractedContent = transliterateEssentialEnglishTerms(
+      stripLeadingEnglishProseSentence(
+        extractedContent.replace(
+          /(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi,
+          " "
+        )
+      )
     ).replace(/\s+/g, " ").trim();
   }
   if (!extractedTitle || !isValidCandidate(extractedTitle)) {
@@ -32548,10 +33304,18 @@ ${extractedContent}`;
 
 ${extractedContent}` : clean;
   }
-  const rawFactsCorpus = corpusToExtract.replace(/(?:^|\n|[\s।.\-–—])\s*(?:Title|शीर्षक|हेडलाइन|Headline)\s*:\s*[^\n\r]+/gi, " ").replace(/(?:^|\n|[\s।.\-–—])\s*(?:Meta Description|Description|विवरण|सारांश)\s*:\s*/gi, " ").replace(/(?:^|\n|[\s।.\-–—])\s*(?:Article Content & Facts|Facts & Content|Content|Article Content|URL|Link)\s*:\s*/gi, " ").replace(cleanBylineRegex, " ").replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ").replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\\/&|!_]+[.!?।]\\s*)+(?=[\\u0900-\\u097F])/u, "").replace(/^[A-Za-z0-9\s,.\-–—:;'"()\\/&|!_]{12,}?[.!?।]\\s*(?=[\\u0900-\\u097F])/u, "").replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{15,}?\s*(?=[\u0900-\u097F])/u, "");
+  const rawFactsCorpus = transliterateEssentialEnglishTerms(
+    stripLeadingEnglishProseSentence(
+      corpusToExtract.replace(/(?:^|\n|[\s।.\-–—])\s*(?:Title|शीर्षक|हेडलाइन|Headline)\s*:\s*[^\n\r]+/gi, " ").replace(/(?:^|\n|[\s।.\-–—])\s*(?:Meta Description|Description|विवरण|सारांश)\s*:\s*/gi, " ").replace(/(?:^|\n|[\s।.\-–—])\s*(?:Article Content & Facts|Facts & Content|Content|Article Content|URL|Link)\s*:\s*/gi, " ").replace(cleanBylineRegex, " ").replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ")
+    )
+  );
   const safeFacts = rawFactsCorpus.replace(/(डाॅ|डॉ|पं|प्रो|श्री|क्र|सं|ले|कै|एड)\./g, "$1#DOT#").replace(/\b([A-Za-z])\.(?=\s*[A-Za-z]\.)/g, "$1#DOT#");
   const articleSentences = safeFacts.split(/[।\n]+|(?<=[^\d])\.\s+/).map(
-    (s) => s.replace(/#DOT#/g, ".").replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ").replace(/^(?:Title|Meta Description|Description|URL|Link)[:\s]*/i, "").replace(/^(?:[A-Za-z0-9\s,.\-–—:;'"()\\/&|!_]+[.!?।]\\s*)+(?=[\\u0900-\\u097F])/u, "").replace(/^[A-Za-z0-9\s,.\-–—:;'"()\/&|!_]{10,}?\s*(?=[\u0900-\u097F])/u, "").trim()
+    (s) => transliterateEssentialEnglishTerms(
+      stripLeadingEnglishProseSentence(
+        s.replace(/#DOT#/g, ".").replace(/(?:कॉपी\s*लिंक|फाइल\s*फोटो[:\s]*|शेयर\s*करें|क्लिक\s*करें|डाउनलोड\s*करें|यह\s*भी\s*पढ़ें|संबंधित\s*खबरें|File\s*Photo[:\s]*|Photo[:\s]*|Credit[:\s]*)/gi, " ").replace(/^(?:Title|Meta Description|Description|URL|Link)[:\s]*/i, "").trim()
+      )
+    ).trim()
   ).filter((s) => {
     if (s.length <= 15) return false;
     if (/^(विज्ञापन|क्लिक करें|यह भी पढ़ें|कॉपी लिंक|फाइल फोटो|शेयर करें)/i.test(s)) return false;
@@ -32905,14 +33669,54 @@ function sanitizeHeadlineClean(text) {
   }
   return res.replace(/^(?:में|पर|से|को|का|की|के|ने|और|तथा|व)\s+/u, "").replace(/[।.,!?:–—;\s-]+$/u, "").trim();
 }
+var SERVER_CRITICAL_HEADLINE_ENTITIES = [
+  "\u0908\u0913\u0921\u092C\u094D\u0932\u094D\u092F\u0942",
+  "\u0938\u0940\u092C\u0940\u0906\u0908",
+  "\u0908\u0921\u0940",
+  "\u0932\u094B\u0915\u093E\u092F\u0941\u0915\u094D\u0924",
+  "\u090F\u0938\u0940\u092C\u0940",
+  "\u090F\u0928\u0906\u0908\u090F",
+  "\u090F\u0938\u0906\u0908\u091F\u0940",
+  "\u090F\u091F\u0940\u090F\u0938",
+  "\u090F\u0938\u091F\u0940\u090F\u092B",
+  "\u090F\u0928\u0938\u0940\u092C\u0940",
+  "\u0921\u0940\u0906\u0930\u0906\u0908",
+  "\u090F\u0928\u0921\u0940\u0906\u0930\u090F\u092B",
+  "\u090F\u0938\u0921\u0940\u0906\u0930\u090F\u092B",
+  "\u090F\u0938\u0921\u0940\u0908\u0906\u0930\u090F\u092B",
+  "\u0938\u0941\u092A\u094D\u0930\u0940\u092E \u0915\u094B\u0930\u094D\u091F",
+  "\u0939\u093E\u0908 \u0915\u094B\u0930\u094D\u091F",
+  "\u0938\u0947\u092C\u0940",
+  "\u0906\u0930\u092C\u0940\u0906\u0908",
+  "\u0907\u0938\u0930\u094B",
+  "\u0921\u0940\u0906\u0930\u0921\u0940\u0913",
+  "\u092C\u0940\u0938\u0940\u0938\u0940\u0906\u0908",
+  "\u0906\u0908\u092A\u0940\u090F\u0932",
+  "\u090F\u092B\u0906\u0908\u0906\u0930",
+  "\u092A\u0949\u0915\u094D\u0938\u094B",
+  "\u090F\u0938\u0921\u0940\u090F\u092E",
+  "\u0921\u0940\u090F\u0938\u092A\u0940",
+  "\u0915\u0932\u0947\u0915\u094D\u091F\u0930",
+  "\u0938\u0940\u090F\u092E\u090F\u091A\u0913"
+];
 function generate5BalancedHeadlineOptions(primaryTitle, factSentences = [], location = "") {
   const cleanBase = sanitizeHeadlineClean(primaryTitle || "");
   if (!cleanBase) return [];
   const loc = location && location !== "\u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C" ? location.trim() : "";
+  const requiredCriticalEntities = SERVER_CRITICAL_HEADLINE_ENTITIES.filter((ent) => cleanBase.includes(ent));
+  const ensureCriticalEntitiesPreserved = (candidateText) => {
+    if (!candidateText || requiredCriticalEntities.length === 0) return candidateText;
+    const missing = requiredCriticalEntities.filter((ent) => !candidateText.includes(ent));
+    if (missing.length === 0) return candidateText;
+    if (cleanBase.length <= 75 && !candidateText.includes(cleanBase)) {
+      return `${cleanBase}: ${candidateText}`;
+    }
+    return `${missing.join(" ")} \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908: ${candidateText}`;
+  };
   const uniqueOptions = [];
   const addOptionIfDistinct = (cand) => {
     if (!cand) return;
-    const formatted = sanitizeHeadlineClean(cand);
+    const formatted = sanitizeHeadlineClean(ensureCriticalEntitiesPreserved(cand));
     if (!formatted || formatted.length < 20 || countHeadlineVisibleCharacters(formatted) > 200) return;
     if (uniqueOptions.includes(formatted)) return;
     const isTooSimilar = uniqueOptions.some((ex) => calculateHeadlineSimilarityInternal(ex, formatted) >= 0.88);
@@ -33179,7 +33983,8 @@ function fitHeadlinesTo5TierRanges(headlines, contextOrBase = "", baseOrContext 
   if (typeof baseOrContext === "string" && baseOrContext.trim()) rawSources.push(baseOrContext.trim());
   if (Array.isArray(baseOrContext)) rawSources.push(...baseOrContext.filter(Boolean).map(String));
   if (safeHeadlines.length > 0) rawSources.push(...safeHeadlines);
-  const baseText = typeof baseOrContext === "string" && baseOrContext.trim() ? baseOrContext.trim() : typeof contextOrBase === "string" && contextOrBase.trim() ? contextOrBase.trim() : safeHeadlines[0] || "";
+  const rawBaseText = typeof baseOrContext === "string" && baseOrContext.trim() ? baseOrContext.trim() : typeof contextOrBase === "string" && contextOrBase.trim() ? contextOrBase.trim() : safeHeadlines[0] || "";
+  const baseText = sanitizeHeadlineClean(rawBaseText) || safeHeadlines[0] || "";
   const factsList = rawSources.flatMap((f) => f.split(/[।\n\.\r]+/)).map((s) => cleanCandidateClause(s)).filter((s) => s.length >= 12 && !hasBlockedMediaBrand(s, sourcePublisherNames) && !hasInvalidHeadlineEnding(s));
   const workingHeadlines = [...safeHeadlines];
   if (workingHeadlines.length < 5 && baseText) {
@@ -33356,10 +34161,11 @@ function buildMasterNewsEditorialPrompt(params) {
   ].includes(cleanUser.toLowerCase());
   const userTagInstruction = cleanUser && !isGeneric ? `\u092A\u0939\u0932\u093E \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947: #${cleanUser}` : `\u092A\u0939\u0932\u093E \u0939\u0948\u0936\u091F\u0948\u0917 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947: #AINewsMakerUser`;
   const systemInstruction = `\u0906\u092A \u090F\u0915 \u092A\u094D\u0930\u092E\u0941\u0916 \u0921\u093F\u091C\u093F\u091F\u0932 \u0939\u093F\u0902\u0926\u0940 \u0928\u094D\u092F\u0942\u091C\u093C \u0928\u0947\u091F\u0935\u0930\u094D\u0915 \u0915\u0947 \u0935\u0930\u093F\u0937\u094D\u0920 \u0938\u0902\u092A\u093E\u0926\u0915 (Professional Hindi News Editor) \u0939\u0948\u0902\u0964
-\u0906\u092A\u0915\u093E \u0915\u093E\u0930\u094D\u092F \u092A\u0942\u0930\u0947 \u0909\u092A\u0932\u092C\u094D\u0927 \u0938\u092E\u093E\u091A\u093E\u0930 \u0932\u0947\u0916 \u0915\u094B \u0917\u0939\u0930\u093E\u0908 \u0938\u0947 \u092A\u0922\u093C\u0915\u0930, \u0909\u0938\u0915\u0947 \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 \u0924\u0925\u094D\u092F\u094B\u0902 \u0914\u0930 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u0947 \u0906\u0927\u093E\u0930 \u092A\u0930 5 \u0905\u0928\u0941\u092E\u094B\u0926\u093F\u0924 \u0936\u0948\u0932\u093F\u092F\u094B\u0902 \u092E\u0947\u0902 5 \u0905\u0932\u0917-\u0905\u0932\u0917, \u0938\u091F\u0940\u0915, \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0914\u0930 \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938 (\u0935\u093F\u0915\u0932\u094D\u092A 1: 80-110 \u0905\u0915\u094D\u0937\u0930, \u0935\u093F\u0915\u0932\u094D\u092A 2: 100-130 \u0905\u0915\u094D\u0937\u0930, \u0935\u093F\u0915\u0932\u094D\u092A 3: 125-150 \u0905\u0915\u094D\u0937\u0930, \u0935\u093F\u0915\u0932\u094D\u092A 4: 130-160 \u0905\u0915\u094D\u0937\u0930, \u0935\u093F\u0915\u0932\u094D\u092A 5: 150-200 \u0905\u0915\u094D\u0937\u0930; \u0905\u0927\u093F\u0915\u0924\u092E \u0938\u0940\u092E\u093E 200 \u0905\u0915\u094D\u0937\u0930) \u0924\u0925\u093E 3 \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u0948\u092A\u094D\u0936\u0928 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0928\u093E \u0939\u0948\u0964
+\u0906\u092A\u0915\u093E \u0915\u093E\u0930\u094D\u092F \u092A\u0942\u0930\u0947 \u0909\u092A\u0932\u092C\u094D\u0927 \u0938\u092E\u093E\u091A\u093E\u0930 \u0932\u0947\u0916 (URL \u092F\u093E \u0930\u0949 \u0938\u094D\u0915\u094D\u0930\u093F\u092A\u094D\u091F) \u0915\u094B \u0917\u0939\u0930\u093E\u0908 \u0938\u0947 \u092A\u0922\u093C\u0915\u0930, \u0909\u0938\u0915\u0947 \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 \u0924\u0925\u094D\u092F\u094B\u0902 \u0914\u0930 \u092E\u0941\u0916\u094D\u092F \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0915\u0947 \u0906\u0927\u093E\u0930 \u092A\u0930 5 \u0905\u0928\u0941\u092E\u094B\u0926\u093F\u0924 \u0936\u0948\u0932\u093F\u092F\u094B\u0902 \u092E\u0947\u0902 5 \u0905\u0932\u0917-\u0905\u0932\u0917, \u0938\u091F\u0940\u0915, \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0914\u0930 \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0939\u093F\u0902\u0926\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938 (\u0935\u093F\u0915\u0932\u094D\u092A 1: 80-110 \u0905\u0915\u094D\u0937\u0930, \u0935\u093F\u0915\u0932\u094D\u092A 2: 100-130 \u0905\u0915\u094D\u0937\u0930, \u0935\u093F\u0915\u0932\u094D\u092A 3: 125-150 \u0905\u0915\u094D\u0937\u0930, \u0935\u093F\u0915\u0932\u094D\u092A 4: 130-160 \u0905\u0915\u094D\u0937\u0930, \u0935\u093F\u0915\u0932\u094D\u092A 5: 150-200 \u0905\u0915\u094D\u0937\u0930; \u0905\u0927\u093F\u0915\u0924\u092E \u0938\u0940\u092E\u093E 200 \u0905\u0915\u094D\u0937\u0930) \u0924\u0925\u093E 3 \u0938\u094B\u0936\u0932 \u092E\u0940\u0921\u093F\u092F\u093E \u0915\u0948\u092A\u094D\u0936\u0928 \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0928\u093E \u0939\u0948\u0964
+\u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u092E\u0941\u0916\u094D\u092F \u0936\u092C\u094D\u0926 \u090F\u0935\u0902 \u091C\u093E\u0902\u091A \u090F\u091C\u0947\u0902\u0938\u0940 \u0938\u0902\u0930\u0915\u094D\u0937\u0923 \u0928\u093F\u092F\u092E (MANDATORY KEY ENTITY & ACRONYM PRESERVATION): \u092F\u0926\u093F \u092E\u0942\u0932 \u0916\u092C\u0930 \u092F\u093E \u0936\u0940\u0930\u094D\u0937\u0915 \u092E\u0947\u0902 \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u0915\u0947 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0928\u093E\u092E (Acronyms), \u091C\u093E\u0902\u091A \u090F\u091C\u0947\u0902\u0938\u093F\u092F\u093E\u0902, \u092A\u0926, \u0938\u0902\u0938\u094D\u0925\u093E\u090F\u0902 \u092F\u093E \u092E\u0941\u0916\u094D\u092F \u0936\u092C\u094D\u0926 (\u091C\u0948\u0938\u0947 EOW -> \u0908\u0913\u0921\u092C\u094D\u0932\u094D\u092F\u0942, CBI -> \u0938\u0940\u092C\u0940\u0906\u0908, ED -> \u0908\u0921\u0940, ACB -> \u090F\u0938\u0940\u092C\u0940, Lokayukta -> \u0932\u094B\u0915\u093E\u092F\u0941\u0915\u094D\u0924, NIA -> \u090F\u0928\u0906\u0908\u090F, SIT -> \u090F\u0938\u0906\u0908\u091F\u0940, NDRF -> \u090F\u0928\u0921\u0940\u0906\u0930\u090F\u092B, SDRF -> \u090F\u0938\u0921\u0940\u0906\u0930\u090F\u092B, FIR -> \u090F\u092B\u0906\u0908\u0906\u0930, SDM -> \u090F\u0938\u0921\u0940\u090F\u092E, DSP -> \u0921\u0940\u090F\u0938\u092A\u0940, Collector -> \u0915\u0932\u0947\u0915\u094D\u091F\u0930, Raid -> \u091B\u093E\u092A\u093E/\u0930\u0947\u0921 \u0906\u0926\u093F) \u0926\u093F\u090F \u0917\u090F \u0939\u0948\u0902, \u0924\u094B \u0909\u0928\u094D\u0939\u0947\u0902 \u0915\u092D\u0940 \u092D\u0940 \u0939\u091F\u093E\u090F\u0902 \u0928\u0939\u0940\u0902 (NEVER delete or drop them)\u2014\u0909\u0928\u094D\u0939\u0947\u0902 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u0939\u093F\u0902\u0926\u0940 \u092E\u0947\u0902 \u0932\u093F\u092A\u094D\u092F\u0902\u0924\u0930\u093F\u0924 (Transliterate) \u0915\u0930\u0915\u0947 \u0938\u092D\u0940 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A\u094B\u0902 \u0914\u0930 \u0924\u0940\u0928\u094B\u0902 \u0915\u0948\u092A\u094D\u0936\u0928\u094B\u0902 \u092E\u0947\u0902 \u0936\u093E\u092E\u093F\u0932 \u0930\u0916\u0947\u0902\u0964 \u0909\u0926\u093E\u0939\u0930\u0923: "\u0921\u093F\u0902\u0921\u094B\u0930\u0940 \u092E\u0947\u0902 EOW \u0915\u093E \u091B\u093E\u092A\u093E" \u092E\u0947\u0902 "\u0908\u0913\u0921\u092C\u094D\u0932\u094D\u092F\u0942" \u0939\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A \u0914\u0930 \u0915\u0948\u092A\u094D\u0936\u0928 \u092E\u0947\u0902 \u0938\u094D\u092A\u0937\u094D\u091F \u0930\u0942\u092A \u0938\u0947 \u0930\u0939\u0928\u093E \u091A\u093E\u0939\u093F\u090F\u0964
 \u0915\u0921\u093C\u093E \u0928\u093F\u092F\u092E: \u0915\u093F\u0938\u0940 \u092D\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0940 \u0932\u0902\u092C\u093E\u0908 \u092C\u0922\u093C\u093E\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0905\u092A\u0928\u0940 \u0913\u0930 \u0938\u0947 \u0915\u094B\u0908 \u0915\u0943\u0924\u094D\u0930\u093F\u092E \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0935\u093E\u0915\u094D\u092F ('\u0936\u093E\u0938\u0928 \u0938\u094D\u0924\u0930 \u092A\u0930 \u0906\u0935\u0936\u094D\u092F\u0915 \u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u0926\u093F\u090F \u0917\u090F', '\u0938\u0902\u092C\u0902\u0927\u093F\u0924 \u092A\u0915\u094D\u0937\u094B\u0902 \u0915\u094B \u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940 \u0915\u093F\u090F \u0917\u090F', '\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0928\u092F\u093E \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0938\u093E\u092E\u0928\u0947 \u0906\u092F\u093E \u0939\u0948', '\u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0935 \u0935\u093F\u092D\u093E\u0917\u0940\u092F \u0938\u094D\u0924\u0930 \u092A\u0930 \u091C\u0930\u0942\u0930\u0940 \u0915\u0926\u092E \u0909\u0920\u093E\u090F \u091C\u093E \u0930\u0939\u0947 \u0939\u0948\u0902', '\u0935\u093F\u0936\u0947\u0937 \u0921\u0947\u0938\u094D\u0915' \u0906\u0926\u093F) \u092C\u093F\u0932\u094D\u0915\u0941\u0932 \u0928 \u091C\u094B\u0921\u093C\u0947\u0902\u0964 URL \u0915\u094B \u0915\u092D\u0940 \u092D\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092F\u093E \u0915\u0948\u092A\u094D\u0936\u0928 \u0928 \u092C\u0928\u093E\u090F\u0902\u0964 \u0915\u0947\u0935\u0932 \u0935\u0948\u0927 JSON \u0932\u094C\u091F\u093E\u090F\u0902\u0964`;
-  const effectiveSourceTitle = primaryHeadline || "";
-  const effectiveBody = fullArticleText || fetchedArticleSnippet || effectiveInput || "";
+  const effectiveSourceTitle = transliterateEssentialEnglishTerms(primaryHeadline || "");
+  const effectiveBody = transliterateEssentialEnglishTerms(fullArticleText || fetchedArticleSnippet || effectiveInput || "");
   const prompt = `\u0906\u092A \u090F\u0915 \u0935\u0930\u093F\u0937\u094D\u0920 \u0939\u093F\u0902\u0926\u0940 \u0928\u094D\u092F\u0942\u091C\u093C \u090F\u0921\u093F\u091F\u0930 \u0939\u0948\u0902\u0964
 \u0928\u0940\u091A\u0947 \u0926\u093F\u090F \u0917\u090F \u092A\u0942\u0930\u094D\u0923 \u0938\u092E\u093E\u091A\u093E\u0930 \u0932\u0947\u0916 (Article) \u0915\u094B \u0927\u094D\u092F\u093E\u0928\u092A\u0942\u0930\u094D\u0935\u0915 \u092A\u0922\u093C\u0947\u0902:
 
@@ -33367,7 +34173,7 @@ function buildMasterNewsEditorialPrompt(params) {
 """
 ${effectiveSourceTitle ? `\u092E\u0942\u0932 \u0936\u0940\u0930\u094D\u0937\u0915 \u0938\u0902\u0926\u0930\u094D\u092D: ${effectiveSourceTitle}
 
-` : ""}${effectiveBody ? effectiveBody.slice(0, 5500) : effectiveInput}
+` : ""}${effectiveBody ? effectiveBody.slice(0, 5500) : transliterateEssentialEnglishTerms(effectiveInput)}
 """
 
 ${customPrompt ? `[\u092F\u0942\u091C\u093C\u0930 \u0915\u093E \u0905\u0924\u093F\u0930\u093F\u0915\u094D\u0924 \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0928\u093F\u0930\u094D\u0926\u0947\u0936]:
@@ -33405,8 +34211,9 @@ ${customPrompt}
    - \u0935\u093F\u0915\u0932\u094D\u092A 5: 150 \u0938\u0947 200 \u0905\u0915\u094D\u0937\u0930 (\u0916\u092C\u0930 \u0915\u093E \u0938\u0902\u0924\u0941\u0932\u093F\u0924, \u0938\u093E\u0930\u0917\u0930\u094D\u092D\u093F\u0924 \u0914\u0930 \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u0938\u0902\u092A\u093E\u0926\u0915\u0940\u092F \u0936\u0940\u0930\u094D\u0937\u0915)
    - \u0915\u094B\u0908 \u092D\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u093F\u0938\u0940 \u092D\u0940 \u092A\u0930\u093F\u0938\u094D\u0925\u093F\u0924\u093F \u092E\u0947\u0902 200 \u0905\u0915\u094D\u0937\u0930 \u0938\u0947 \u0905\u0927\u093F\u0915 \u0928\u0939\u0940\u0902 \u0939\u094B\u0928\u0940 \u091A\u093E\u0939\u093F\u090F\u0964
    - \u092F\u0926\u093F \u092E\u0942\u0932 \u0938\u092E\u093E\u091A\u093E\u0930 \u092E\u0947\u0902 \u091C\u093E\u0928\u0915\u093E\u0930\u0940 \u0938\u0940\u092E\u093F\u0924 \u0939\u0948, \u0924\u094B \u0928\u094D\u092F\u0942\u0928\u0924\u092E \u0905\u0915\u094D\u0937\u0930 \u0938\u0902\u0916\u094D\u092F\u093E \u092A\u0942\u0930\u0940 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F \u0915\u092D\u0940 \u092D\u0940 \u0915\u0943\u0924\u094D\u0930\u093F\u092E \u0936\u092C\u094D\u0926 \u0928 \u091C\u094B\u0921\u093C\u0947\u0902\u2014\u091B\u094B\u091F\u0940 \u0932\u0947\u0915\u093F\u0928 \u0938\u091F\u0940\u0915 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0930\u0916\u0947\u0902\u0964
-3. \u092D\u093E\u0937\u093E, \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937\u0924\u093E \u0914\u0930 \u0936\u0941\u0926\u094D\u0927\u0924\u093E (LANGUAGE & HONORIFIC REMOVAL):
-   - \u0938\u092D\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938 100% \u0936\u0941\u0926\u094D\u0927 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u0939\u093F\u0902\u0926\u0940 \u092E\u0947\u0902 \u0939\u094B\u0902\u0964 \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0930\u0942\u092A\u094B\u0902 \u0915\u094B \u0939\u093F\u0902\u0926\u0940 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u092E\u0947\u0902 \u0932\u093F\u0916\u0947\u0902 (\u091C\u0948\u0938\u0947 \u090F\u092A\u0940\u0915\u0947, \u092F\u0942\u092A\u0940\u0906\u0908, \u0938\u0941\u092A\u094D\u0930\u0940\u092E \u0915\u094B\u0930\u094D\u091F, \u0939\u093E\u0908 \u0915\u094B\u0930\u094D\u091F, \u090F\u092B\u0906\u0908\u0906\u0930, \u0938\u0940\u092C\u0940\u0906\u0908, \u0908\u0921\u0940, \u091C\u0940\u090F\u0938\u091F\u0940, \u0906\u0930\u092C\u0940\u0906\u0908, \u092C\u0940\u0938\u0940\u0938\u0940\u0906\u0908, \u0906\u0908\u092A\u0940\u090F\u0932, \u090F\u0906\u0908)\u0964
+3. \u092D\u093E\u0937\u093E, \u0928\u093F\u0937\u094D\u092A\u0915\u094D\u0937\u0924\u093E \u0914\u0930 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u092E\u0941\u0916\u094D\u092F \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u093E \u0938\u0902\u0930\u0915\u094D\u0937\u0923 (LANGUAGE, KEY ENTITY PRESERVATION & HONORIFIC REMOVAL):
+   - \u0938\u092D\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0902\u0938 100% \u0936\u0941\u0926\u094D\u0927 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u0939\u093F\u0902\u0926\u0940 \u092E\u0947\u0902 \u0939\u094B\u0902\u0964
+   - \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u092E\u0941\u0916\u094D\u092F \u0936\u092C\u094D\u0926 \u090F\u0935\u0902 \u091C\u093E\u0902\u091A \u090F\u091C\u0947\u0902\u0938\u0940 \u0938\u0902\u0930\u0915\u094D\u0937\u0923: \u0916\u092C\u0930 \u0915\u0947 \u0932\u093F\u090F \u0906\u0935\u0936\u094D\u092F\u0915 \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u0915\u0947 \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0930\u0942\u092A\u094B\u0902 (Acronyms), \u091C\u093E\u0902\u091A \u090F\u091C\u0947\u0902\u0938\u093F\u092F\u094B\u0902, \u092A\u0926\u094B\u0902 \u0914\u0930 \u092C\u0941\u0928\u093F\u092F\u093E\u0926\u0940 \u0936\u092C\u094D\u0926\u094B\u0902 \u0915\u094B \u0915\u092D\u0940 \u092D\u0940 \u0939\u091F\u093E\u090F\u0902 \u0928\u0939\u0940\u0902 (NEVER omit or strip them)\u2014\u0909\u0928\u094D\u0939\u0947\u0902 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 \u0939\u093F\u0902\u0926\u0940 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u092E\u0947\u0902 \u0932\u093F\u0916\u0915\u0930 \u0938\u092D\u0940 5 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A\u094B\u0902 \u0914\u0930 \u0924\u0940\u0928\u094B\u0902 \u0915\u0948\u092A\u094D\u0936\u0928\u094B\u0902 \u092E\u0947\u0902 \u0936\u093E\u092E\u093F\u0932 \u0930\u0916\u0947\u0902 (\u091C\u0948\u0938\u0947 EOW -> \u0908\u0913\u0921\u092C\u094D\u0932\u094D\u092F\u0942, CBI -> \u0938\u0940\u092C\u0940\u0906\u0908, ED -> \u0908\u0921\u0940, ACB -> \u090F\u0938\u0940\u092C\u0940, Lokayukta -> \u0932\u094B\u0915\u093E\u092F\u0941\u0915\u094D\u0924, NIA -> \u090F\u0928\u0906\u0908\u090F, SIT -> \u090F\u0938\u0906\u0908\u091F\u0940, NDRF -> \u090F\u0928\u0921\u0940\u0906\u0930\u090F\u092B, SDRF -> \u090F\u0938\u0921\u0940\u0906\u0930\u090F\u092B, FIR -> \u090F\u092B\u0906\u0908\u0906\u0930, SDM -> \u090F\u0938\u0921\u0940\u090F\u092E, DSP -> \u0921\u0940\u090F\u0938\u092A\u0940, Collector -> \u0915\u0932\u0947\u0915\u094D\u091F\u0930, \u090F\u092A\u0940\u0915\u0947, \u092F\u0942\u092A\u0940\u0906\u0908, \u0938\u0941\u092A\u094D\u0930\u0940\u092E \u0915\u094B\u0930\u094D\u091F, \u0939\u093E\u0908 \u0915\u094B\u0930\u094D\u091F, \u091C\u0940\u090F\u0938\u091F\u0940, \u0906\u0930\u092C\u0940\u0906\u0908, \u092C\u0940\u0938\u0940\u0938\u0940\u0906\u0908, \u0906\u0908\u092A\u0940\u090F\u0932, \u090F\u0906\u0908)\u0964 \u0909\u0926\u093E\u0939\u0930\u0923: \u092F\u0926\u093F \u0916\u092C\u0930 "\u0921\u093F\u0902\u0921\u094B\u0930\u0940 \u092E\u0947\u0902 EOW \u0915\u093E \u091B\u093E\u092A\u093E" \u0939\u0948, \u0924\u094B "\u0908\u0913\u0921\u092C\u094D\u0932\u094D\u092F\u0942" \u0936\u092C\u094D\u0926 \u0939\u0930 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A \u0914\u0930 \u0915\u0948\u092A\u094D\u0936\u0928 \u092E\u0947\u0902 \u0905\u0928\u093F\u0935\u093E\u0930\u094D\u092F \u0930\u0942\u092A \u0938\u0947 \u0939\u094B\u0928\u093E \u091A\u093E\u0939\u093F\u090F\u0964
    - \u0938\u092E\u094D\u092E\u093E\u0928\u0938\u0942\u091A\u0915 \u092F\u093E \u091A\u093E\u091F\u0941\u0915\u093E\u0930\u093F\u0924\u093E \u0935\u093E\u0932\u0947 \u0936\u092C\u094D\u0926 ('\u0936\u094D\u0930\u0940', '\u0936\u094D\u0930\u0940\u092E\u093E\u0928', '\u0936\u094D\u0930\u0940\u092E\u0924\u0940', '\u0938\u0941\u0936\u094D\u0930\u0940', '\u092E\u093E\u0928\u0928\u0940\u092F', '\u0906\u0926\u0930\u0923\u0940\u092F', '\u092E\u0939\u094B\u0926\u092F', '\u091C\u0940', '\u0938\u092E\u094D\u092E\u093E\u0928\u0928\u0940\u092F', '\u0938\u092E\u094D\u092E\u093E\u0928\u0940\u092F', '\u092A\u0942\u091C\u094D\u092F') \u092A\u0942\u0930\u0940 \u0924\u0930\u0939 \u0939\u091F\u093E \u0926\u0947\u0902, \u0915\u093F\u0902\u0924\u0941 \u0935\u094D\u092F\u0915\u094D\u0924\u093F \u0915\u093E \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 \u0928\u093E\u092E \u0914\u0930 \u0906\u0927\u093F\u0915\u093E\u0930\u093F\u0915 \u092A\u0926 \u0938\u0941\u0930\u0915\u094D\u0937\u093F\u0924 \u0930\u0916\u0947\u0902\u0964
    - \u0915\u093F\u0938\u0940 \u092D\u0940 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u0947 \u0905\u0902\u0924 \u092E\u0947\u0902 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E (\u0964 \u092F\u093E .) \u092F\u093E \u092A\u094D\u0930\u0936\u094D\u0928\u0935\u093E\u091A\u0915 \u091A\u093F\u0939\u094D\u0928 \u0928 \u0932\u0917\u093E\u090F\u0902\u0964 \u0915\u094B\u0908 \u0907\u092E\u094B\u091C\u0940 \u092F\u093E \u0939\u0948\u0936\u091F\u0948\u0917 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092E\u0947\u0902 \u0928 \u0930\u0916\u0947\u0902\u0964
    - \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0915\u093E \u0905\u0902\u0924 \u0905\u0930\u094D\u0925\u092A\u0942\u0930\u094D\u0923 \u0914\u0930 \u0938\u094D\u0935\u093E\u092D\u093E\u0935\u093F\u0915 \u0935\u093E\u0915\u094D\u092F \u092A\u0930 \u0938\u092E\u093E\u092A\u094D\u0924 \u0939\u094B\u0964
@@ -34609,12 +35416,12 @@ Generate exactly 5 BRAND NEW, distinct, balanced headline options of the SAME pr
   * Option 5 (\u0935\u093F\u0915\u0932\u094D\u092A 5): 150\u2013200 characters
 - No headline may exceed 200 characters under any circumstance. If the original news is short, keep a shorter accurate headline rather than adding filler.
 - No ending punctuation (. or \u0964 or ?). No tier labels or bracketed counts like '[85/100]'.
-- Pure Devanagari Hindi only (no Roman English characters).
+- Pure Devanagari Hindi only \u2014 NEVER omit or strip compulsory English acronyms, investigating agencies, posts, or core terms from the source story; always transliterate them into Devanagari Hindi (e.g. EOW -> \u0908\u0913\u0921\u092C\u094D\u0932\u094D\u092F\u0942, CBI -> \u0938\u0940\u092C\u0940\u0906\u0908, ED -> \u0908\u0921\u0940, ACB -> \u090F\u0938\u0940\u092C\u0940, Lokayukta -> \u0932\u094B\u0915\u093E\u092F\u0941\u0915\u094D\u0924, NIA -> \u090F\u0928\u0906\u0908\u090F, SIT -> \u090F\u0938\u0906\u0908\u091F\u0940, FIR -> \u090F\u092B\u0906\u0908\u0906\u0930, SDM -> \u090F\u0938\u0921\u0940\u090F\u092E, DSP -> \u0921\u0940\u090F\u0938\u092A\u0940, Collector -> \u0915\u0932\u0947\u0915\u094D\u091F\u0930) and preserve them across ALL 5 headline options.
 Return valid JSON: { "headlineOptions": ["...", "...", "...", "...", "..."] }`;
     const regenPrompt = `\u0915\u0943\u092A\u092F\u093E \u0928\u093F\u092E\u094D\u0928\u0932\u093F\u0916\u093F\u0924 \u0938\u092E\u093E\u091A\u093E\u0930 \u0915\u0947 \u0932\u093F\u090F \u0920\u0940\u0915 5 \u0928\u090F \u0938\u0902\u0924\u0941\u0932\u093F\u0924, \u092A\u094D\u0930\u092D\u093E\u0935\u0936\u093E\u0932\u0940 \u092A\u0924\u094D\u0930\u0915\u093E\u0930\u093F\u0924\u093E \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u0935\u093F\u0915\u0932\u094D\u092A \u0924\u0948\u092F\u093E\u0930 \u0915\u0930\u0947\u0902\u0964
-\u092A\u094D\u0930\u0924\u094D\u092F\u0947\u0915 \u0935\u093F\u0915\u0932\u094D\u092A \u0905\u0927\u093F\u0915\u0924\u092E 200 \u0905\u0915\u094D\u0937\u0930 \u0915\u0940 \u0938\u0940\u092E\u093E \u0915\u0947 \u092D\u0940\u0924\u0930 \u0939\u094B, \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E \u0915\u0947, \u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u092E\u0947\u0902, \u0938\u0915\u094D\u0930\u093F\u092F \u0935\u093E\u091A\u094D\u092F \u092E\u0947\u0902, \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u0906\u0902\u0924\u0930\u093F\u0915 \u092A\u0941\u0928\u0930\u093E\u0935\u0943\u0924\u094D\u0924\u093F \u0915\u0947, \u0914\u0930 \u0915\u0947\u0935\u0932 \u092E\u0942\u0932 \u0916\u092C\u0930 \u0915\u0947 \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 \u0924\u0925\u094D\u092F\u094B\u0902 \u092A\u0930 \u0906\u0927\u093E\u0930\u093F\u0924 \u0939\u094B\u0964
-\u0936\u0940\u0930\u094D\u0937\u0915 \u0938\u0902\u0926\u0930\u094D\u092D: ${sourceTitle}
-\u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u093E\u092E\u0917\u094D\u0930\u0940/\u0924\u0925\u094D\u092F: ${sourceText.slice(0, 3e3)}
+\u092A\u094D\u0930\u0924\u094D\u092F\u0947\u0915 \u0935\u093F\u0915\u0932\u094D\u092A \u0905\u0927\u093F\u0915\u0924\u092E 200 \u0905\u0915\u094D\u0937\u0930 \u0915\u0940 \u0938\u0940\u092E\u093E \u0915\u0947 \u092D\u0940\u0924\u0930 \u0939\u094B, \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u092A\u0942\u0930\u094D\u0923\u0935\u093F\u0930\u093E\u092E \u0915\u0947, \u0936\u0941\u0926\u094D\u0927 \u0939\u093F\u0902\u0926\u0940 \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u092E\u0947\u0902, \u0938\u0915\u094D\u0930\u093F\u092F \u0935\u093E\u091A\u094D\u092F \u092E\u0947\u0902, \u092C\u093F\u0928\u093E \u0915\u093F\u0938\u0940 \u0906\u0902\u0924\u0930\u093F\u0915 \u092A\u0941\u0928\u0930\u093E\u0935\u0943\u0924\u094D\u0924\u093F \u0915\u0947, \u0914\u0930 \u0915\u0947\u0935\u0932 \u092E\u0942\u0932 \u0916\u092C\u0930 \u0915\u0947 \u0935\u093E\u0938\u094D\u0924\u0935\u093F\u0915 \u0924\u0925\u094D\u092F\u094B\u0902 \u092A\u0930 \u0906\u0927\u093E\u0930\u093F\u0924 \u0939\u094B\u0964 \u092E\u0942\u0932 \u0916\u092C\u0930 \u092E\u0947\u0902 \u092E\u094C\u091C\u0942\u0926 \u092A\u094D\u0930\u092E\u0941\u0916 \u091C\u093E\u0902\u091A \u090F\u091C\u0947\u0902\u0938\u0940, \u092A\u0926 \u092F\u093E \u0905\u0902\u0917\u094D\u0930\u0947\u091C\u0940 \u0938\u0902\u0915\u094D\u0937\u093F\u092A\u094D\u0924 \u0928\u093E\u092E (\u091C\u0948\u0938\u0947 EOW -> \u0908\u0913\u0921\u092C\u094D\u0932\u094D\u092F\u0942, CBI -> \u0938\u0940\u092C\u0940\u0906\u0908, ED -> \u0908\u0921\u0940, FIR -> \u090F\u092B\u0906\u0908\u0906\u0930 \u0906\u0926\u093F) \u0915\u094B \u0939\u091F\u093E\u090F\u0902 \u0928\u0939\u0940\u0902, \u092C\u0932\u094D\u0915\u093F \u0926\u0947\u0935\u0928\u093E\u0917\u0930\u0940 \u092E\u0947\u0902 \u0932\u093F\u0916\u0915\u0930 \u0938\u092D\u0940 \u0935\u093F\u0915\u0932\u094D\u092A\u094B\u0902 \u092E\u0947\u0902 \u0936\u093E\u092E\u093F\u0932 \u0930\u0916\u0947\u0902\u0964
+\u0936\u0940\u0930\u094D\u0937\u0915 \u0938\u0902\u0926\u0930\u094D\u092D: ${transliterateEssentialEnglishTerms(sourceTitle)}
+\u0938\u092E\u093E\u091A\u093E\u0930 \u0938\u093E\u092E\u0917\u094D\u0930\u0940/\u0924\u0925\u094D\u092F: ${transliterateEssentialEnglishTerms(sourceText).slice(0, 3e3)}
 ${sourceLoc ? `\u0938\u094D\u0925\u093E\u0928: ${sourceLoc}
 ` : ""}${customPrompt ? `\u092F\u0942\u091C\u093C\u0930 \u0915\u093E \u0935\u093F\u0936\u0947\u0937 \u0928\u093F\u0930\u094D\u0926\u0947\u0936: ${customPrompt}
 ` : ""}
@@ -34921,9 +35728,10 @@ function cleanHeadlineText(text) {
     " "
   );
   cleaned = cleaned.replace(
-    /\s*[|\-–—:]\s*(?:[A-Za-z\s]+News|[A-Za-z\s]+Samachar|Dainik Bhaskar|Bhaskar|Aaj Tak|आज तक|BBC News हिंदी|BBC Hindi|NDTV India|NDTV|Amar Ujala|News18|Zee News|Patrika|Navbharat Times|Hindustan|Live Hindustan|Oneindia|ABP News|Jagran|Dainik Jagran|TV9|Navbharat).*$/i,
+    /\s*[|\-–—:]\s*(?:[A-Za-z\s]+News|[A-Za-z\s]+Samachar|Dainik Bhaskar|Bhaskar|Aaj Tak|आज तक|BBC News हिंदी|BBC Hindi|NDTV India|NDTV|Amar Ujala|News18|Zee News|Patrika|Navbharat Times|Hindustan|Live Hindustan|Oneindia|ABP News|Jagran|Dainik Jagran|TV9|Navbharat|Nai Dunia|Naidunia|Haribhoomi|The Sootr|Lallantop|Firstpost|Indian Express|The Hindu|Times of India|Hindustan Times|Republic Bharat|India TV|News24|Goodreturns|Moneycontrol|LiveMint|ET Now|Business Standard|Jansatta|Prabhat Khabar|Punjab Kesari|Rajasthan Patrika|Divya Bhaskar|Sandesh|Lokmat|Sakal|Maharashtra Times).*$/i,
     ""
-  ).replace(/\s*[|\-–—:]\s*[A-Za-z\s]{3,30}$/, "").trim();
+  ).replace(/\s*[|]\s*[A-Za-z\s]{3,35}$/, "").trim();
+  cleaned = stripLeadingEnglishProseSentence(cleaned);
   cleaned = cleaned.replace(
     /^(?:विकल्प|ऑप्शन|Option|Angle)\s*\d+[\s:\-–—.]*\s*/i,
     ""
@@ -34940,96 +35748,7 @@ function cleanHeadlineText(text) {
     ""
   ).trim();
   cleaned = cleaned.replace(/https?:\/\/\S+/gi, "").replace(/www\.\S+/gi, "").replace(/\b[a-zA-Z0-9.\-]+\.(?:com|in|org|net|co|io)\b/gi, "").replace(/#[\w\u0900-\u097F]+/g, "").replace(/@[\w\u0900-\u097F]+/g, "");
-  const acronyms = [
-    [/\bAPK\b/gi, "\u090F\u092A\u0940\u0915\u0947"],
-    [/\bUPI\b/gi, "\u092F\u0942\u092A\u0940\u0906\u0908"],
-    [/\bOTP\b/gi, "\u0913\u091F\u0940\u092A\u0940"],
-    [/\bATM\b/gi, "\u090F\u091F\u0940\u090F\u092E"],
-    [/\bSIM\b/gi, "\u0938\u093F\u092E"],
-    [/\bKYC\b/gi, "\u0915\u0947\u0935\u093E\u0908\u0938\u0940"],
-    [/\bPDF\b/gi, "\u092A\u0940\u0921\u0940\u090F\u092B"],
-    [/\bURL\b/gi, "\u092F\u0942\u0906\u0930\u090F\u0932"],
-    [/\bSMS\b/gi, "\u090F\u0938\u090F\u092E\u090F\u0938"],
-    [/\bPIL\b/gi, "\u092A\u0940\u0906\u0908\u090F\u0932"],
-    [/\bAI\b/gi, "\u090F\u0906\u0908"],
-    [/\bPoK\b/gi, "\u092A\u0940\u0913\u0915\u0947"],
-    [/\bLOC\b/gi, "\u090F\u0932\u0913\u0938\u0940"],
-    [/\bLAC\b/gi, "\u090F\u0932\u090F\u0938\u0940"],
-    [/\bBSF\b/gi, "\u092C\u0940\u090F\u0938\u090F\u092B"],
-    [/\bCRPF\b/gi, "\u0938\u0940\u0906\u0930\u092A\u0940\u090F\u092B"],
-    [/\bCISF\b/gi, "\u0938\u0940\u0906\u0908\u090F\u0938\u090F\u092B"],
-    [/\bDRDO\b/gi, "\u0921\u0940\u0906\u0930\u0921\u0940\u0913"],
-    [/\bCJI\b/gi, "\u0938\u0940\u091C\u0947\u0906\u0908"],
-    [/\bSIT\b/gi, "\u090F\u0938\u0906\u0908\u091F\u0940"],
-    [/\bATS\b/gi, "\u090F\u091F\u0940\u090F\u0938"],
-    [/\bSTF\b/gi, "\u090F\u0938\u091F\u0940\u090F\u092B"],
-    [/\bNCB\b/gi, "\u090F\u0928\u0938\u0940\u092C\u0940"],
-    [/\bCCTV\b/gi, "\u0938\u0940\u0938\u0940\u091F\u0940\u0935\u0940"],
-    [/\bDNA\b/gi, "\u0921\u0940\u090F\u0928\u090F"],
-    [/\bEMI\b/gi, "\u0908\u090F\u092E\u0906\u0908"],
-    [/\bGDP\b/gi, "\u091C\u0940\u0921\u0940\u092A\u0940"],
-    [/\bDA\b/gi, "\u0921\u0940\u090F"],
-    [/\bHRA\b/gi, "\u090F\u091A\u0906\u0930\u090F"],
-    [/\bISRO\b/gi, "\u0907\u0938\u0930\u094B"],
-    [/\bNASA\b/gi, "\u0928\u093E\u0938\u093E"],
-    [/\bFIR\b/gi, "\u090F\u092B\u0906\u0908\u0906\u0930"],
-    [/\bIT\b/gi, "\u0906\u0908\u091F\u0940"],
-    [/\bOPD\b/gi, "\u0913\u092A\u0940\u0921\u0940"],
-    [/\bVIP\b/gi, "\u0935\u0940\u0906\u0908\u092A\u0940"],
-    [/\bBJP\b/gi, "\u092C\u0940\u091C\u0947\u092A\u0940"],
-    [/\bPM\b/gi, "\u092A\u0940\u090F\u092E"],
-    [/\bCM\b/gi, "\u0938\u0940\u090F\u092E"],
-    [/\bDM\b/gi, "\u0921\u0940\u090F\u092E"],
-    [/\bSP\b/gi, "\u090F\u0938\u092A\u0940"],
-    [/\bSDM\b/gi, "\u090F\u0938\u0921\u0940\u090F\u092E"],
-    [/\bBHK\b/gi, "\u092C\u0940\u090F\u091A\u0915\u0947"],
-    [/\bGST\b/gi, "\u091C\u0940\u090F\u0938\u091F\u0940"],
-    [/\bCBI\b/gi, "\u0938\u0940\u092C\u0940\u0906\u0908"],
-    [/\bED\b/gi, "\u0908\u0921\u0940"],
-    [/\bNIA\b/gi, "\u090F\u0928\u0906\u0908\u090F"],
-    [/\bICU\b/gi, "\u0906\u0908\u0938\u0940\u092F\u0942"],
-    [/\bMP\b/gi, "\u090F\u092E\u092A\u0940"],
-    [/\bUP\b/gi, "\u092F\u0942\u092A\u0940"],
-    [/\bUSA\b/gi, "\u092F\u0942\u090F\u0938\u090F"],
-    [/\bUK\b/gi, "\u092F\u0942\u0915\u0947"],
-    [/\bCEO\b/gi, "\u0938\u0940\u0908\u0913"],
-    [/\bBCCI\b/gi, "\u092C\u0940\u0938\u0940\u0938\u0940\u0906\u0908"],
-    [/\bICC\b/gi, "\u0906\u0908\u0938\u0940\u0938\u0940"],
-    [/\bIPL\b/gi, "\u0906\u0908\u092A\u0940\u090F\u0932"],
-    [/\bT20\b/gi, "\u091F\u094020"],
-    [/\bODI\b/gi, "\u0935\u0928\u0921\u0947"],
-    [/\bWHO\b/gi, "\u0921\u092C\u094D\u0932\u094D\u092F\u0942\u090F\u091A\u0913"],
-    [/\bUN\b/gi, "\u092F\u0942\u090F\u0928"],
-    [/\bNATO\b/gi, "\u0928\u093E\u091F\u094B"],
-    [/\bRBI\b/gi, "\u0906\u0930\u092C\u0940\u0906\u0908"],
-    [/\bSBI\b/gi, "\u090F\u0938\u092C\u0940\u0906\u0908"],
-    [/\bLIC\b/gi, "\u090F\u0932\u0906\u0908\u0938\u0940"],
-    [/\bUPSC\b/gi, "\u092F\u0942\u092A\u0940\u090F\u0938\u0938\u0940"],
-    [/\bSSC\b/gi, "\u090F\u0938\u090F\u0938\u0938\u0940"],
-    [/\bCBSE\b/gi, "\u0938\u0940\u092C\u0940\u090F\u0938\u0908"],
-    [/\bNEET\b/gi, "\u0928\u0940\u091F"],
-    [/\bJEE\b/gi, "\u091C\u0947\u0908\u0908"],
-    [/\bIIT\b/gi, "\u0906\u0908\u0906\u0908\u091F\u0940"],
-    [/\bIIM\b/gi, "\u0906\u0908\u0906\u0908\u090F\u092E"],
-    [/\bEV\b/gi, "\u0908\u0935\u0940"],
-    [/\bOTT\b/gi, "\u0913\u091F\u0940\u091F\u0940"],
-    [/\bSupreme Court\b/gi, "\u0938\u0941\u092A\u094D\u0930\u0940\u092E \u0915\u094B\u0930\u094D\u091F"],
-    [/\bHigh Court\b/gi, "\u0939\u093E\u0908 \u0915\u094B\u0930\u094D\u091F"],
-    [/\bCongress\b/gi, "\u0915\u093E\u0902\u0917\u094D\u0930\u0947\u0938"],
-    [/\bWhatsApp\b/gi, "\u0935\u094D\u0939\u093E\u091F\u094D\u0938\u090F\u092A"],
-    [/\bFacebook\b/gi, "\u092B\u0947\u0938\u092C\u0941\u0915"],
-    [/\bTwitter\b/gi, "\u091F\u094D\u0935\u093F\u091F\u0930"],
-    [/\bInstagram\b/gi, "\u0907\u0902\u0938\u094D\u091F\u093E\u0917\u094D\u0930\u093E\u092E"],
-    [/\bYouTube\b/gi, "\u092F\u0942\u091F\u094D\u092F\u0942\u092C"],
-    [/\bGoogle\b/gi, "\u0917\u0942\u0917\u0932"],
-    [/\bTelegram\b/gi, "\u091F\u0947\u0932\u0940\u0917\u094D\u0930\u093E\u092E"],
-    [/\bApple\b/gi, "\u090F\u092A\u094D\u092A\u0932"],
-    [/\bMicrosoft\b/gi, "\u092E\u093E\u0907\u0915\u094D\u0930\u094B\u0938\u0949\u092B\u094D\u091F"],
-    [/\bAndroid\b/gi, "\u090F\u0902\u0921\u094D\u0930\u0949\u0907\u0921"]
-  ];
-  for (const [pattern, devanagari] of acronyms) {
-    cleaned = cleaned.replace(pattern, devanagari);
-  }
+  cleaned = transliterateEssentialEnglishTerms(cleaned);
   cleaned = cleaned.replace(/\[(yellow|highlight)\]/g, "\uE001");
   cleaned = cleaned.replace(/\[\/(yellow|highlight)\]/g, "\uE002");
   cleaned = cleaned.replace(/[A-Za-z]+/g, "");
@@ -39625,6 +40344,7 @@ if (process.env.NO_SERVER_START !== "true") {
   BLOCKED_MEDIA_BRANDS,
   BYLINE_REGEX,
   DISTRICT_STATE_LIST,
+  ESSENTIAL_ENGLISH_TO_HINDI_TERMS,
   GEMINI_NEWS_RESPONSE_SCHEMA,
   HEADLINE_5_TIER_MAX_LIMITS,
   HEADLINE_5_TIER_RANGES,
@@ -39703,7 +40423,9 @@ if (process.env.NO_SERVER_START !== "true") {
   saveDeletedNewsTombstone,
   scrapeNewsFromUrl,
   stripAllUrlsAndHyperlinks,
+  stripLeadingEnglishProseSentence,
   stripNewspaperBylines,
+  transliterateEssentialEnglishTerms,
   validateGeneralHeadline,
   validateHeadline,
   validateHeadlineOption,

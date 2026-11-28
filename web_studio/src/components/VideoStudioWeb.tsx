@@ -1497,11 +1497,78 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   // Completed Download State for Fallback Direct Click (Part G.21)
   const [completedDownloadUrl, setCompletedDownloadUrl] = useState<string | null>(null);
   const [completedDownloadFilename, setCompletedDownloadFilename] = useState<string | null>(null);
+  const [completedFileSizeLabel, setCompletedFileSizeLabel] = useState<string>('');
   const completedBlobRef = useRef<Blob | null>(null);
   const [isVideoSuccessModalOpen, setIsVideoSuccessModalOpen] = useState<boolean>(false);
   const [isResetConfirmModalOpen, setIsResetConfirmModalOpen] = useState<boolean>(false);
 
-  // Robust Browser File Download Helper (Direct User Gesture & Blob URL)
+  // Listen for native Android MediaStore video save results
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const prevHandler = (window as any).onAndroidVideoDownloadResult;
+    (window as any).onAndroidVideoDownloadResult = (success: boolean, message?: string) => {
+      if (success) {
+        showToast(message || '✅ वीडियो गैलरी (Movies/AINewsMaker) में सुरक्षित हो गया!');
+      } else {
+        showToast(message || '❌ वीडियो सेव करने में समस्या आई, कृपया पुनः प्रयास करें।');
+      }
+    };
+    return () => {
+      if (prevHandler) {
+        (window as any).onAndroidVideoDownloadResult = prevHandler;
+      } else {
+        delete (window as any).onAndroidVideoDownloadResult;
+      }
+    };
+  }, []);
+
+  // Format bytes to human-readable MB/KB label
+  const formatExportBytes = (bytes: number): string => {
+    if (!bytes || bytes <= 0) return '';
+    if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  };
+
+  // Helper: Stream video Blob in 192 KB chunks to Android Native Bridge (prevents 1 MB Binder IPC TransactionTooLargeException)
+  const streamVideoBlobToAndroidBridge = async (blob: Blob, filename: string): Promise<boolean> => {
+    const bridge = (window as any).AndroidBridge;
+    if (!bridge || typeof bridge.beginVideoDownload !== 'function' || typeof bridge.appendVideoChunk !== 'function' || typeof bridge.finishVideoDownload !== 'function') {
+      return false;
+    }
+    const mimeType = blob.type || (filename.endsWith('.webm') ? 'video/webm' : 'video/mp4');
+    const transferId: string = bridge.beginVideoDownload(filename, mimeType);
+    if (!transferId) return false;
+
+    const CHUNK_SIZE = 192 * 1024; // 192 KB raw (~256 KB Base64) — safely under Android Binder limit
+    try {
+      for (let offset = 0; offset < blob.size; offset += CHUNK_SIZE) {
+        const slice = blob.slice(offset, Math.min(offset + CHUNK_SIZE, blob.size));
+        const chunkBase64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const res = typeof reader.result === 'string' ? reader.result : '';
+            const idx = res.indexOf(',');
+            resolve(idx >= 0 ? res.slice(idx + 1) : res);
+          };
+          reader.onerror = () => reject(new Error('Chunk read error'));
+          reader.readAsDataURL(slice);
+        });
+        const ok = bridge.appendVideoChunk(transferId, chunkBase64);
+        if (!ok) {
+          try { bridge.cancelVideoDownload?.(transferId); } catch {}
+          return false;
+        }
+      }
+      const saved = bridge.finishVideoDownload(transferId);
+      return Boolean(saved);
+    } catch (chunkErr) {
+      console.warn('[VideoExport] Chunked AndroidBridge stream failed:', chunkErr);
+      try { bridge.cancelVideoDownload?.(transferId); } catch {}
+      return false;
+    }
+  };
+
+  // Robust Browser File Download Helper (Desktop Web, Mobile Web & Android WebView App)
   const triggerBrowserDownload = (blob: Blob, filename: string): boolean => {
     try {
       if (!blob || blob.size < 100) {
@@ -1511,6 +1578,15 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
       // Android Native Bridge Detection (Part 8.1 - Native Android Gallery Storage)
       if (typeof window !== 'undefined' && (window as any).AndroidBridge) {
+        const bridge = (window as any).AndroidBridge;
+        if (typeof bridge.beginVideoDownload === 'function' && typeof bridge.appendVideoChunk === 'function' && typeof bridge.finishVideoDownload === 'function') {
+          streamVideoBlobToAndroidBridge(blob, filename).then((ok) => {
+            if (!ok) {
+              showToast('⚠️ वीडियो सेव करने में त्रुटि आई, कृपया पुनः सेव बटन दबाएं।');
+            }
+          });
+          return true;
+        }
         try {
           const reader = new FileReader();
           reader.onloadend = () => {
@@ -1523,24 +1599,9 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
             }
           };
           reader.readAsDataURL(blob);
+          return true;
         } catch (androidErr) {
           console.warn('[VideoExport] AndroidBridge error:', androidErr);
-        }
-      }
-
-      // Web Share API for Mobile Devices
-      if (typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
-        try {
-          const file = new File([blob], filename, { type: blob.type || 'video/mp4' });
-          if (navigator.canShare({ files: [file] })) {
-            navigator.share({
-              files: [file],
-              title: filename,
-              text: 'AI News Maker Video Report',
-            }).catch(() => {});
-          }
-        } catch (shareErr) {
-          console.warn('[VideoExport] Web Share API fallback to anchor:', shareErr);
         }
       }
 
@@ -1550,6 +1611,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       link.href = objectUrl;
       link.download = filename;
       link.setAttribute('download', filename);
+      link.rel = 'noopener';
       link.style.display = 'none';
       document.body.appendChild(link);
 
@@ -1585,6 +1647,35 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     }
   };
 
+  // Explicit Share Handler (Runs on fresh user tap inside Success Modal — never blocks direct download)
+  const handleShareExportedVideo = async () => {
+    const filename = completedDownloadFilename || generateVideoDownloadFileName('mp4');
+    if (typeof window !== 'undefined' && (window as any).AndroidBridge?.shareLastSavedVideo) {
+      try {
+        const shared = (window as any).AndroidBridge.shareLastSavedVideo(headline || filename);
+        if (shared) return;
+      } catch {}
+    }
+    const blob = completedBlobRef.current;
+    if (blob && typeof navigator !== 'undefined' && navigator.share && navigator.canShare) {
+      try {
+        const file = new File([blob], filename, { type: blob.type || 'video/mp4' });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: headline || filename,
+            text: generatedCaptionText || 'AI News Maker Video Report',
+          });
+          return;
+        }
+      } catch (shareErr: any) {
+        if (shareErr?.name === 'AbortError') return;
+        console.warn('[VideoExport] Share sheet unavailable, falling back to direct download:', shareErr);
+      }
+    }
+    handleImmediateDownload();
+  };
+
   // Immediate Download Handler for completed renders (prevents re-render and SPA unloading)
   const handleImmediateDownload = () => {
     const filename = completedDownloadFilename || generateVideoDownloadFileName('mp4');
@@ -1595,6 +1686,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       link.href = completedDownloadUrl;
       link.download = filename;
       link.setAttribute('download', filename);
+      link.rel = 'noopener';
       link.style.display = 'none';
       document.body.appendChild(link);
       link.click();
@@ -2835,9 +2927,51 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
     } catch {}
 
     let originalLoop = video.loop;
+    // Hoisted export resources so catch & finally NEVER hit ReferenceError and always clean up
+    let canvas: HTMLCanvasElement | null = null;
+    let exportVideoEl: HTMLVideoElement = video;
+    let tempExportVideoEl: HTMLVideoElement | null = null;
+    let tempExportBlobUrl: string | null = null;
+    const extraAudioEls: HTMLAudioElement[] = [];
+    const tempAudioNodes: AudioNode[] = [];
+    let keepAliveOsc: OscillatorNode | null = null;
+    let activeCanvasStream: MediaStream | null = null;
+    let activeCombinedStream: MediaStream | null = null;
+
+    // Helper: Ensure external cross-origin images route through /api/proxy-image so canvas stays untainted
+    const toCorsSafeImageUrl = (rawUrl: string): string => {
+      if (!rawUrl || rawUrl.startsWith('data:') || rawUrl.startsWith('blob:') || rawUrl.startsWith('/')) {
+        return rawUrl;
+      }
+      try {
+        const parsed = new URL(rawUrl, window.location.href);
+        if (parsed.origin === window.location.origin) return rawUrl;
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+          return getApiUrl(`/api/proxy-image?url=${encodeURIComponent(rawUrl)}`);
+        }
+      } catch {}
+      return rawUrl;
+    };
+
+    // Helper: Detect if drawing the preview <video> taints canvas (e.g. crossOrigin stripped on remote video)
+    const isVideoCanvasSafe = (vid: HTMLVideoElement): boolean => {
+      try {
+        if (!vid || vid.readyState < 2 || !vid.videoWidth || !vid.videoHeight) return false;
+        const probe = document.createElement('canvas');
+        probe.width = 4;
+        probe.height = 4;
+        const pCtx = probe.getContext('2d');
+        if (!pCtx) return true;
+        pCtx.drawImage(vid, 0, 0, 4, 4);
+        probe.toDataURL('image/png');
+        return true;
+      } catch {
+        return false;
+      }
+    };
 
     try {
-      // Ensure video metadata duration is loaded before export
+      // Ensure preview video metadata duration is loaded before export
       if (!video.duration || isNaN(video.duration) || video.duration === 0) {
         setVideoExportStatus('वीडियो मेटाडेटा लोड हो रहा है...');
         await new Promise<void>((resolve) => {
@@ -2847,7 +2981,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
             resolve();
           };
           video.addEventListener('loadedmetadata', onMeta);
-          setTimeout(resolve, 1200);
+          setTimeout(resolve, 1500);
         });
       }
 
@@ -2858,21 +2992,106 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         return;
       }
 
-      // Prevent video from looping back to 0 during export
-      originalLoop = video.loop;
-      video.loop = false;
+      // CORS-Safe Video Guarantee: if preview video taints canvas (remote URL without CORS), load via /api/proxy-video
+      const rawSourceUrl = (video.currentSrc || video.src || videoUrl || '').trim();
+      const needsCorsProxy =
+        rawSourceUrl.startsWith('http://') || rawSourceUrl.startsWith('https://')
+          ? (!isVideoCanvasSafe(video) && (() => {
+              try {
+                return new URL(rawSourceUrl, window.location.href).origin !== window.location.origin || !video.crossOrigin;
+              } catch {
+                return true;
+              }
+            })())
+          : false;
 
-      // Full Resolution Dimensions with source quality preservation
-      let width = aspect === '9:16' ? 1080 : aspect === '1:1' ? 1080 : aspect === '4:5' ? 1080 : aspect === '4:3' ? 1440 : 1080;
-      let height = aspect === '9:16' ? 1920 : aspect === '1:1' ? 1080 : aspect === '4:5' ? 1350 : aspect === '4:3' ? 1080 : 1080;
-      if (video.videoWidth && video.videoHeight) {
-        if (video.videoWidth >= width && Math.abs((video.videoWidth / video.videoHeight) - (width / height)) < 0.05) {
-          width = video.videoWidth;
-          height = video.videoHeight;
+      if (needsCorsProxy && rawSourceUrl) {
+        setVideoExportProgress(10);
+        setVideoExportStatus('सुरक्षित वीडियो स्ट्रीम तैयार हो रही है...');
+        try {
+          const proxiedVideoUrl = getApiUrl(`/api/proxy-video?url=${encodeURIComponent(rawSourceUrl)}`);
+          const offscreenVid = document.createElement('video');
+          offscreenVid.crossOrigin = 'anonymous';
+          offscreenVid.playsInline = true;
+          offscreenVid.preload = 'auto';
+          offscreenVid.muted = false;
+          offscreenVid.style.position = 'fixed';
+          offscreenVid.style.left = '-9999px';
+          offscreenVid.style.top = '0px';
+          offscreenVid.style.width = '2px';
+          offscreenVid.style.height = '2px';
+          offscreenVid.style.opacity = '0.01';
+          offscreenVid.style.pointerEvents = 'none';
+          document.body.appendChild(offscreenVid);
+          tempExportVideoEl = offscreenVid;
+
+          const loadViaSrc = (srcToLoad: string) =>
+            new Promise<boolean>((resolve) => {
+              let done = false;
+              const finish = (ok: boolean) => {
+                if (done) return;
+                done = true;
+                offscreenVid.removeEventListener('loadeddata', onReady);
+                offscreenVid.removeEventListener('canplay', onReady);
+                offscreenVid.removeEventListener('error', onErr);
+                resolve(ok);
+              };
+              const onReady = () => finish(true);
+              const onErr = () => finish(false);
+              offscreenVid.addEventListener('loadeddata', onReady);
+              offscreenVid.addEventListener('canplay', onReady);
+              offscreenVid.addEventListener('error', onErr);
+              offscreenVid.src = srcToLoad;
+              offscreenVid.load();
+              setTimeout(() => finish(offscreenVid.readyState >= 2), 12000);
+            });
+
+          let proxyLoaded = await loadViaSrc(proxiedVideoUrl);
+          if (!proxyLoaded) {
+            // Fallback: fetch proxied video as Blob URL
+            const resp = await fetch(proxiedVideoUrl);
+            if (resp.ok) {
+              const vBlob = await resp.blob();
+              if (vBlob.size > 1024) {
+                tempExportBlobUrl = URL.createObjectURL(vBlob);
+                proxyLoaded = await loadViaSrc(tempExportBlobUrl);
+              }
+            }
+          }
+
+          if (proxyLoaded && offscreenVid.readyState >= 2 && isVideoCanvasSafe(offscreenVid)) {
+            exportVideoEl = offscreenVid;
+          }
+        } catch (proxyErr) {
+          console.warn('[VideoExport] CORS proxy video setup notice:', proxyErr);
         }
       }
 
-      const canvas = document.createElement('canvas');
+      // Prevent active export video from looping back to 0 during export
+      originalLoop = exportVideoEl.loop;
+      exportVideoEl.loop = false;
+
+      // Smart Resolution & Bitrate Scaling (Mobile/Android WebView: crisp 720p @ 3.2Mbps to prevent OOM/codec stall; Desktop: Full HD 1080p @ 5.5Mbps)
+      const isAndroidWebView = typeof window !== 'undefined' && Boolean((window as any).AndroidBridge);
+      const isMobileExportDevice =
+        isAndroidWebView ||
+        (typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent));
+
+      let width = isMobileExportDevice
+        ? (aspect === '9:16' ? 720 : aspect === '1:1' ? 720 : aspect === '4:5' ? 720 : aspect === '4:3' ? 960 : 1280)
+        : (aspect === '9:16' ? 1080 : aspect === '1:1' ? 1080 : aspect === '4:5' ? 1080 : aspect === '4:3' ? 1440 : 1920);
+      let height = isMobileExportDevice
+        ? (aspect === '9:16' ? 1280 : aspect === '1:1' ? 720 : aspect === '4:5' ? 900 : aspect === '4:3' ? 720 : 720)
+        : (aspect === '9:16' ? 1920 : aspect === '1:1' ? 1080 : aspect === '4:5' ? 1350 : aspect === '4:3' ? 1080 : 1080);
+
+      // Ensure even dimensions for H.264/VP8 hardware encoders
+      width = width - (width % 2);
+      height = height - (height % 2);
+
+      const exportFps = isMobileExportDevice ? 25 : 30;
+      const exportBitrate = isMobileExportDevice ? 3200000 : 5500000;
+
+      canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
       canvas.style.position = 'fixed';
@@ -2890,43 +3109,40 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         throw new Error('कैनवास संदर्भ उपलब्ध नहीं है');
       }
 
+      // Helper to preload images CORS-safely without tainting canvas
+      const preloadCorsSafeImage = (origUrl: string, cacheKey?: string): Promise<HTMLImageElement | null> => {
+        return new Promise((resolve) => {
+          const safeSrc = toCorsSafeImageUrl(origUrl);
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          let settled = false;
+          const done = (result: HTMLImageElement | null) => {
+            if (settled) return;
+            settled = true;
+            if (result && cacheKey) dynamicImageCache.set(cacheKey, result);
+            resolve(result);
+          };
+          img.onload = () => done(img.naturalWidth > 0 ? img : null);
+          img.onerror = () => done(null);
+          img.src = safeSrc;
+          setTimeout(() => done(img.complete && img.naturalWidth > 0 ? img : null), 1500);
+        });
+      };
+
       // Preload logo image (Master Admin template logo overrides user profile logo fallback)
       const dynamicVConf = activeDynamicFrame?.rawDynamicFrame?.videoConfig;
       const effectiveLogoUrl = dynamicVConf?.logoUrl || activeLogoUrl;
       let logoImg: HTMLImageElement | null = null;
       if (effectiveLogoUrl) {
-        try {
-          logoImg = new Image();
-          logoImg.crossOrigin = 'anonymous';
-          logoImg.src = effectiveLogoUrl;
-          dynamicImageCache.set(effectiveLogoUrl, logoImg);
-          await new Promise<void>((resolve) => {
-            if (logoImg!.complete && logoImg!.naturalWidth > 0) return resolve();
-            logoImg!.onload = () => resolve();
-            logoImg!.onerror = () => resolve();
-            setTimeout(resolve, 800);
-          });
-        } catch {}
+        logoImg = await preloadCorsSafeImage(effectiveLogoUrl, effectiveLogoUrl);
       }
 
-      // Preload dynamic overlay assets and custom ribbons
+      // Preload dynamic overlay assets and custom ribbons (CORS-clean)
       if (dynamicVConf?.overlayAssets && dynamicVConf.overlayAssets.length > 0) {
         await Promise.all(
           dynamicVConf.overlayAssets
             .filter((o) => o.url && o.visible !== false)
-            .map((o) => {
-              return new Promise<void>((resolve) => {
-                let img = dynamicImageCache.get(o.url);
-                if (img && img.complete && img.naturalWidth > 0) return resolve();
-                img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.onload = () => resolve();
-                img.onerror = () => resolve();
-                img.src = o.url;
-                dynamicImageCache.set(o.url, img);
-                setTimeout(resolve, 800);
-              });
-            })
+            .map((o) => preloadCorsSafeImage(o.url, o.url))
         );
       }
 
@@ -2934,36 +3150,14 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         await Promise.all(
           dynamicVConf.ribbonLayers
             .filter((r) => r.customRibbonUrl && r.visible !== false)
-            .map((r) => {
-              return new Promise<void>((resolve) => {
-                let img = dynamicImageCache.get(r.customRibbonUrl!);
-                if (img && img.complete && img.naturalWidth > 0) return resolve();
-                img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.onload = () => resolve();
-                img.onerror = () => resolve();
-                img.src = r.customRibbonUrl!;
-                dynamicImageCache.set(r.customRibbonUrl!, img);
-                setTimeout(resolve, 800);
-              });
-            })
+            .map((r) => preloadCorsSafeImage(r.customRibbonUrl!, r.customRibbonUrl!))
         );
       }
 
       // Preload watermark image if image watermark selected (Part 8.H)
       let watermarkImgPreload: HTMLImageElement | null = null;
       if (showWatermark && watermarkType === 'image' && watermarkImage) {
-        try {
-          watermarkImgPreload = new Image();
-          watermarkImgPreload.crossOrigin = 'anonymous';
-          watermarkImgPreload.src = watermarkImage;
-          await new Promise<void>((resolve) => {
-            if (watermarkImgPreload!.complete && watermarkImgPreload!.naturalWidth > 0) return resolve();
-            watermarkImgPreload!.onload = () => resolve();
-            watermarkImgPreload!.onerror = () => resolve();
-            setTimeout(resolve, 800);
-          });
-        } catch {}
+        watermarkImgPreload = await preloadCorsSafeImage(watermarkImage);
       }
 
       setVideoExportProgress(15);
@@ -2978,7 +3172,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
         return;
       }
 
-      const canvasStream = captureStreamFn.call(canvas, 30); // 30 FPS stream
+      const canvasStream: MediaStream = captureStreamFn.call(canvas, exportFps);
+      activeCanvasStream = canvasStream;
       const vTracks = canvasStream.getVideoTracks();
       if (!vTracks || vTracks.length === 0) {
         if (canvas.parentNode) canvas.parentNode.removeChild(canvas);
@@ -3001,12 +3196,25 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
           const dest = audioCtx.createMediaStreamDestination();
 
-          // 1. Video audio source (with caching)
-          let mediaSource = (video as any).__audioSourceNode as MediaElementAudioSourceNode | null;
+          // Silent keepalive oscillator prevents Chromium MP4/WebM MediaRecorder from stalling on muted/silent videos
+          try {
+            const osc = audioCtx.createOscillator();
+            const silentGain = audioCtx.createGain();
+            osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+            silentGain.gain.setValueAtTime(0.00001, audioCtx.currentTime);
+            osc.connect(silentGain);
+            silentGain.connect(dest);
+            osc.start();
+            keepAliveOsc = osc;
+            tempAudioNodes.push(silentGain);
+          } catch {}
+
+          // 1. Video audio source (with caching per element)
+          let mediaSource = (exportVideoEl as any).__audioSourceNode as MediaElementAudioSourceNode | null;
           if (!mediaSource) {
             try {
-              mediaSource = audioCtx.createMediaElementSource(video);
-              (video as any).__audioSourceNode = mediaSource;
+              mediaSource = audioCtx.createMediaElementSource(exportVideoEl);
+              (exportVideoEl as any).__audioSourceNode = mediaSource;
             } catch (e) {
               console.warn('Audio source reuse notice:', e);
             }
@@ -3017,6 +3225,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               videoGain.gain.setValueAtTime(videoVolume / 100, audioCtx.currentTime);
               mediaSource.connect(videoGain);
               videoGain.connect(dest);
+              tempAudioNodes.push(videoGain);
             } catch {}
           }
 
@@ -3026,11 +3235,14 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               if (customAudioUrl) {
                 const bgmAudio = new Audio(customAudioUrl);
                 bgmAudio.crossOrigin = 'anonymous';
+                bgmAudio.loop = true;
                 const bgmSource = audioCtx.createMediaElementSource(bgmAudio);
                 const bgmGain = audioCtx.createGain();
                 bgmGain.gain.setValueAtTime(bgmVolume / 100, audioCtx.currentTime);
                 bgmSource.connect(bgmGain);
                 bgmGain.connect(dest);
+                extraAudioEls.push(bgmAudio);
+                tempAudioNodes.push(bgmSource, bgmGain);
                 bgmAudio.play().catch(() => {});
               }
             } catch {}
@@ -3046,6 +3258,8 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               voGain.gain.setValueAtTime(voiceoverVolume / 100, audioCtx.currentTime);
               voSource.connect(voGain);
               voGain.connect(dest);
+              extraAudioEls.push(voAudio);
+              tempAudioNodes.push(voSource, voGain);
               voAudio.play().catch(() => {});
             } catch {}
           }
@@ -3053,75 +3267,19 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
           const aTrack = dest.stream.getAudioTracks()[0];
           if (aTrack) {
             combinedStream = new MediaStream([...canvasStream.getVideoTracks(), aTrack]);
+            activeCombinedStream = combinedStream;
           }
         }
       } catch (err) {
         console.warn('Audio mixing setup fallback:', err);
       }
 
-      let mimeType = '';
-      const preferredMimes = [
-        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-        'video/mp4;codecs=avc1',
-        'video/mp4',
-        'video/webm;codecs=vp9,opus',
-        'video/webm;codecs=vp8,opus',
-        'video/webm',
-      ];
-      for (const m of preferredMimes) {
-        if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) {
-          mimeType = m;
-          break;
-        }
-      }
-
-      const recorderOptions: MediaRecorderOptions = {
-        ...(mimeType ? { mimeType } : {}),
-        videoBitsPerSecond: 8000000,
-      };
-      let recorder: MediaRecorder;
-      try {
-        recorder = new MediaRecorder(combinedStream, recorderOptions);
-      } catch {
-        recorder = new MediaRecorder(combinedStream);
-      }
-
-      const chunks: Blob[] = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
-      };
-
-      const recordingPromise = new Promise<Blob>((resolve, reject) => {
-        let settled = false;
-        // Generous watchdog timer (120 seconds) to prevent premature cutoffs while recording full videos
-        const fallbackTimer = setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          const recordedType = recorder.mimeType || mimeType || 'video/webm';
-          resolve(new Blob(chunks, { type: recordedType }));
-        }, 120000);
-
-        recorder.onstop = () => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(fallbackTimer);
-          const recordedType = recorder.mimeType || mimeType || 'video/webm';
-          resolve(new Blob(chunks, { type: recordedType }));
-        };
-        recorder.onerror = (e) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(fallbackTimer);
-          reject(e);
-        };
-      });
-
       const fallbackDur = (duration && isFinite(duration) && duration > 1.5)
         ? duration
         : parseVideoDurationSeconds(initialVideo?.duration, 30);
-      const rawVideoDuration = (video.duration && isFinite(video.duration) && video.duration > 1.5)
-        ? video.duration
-        : fallbackDur;
+      const rawVideoDuration = (exportVideoEl.duration && isFinite(exportVideoEl.duration) && exportVideoEl.duration > 1.5)
+        ? exportVideoEl.duration
+        : (video.duration && isFinite(video.duration) && video.duration > 1.5 ? video.duration : fallbackDur);
       const startTime = isReadyToUseMode ? 0 : Math.max(0, trimStart || 0);
       const validTrimEnd = (trimEnd && isFinite(trimEnd) && trimEnd > startTime + 1.5 && trimEnd <= rawVideoDuration)
         ? trimEnd
@@ -3130,215 +3288,295 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       const endTime = Math.max(startTime + 2, rawEnd);
       const totalDuration = Math.max(2, endTime - startTime);
 
-      // Seek to start position and wait until seek genuinely finishes before starting MediaRecorder
-      video.pause();
-      if (Math.abs(video.currentTime - startTime) > 0.05 || video.ended) {
-        await new Promise<void>((resolve) => {
+      const drawFrameWithHeadline = (expHeadlineText: string) => {
+        drawVideoCompositionToCanvas(ctx, width, height, {
+          video: exportVideoEl,
+          selectedFrameId,
+          activeDynamicFrame,
+          headline: expHeadlineText,
+          subHeadline,
+          location,
+          channelTag,
+          logoImg,
+          websiteUrl,
+          socialHandle,
+          mobileNumber,
+          showMobileNumber,
+          showWebsite,
+          showWhatsapp,
+          cropRegion,
+          aspect,
+          zoomScale,
+          offsetY,
+          isExclusiveBadge,
+          tickerText,
+          logoScale,
+          showWatermark,
+          watermarkOpacity,
+          watermarkOffsetY,
+          watermarkText: watermarkText || profile?.channelNameHi || '',
+          filterCss: getVideoFilterCss(videoColorFilter),
+          watermarkType,
+          watermarkImageImg: watermarkImgPreload,
+          watermarkCustomText: watermarkCustomText || watermarkText || profile?.channelNameHi || '',
+          socialPosition,
+          showLocation,
+          showTicker,
+        });
+      };
+
+      // Resilient recording pass runner (supports automatic retry on video-only WebM if primary codec/audio stalls)
+      const executeRecordingPass = async (
+        streamToRecord: MediaStream,
+        mimeCandidates: string[],
+        passBitrate: number
+      ): Promise<Blob> => {
+        let chosenMime = '';
+        for (const m of mimeCandidates) {
+          if (!m) continue;
+          try {
+            if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) {
+              chosenMime = m;
+              break;
+            }
+          } catch {}
+        }
+
+        const recOpts: MediaRecorderOptions = {
+          ...(chosenMime ? { mimeType: chosenMime } : {}),
+          videoBitsPerSecond: passBitrate,
+        };
+        let recorder: MediaRecorder;
+        try {
+          recorder = new MediaRecorder(streamToRecord, recOpts);
+        } catch {
+          try {
+            recorder = new MediaRecorder(streamToRecord, chosenMime ? { mimeType: chosenMime } : undefined);
+          } catch {
+            recorder = new MediaRecorder(streamToRecord);
+          }
+        }
+
+        const chunks: Blob[] = [];
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) chunks.push(e.data);
+        };
+
+        const recordingDone = new Promise<Blob>((resolve, reject) => {
           let settled = false;
-          const finishSeek = () => {
+          const watchdogMs = Math.max(45000, Math.round((totalDuration + 20) * 1000));
+          const fallbackTimer = setTimeout(() => {
             if (settled) return;
             settled = true;
-            video.removeEventListener('seeked', finishSeek);
-            resolve();
+            const recordedType = recorder.mimeType || chosenMime || 'video/webm';
+            resolve(new Blob(chunks, { type: recordedType }));
+          }, watchdogMs);
+
+          recorder.onstop = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(fallbackTimer);
+            const recordedType = recorder.mimeType || chosenMime || 'video/webm';
+            resolve(new Blob(chunks, { type: recordedType }));
           };
-          video.addEventListener('seeked', finishSeek);
-          try {
-            video.currentTime = startTime;
-          } catch {}
-          setTimeout(finishSeek, 2000);
+          recorder.onerror = (e) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(fallbackTimer);
+            reject(e);
+          };
         });
-      }
 
-      const initialExpHeadline = (headlineScheduleMode === 'scheduled' && scheduledHeadlines.filter((h) => h.trim().length > 0).length > 1)
-        ? (scheduledHeadlines.filter((h) => h.trim().length > 0)[0] || headline)
-        : headline;
+        // Seek export video to startTime cleanly
+        exportVideoEl.pause();
+        if (Math.abs(exportVideoEl.currentTime - startTime) > 0.05 || exportVideoEl.ended) {
+          await new Promise<void>((resolve) => {
+            let settled = false;
+            const finishSeek = () => {
+              if (settled) return;
+              settled = true;
+              exportVideoEl.removeEventListener('seeked', finishSeek);
+              resolve();
+            };
+            exportVideoEl.addEventListener('seeked', finishSeek);
+            try {
+              exportVideoEl.currentTime = startTime;
+            } catch {}
+            setTimeout(finishSeek, 2000);
+          });
+        }
 
-      // Draw initial frame before starting recorder
-      drawVideoCompositionToCanvas(ctx, width, height, {
-        video,
-        selectedFrameId,
-        activeDynamicFrame,
-        headline: initialExpHeadline,
-        subHeadline,
-        location,
-        channelTag,
-        logoImg,
-        websiteUrl,
-        socialHandle,
-        mobileNumber,
-        showMobileNumber,
-        showWebsite,
-        showWhatsapp,
-        cropRegion,
-        aspect,
-        zoomScale,
-        offsetY,
-        isExclusiveBadge,
-        tickerText,
-        logoScale,
-        showWatermark,
-        watermarkOpacity,
-        watermarkOffsetY,
-        watermarkText: watermarkText || profile?.channelNameHi || '',
-        filterCss: getVideoFilterCss(videoColorFilter),
-        watermarkType,
-        watermarkImageImg: watermarkImgPreload,
-        watermarkCustomText: watermarkCustomText || watermarkText || profile?.channelNameHi || '',
-        socialPosition,
-        showLocation,
-        showTicker,
-      });
-
-      recorder.start(100);
-      setVideoExportProgress(20);
-      setVideoExportStatus('वीडियो फ्रेम व जैकेट रेंडर हो रहे हैं...');
-
-      // Attempt to play with audio; fallback to muted if browser autoplay blocks
-      video.muted = false;
-      video.playbackRate = 1.0;
-      try {
-        await video.play();
-      } catch {
-        video.muted = true;
-        try { await video.play(); } catch {}
-      }
-
-      const exportStartWallTime = Date.now();
-      let lastVideoCurrentTime = video.currentTime;
-      let lastProgressWallTime = Date.now();
-      let maxReportedPct = 20;
-      let hasEnded = false;
-
-      // Deterministic Loop with Safe Watchdog and Hybrid Animation/Timer (exports full video duration)
-      await new Promise<void>((resolve) => {
-        let animId: number;
-        let backupIntervalId: any;
-
-        const handleVideoEnded = () => {
-          stopAndFinish();
-        };
-        video.addEventListener('ended', handleVideoEnded);
-
-        const stopAndFinish = () => {
-          if (hasEnded) return;
-          hasEnded = true;
-          try {
-            video.removeEventListener('ended', handleVideoEnded);
-          } catch {}
-          cancelAnimationFrame(animId);
-          if (backupIntervalId) clearInterval(backupIntervalId);
-          try {
-            if (recorder.state !== 'inactive') {
-              recorder.stop();
-            }
-          } catch {}
-          try {
-            video.pause();
-          } catch {}
-          resolve();
-        };
-
-        const renderFrame = () => {
-          if (hasEnded) return;
-
-          // Immediate Cancellation Check (Section 10)
-          if (cancelExportRef.current || activeExportIdRef.current !== currentExportId) {
-            stopAndFinish();
-            return;
-          }
-
-          const currentExpH = (headlineScheduleMode === 'scheduled' && scheduledHeadlines.filter((h) => h.trim().length > 0).length > 1)
-            ? (scheduledHeadlines.filter((h) => h.trim().length > 0)[Math.floor(video.currentTime / headlineInterval) % scheduledHeadlines.filter((h) => h.trim().length > 0).length] || headline)
+        const scheduledList = scheduledHeadlines.filter((h) => h.trim().length > 0);
+        const initialExpHeadline =
+          headlineScheduleMode === 'scheduled' && scheduledList.length > 1
+            ? (scheduledList[0] || headline)
             : headline;
 
-          // Draw composited frame with active jacket
-          drawVideoCompositionToCanvas(ctx, width, height, {
-            video,
-            selectedFrameId,
-            activeDynamicFrame,
-            headline: currentExpH,
-            subHeadline,
-            location,
-            channelTag,
-            logoImg,
-            websiteUrl,
-            socialHandle,
-            mobileNumber,
-            showMobileNumber,
-            showWebsite,
-            showWhatsapp,
-            cropRegion,
-            aspect,
-            zoomScale,
-            offsetY,
-            isExclusiveBadge,
-            tickerText,
-            logoScale,
-            showWatermark,
-            watermarkOpacity,
-            watermarkOffsetY,
-            watermarkText: watermarkText || profile?.channelNameHi || '',
-            filterCss: getVideoFilterCss(videoColorFilter),
-            watermarkType,
-            watermarkImageImg: watermarkImgPreload,
-            watermarkCustomText: watermarkCustomText || watermarkText || profile?.channelNameHi || '',
-            socialPosition,
-            showLocation,
-            showTicker,
-          });
+        // Draw initial frame before starting MediaRecorder
+        drawFrameWithHeadline(initialExpHeadline);
 
-          // Priority 0: Ensure canvas video track explicitly pumps rendered frames into MediaRecorder
-          try {
-            const vTrack = canvasStream.getVideoTracks()[0];
-            if (vTrack && (vTrack as any).requestFrame) {
-              (vTrack as any).requestFrame();
-            }
-          } catch {}
+        recorder.start(250);
+        setVideoExportProgress(20);
+        setVideoExportStatus('वीडियो फ्रेम व जैकेट रेंडर हो रहे हैं...');
 
-          const now = Date.now();
-          const wallElapsed = Math.max(0, (now - exportStartWallTime) / 1000);
+        // Play export video (unmuted first for audio capture; fallback to muted if autoplay restricted)
+        exportVideoEl.muted = false;
+        exportVideoEl.playbackRate = 1.0;
+        try {
+          await exportVideoEl.play();
+        } catch {
+          exportVideoEl.muted = true;
+          try { await exportVideoEl.play(); } catch {}
+        }
 
-          // Watchdog: detect genuine stall (>900ms) and resume playback or finalize
-          if (Math.abs(video.currentTime - lastVideoCurrentTime) > 0.01) {
-            lastVideoCurrentTime = video.currentTime;
-            lastProgressWallTime = now;
-          } else if (now - lastProgressWallTime > 900) {
-            if (video.ended || video.currentTime >= endTime - 0.2) {
+        const exportStartWallTime = Date.now();
+        let lastVideoCurrentTime = exportVideoEl.currentTime;
+        let lastProgressWallTime = Date.now();
+        let maxReportedPct = 20;
+        let hasEnded = false;
+
+        await new Promise<void>((resolve) => {
+          let animId = 0;
+          let backupIntervalId: ReturnType<typeof setInterval> | null = null;
+
+          const stopAndFinish = () => {
+            if (hasEnded) return;
+            hasEnded = true;
+            try {
+              exportVideoEl.removeEventListener('ended', handleVideoEnded);
+            } catch {}
+            cancelAnimationFrame(animId);
+            if (backupIntervalId) clearInterval(backupIntervalId);
+            try {
+              if (recorder.state === 'recording') {
+                try { recorder.requestData(); } catch {}
+                recorder.stop();
+              } else if (recorder.state !== 'inactive') {
+                recorder.stop();
+              }
+            } catch {}
+            try {
+              exportVideoEl.pause();
+            } catch {}
+            resolve();
+          };
+
+          const handleVideoEnded = () => {
+            stopAndFinish();
+          };
+          exportVideoEl.addEventListener('ended', handleVideoEnded);
+
+          const pumpFrame = () => {
+            if (hasEnded) return;
+
+            if (cancelExportRef.current || activeExportIdRef.current !== currentExportId) {
               stopAndFinish();
               return;
             }
-            if (video.paused) {
-              video.play().catch(() => {});
-            } else {
-              try {
-                video.currentTime = Math.min(endTime, startTime + wallElapsed);
-              } catch {}
+
+            const currentExpH =
+              headlineScheduleMode === 'scheduled' && scheduledList.length > 1
+                ? (scheduledList[Math.floor(exportVideoEl.currentTime / headlineInterval) % scheduledList.length] || headline)
+                : headline;
+
+            drawFrameWithHeadline(currentExpH);
+
+            try {
+              const vTrack = canvasStream.getVideoTracks()[0];
+              if (vTrack && (vTrack as any).requestFrame) {
+                (vTrack as any).requestFrame();
+              }
+            } catch {}
+
+            const now = Date.now();
+            const wallElapsed = Math.max(0, (now - exportStartWallTime) / 1000);
+
+            // Watchdog: detect genuine stall (>900ms) and resume playback or advance frame
+            if (Math.abs(exportVideoEl.currentTime - lastVideoCurrentTime) > 0.01) {
+              lastVideoCurrentTime = exportVideoEl.currentTime;
+              lastProgressWallTime = now;
+            } else if (now - lastProgressWallTime > 900) {
+              if (exportVideoEl.ended || exportVideoEl.currentTime >= endTime - 0.2) {
+                stopAndFinish();
+                return;
+              }
+              if (exportVideoEl.paused) {
+                exportVideoEl.play().catch(() => {});
+              } else {
+                try {
+                  exportVideoEl.currentTime = Math.min(endTime, startTime + wallElapsed);
+                } catch {}
+              }
+              lastProgressWallTime = now;
             }
-            lastProgressWallTime = now;
-          }
 
-          // Progress calculation: 20% to 95% (strictly monotonic)
-          const elapsed = Math.max(0, Math.min(totalDuration, video.currentTime - startTime));
-          const timePct = Math.min(95, Math.max(20, Math.round(20 + (elapsed / totalDuration) * 75)));
-          const wallPct = Math.min(95, Math.max(20, Math.round(20 + (wallElapsed / totalDuration) * 75)));
-          maxReportedPct = Math.max(maxReportedPct, Math.max(timePct, wallPct));
-          setVideoExportProgress(maxReportedPct);
+            // Progress: 20% -> 95% strictly monotonic
+            const elapsed = Math.max(0, Math.min(totalDuration, exportVideoEl.currentTime - startTime));
+            const timePct = Math.min(95, Math.max(20, Math.round(20 + (elapsed / totalDuration) * 75)));
+            const wallPct = Math.min(95, Math.max(20, Math.round(20 + (wallElapsed / totalDuration) * 75)));
+            maxReportedPct = Math.max(maxReportedPct, Math.max(timePct, wallPct));
+            setVideoExportProgress(maxReportedPct);
 
-          const minElapsedBeforeStop = Math.min(1.0, totalDuration * 0.4);
-          const isVideoAtEnd = video.ended || (video.currentTime >= endTime - 0.12 && video.currentTime <= endTime + 5);
-          const isTimeComplete = wallElapsed >= minElapsedBeforeStop && !video.seeking && isVideoAtEnd;
-          const isHardTimeout = wallElapsed >= totalDuration + 1.5;
+            const minElapsedBeforeStop = Math.min(1.0, totalDuration * 0.4);
+            const isVideoAtEnd =
+              exportVideoEl.ended ||
+              (exportVideoEl.currentTime >= endTime - 0.12 && exportVideoEl.currentTime <= endTime + 5);
+            const isTimeComplete = wallElapsed >= minElapsedBeforeStop && !exportVideoEl.seeking && isVideoAtEnd;
+            const isHardTimeout = wallElapsed >= totalDuration + 2.0;
 
-          if (isTimeComplete || isHardTimeout) {
-            stopAndFinish();
-            return;
-          }
+            if (isTimeComplete || isHardTimeout) {
+              stopAndFinish();
+              return;
+            }
+          };
 
-          animId = requestAnimationFrame(renderFrame);
-        };
+          const renderLoop = () => {
+            if (hasEnded) return;
+            pumpFrame();
+            if (!hasEnded) {
+              animId = requestAnimationFrame(renderLoop);
+            }
+          };
 
-        animId = requestAnimationFrame(renderFrame);
-      });
+          // Backup timer keeps frame pumping alive even if mobile WebView throttles rAF
+          backupIntervalId = setInterval(() => {
+            if (!hasEnded) pumpFrame();
+          }, Math.round(1000 / exportFps));
+
+          animId = requestAnimationFrame(renderLoop);
+        });
+
+        return await recordingDone;
+      };
+
+      const primaryMimes = [
+        'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+        'video/mp4;codecs=avc1',
+        'video/mp4',
+        'video/webm;codecs=vp8,opus',
+        'video/webm;codecs=vp9,opus',
+        'video/webm',
+      ];
+
+      let rawBlob: Blob | null = null;
+      try {
+        rawBlob = await executeRecordingPass(combinedStream, primaryMimes, exportBitrate);
+      } catch (pass1Err) {
+        console.warn('[VideoExport] Pass 1 failed, preparing safe fallback pass:', pass1Err);
+      }
+
+      // Automatic Pass 2 Recovery: if combined audio+video MP4 stalled/returned 0 bytes, retry cleanly with video-only safe stream
+      if ((!rawBlob || rawBlob.size < 1024) && !cancelExportRef.current && activeExportIdRef.current === currentExportId) {
+        setVideoExportProgress(25);
+        setVideoExportStatus('कम्पैटिबल वीडियो फॉर्मेट में पुनः रेंडर हो रहा है...');
+        const safeFallbackMimes = [
+          'video/webm;codecs=vp8',
+          'video/webm',
+          'video/mp4',
+          '',
+        ];
+        rawBlob = await executeRecordingPass(canvasStream, safeFallbackMimes, Math.min(exportBitrate, 2800000));
+      }
 
       // Cancellation check before finalizing
       if (cancelExportRef.current || activeExportIdRef.current !== currentExportId) {
@@ -3352,7 +3590,6 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       setVideoExportProgress(96);
       setVideoExportStatus('अंतिम वीडियो फाइल प्रोसेस हो रही है...');
 
-      const rawBlob = await recordingPromise;
       try {
         canvasStream.getTracks().forEach((t) => t.stop());
         combinedStream.getTracks().forEach((t) => t.stop());
@@ -3367,7 +3604,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       }
 
       if (!rawBlob || rawBlob.size < 1024) {
-        throw new Error('रेंडरिंग फ़ाइल शून्य या बहुत छोटी प्राप्त हुई। स्नैपशॉट मोड पर स्विच किया जा रहा है।');
+        throw new Error('रेंडरिंग फ़ाइल शून्य या बहुत छोटी प्राप्त हुई।');
       }
 
       // Fix WebM duration header so Mobile Chrome & Android players display exact duration
@@ -3375,7 +3612,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       try {
         finalBlob = await Promise.race([
           injectWebmDuration(rawBlob, totalDuration * 1000),
-          new Promise<Blob>((res) => setTimeout(() => res(rawBlob), 2500)),
+          new Promise<Blob>((res) => setTimeout(() => res(rawBlob!), 2500)),
         ]);
       } catch {
         finalBlob = rawBlob;
@@ -3397,6 +3634,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
       const ext = isMp4 ? 'mp4' : 'webm';
       const filename = generateVideoDownloadFileName(ext);
+      // Revoke previous completedDownloadUrl to free browser memory
+      if (completedDownloadUrl && completedDownloadUrl.startsWith('blob:')) {
+        try { URL.revokeObjectURL(completedDownloadUrl); } catch {}
+      }
       const downloadUrl = URL.createObjectURL(finalBlob);
       try {
         fetch('/api/analytics/track', {
@@ -3445,30 +3686,58 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       completedBlobRef.current = finalBlob;
       setCompletedDownloadUrl(downloadUrl);
       setCompletedDownloadFilename(filename);
+      setCompletedFileSizeLabel(formatExportBytes(finalBlob.size));
 
-      // Trigger file download using robust browser-compatible helper
+      // Trigger file download using unified Desktop / Mobile Web / Android Native Bridge helper
       triggerBrowserDownload(finalBlob, filename);
 
-      // Open Success Modal directly so the user has an immediate, unmissable click-to-save button & sharing
+      // Open Success Modal directly so the user has an immediate preview, 1-click Save & Share button
       setIsVideoSuccessModalOpen(true);
 
-      showToast(`✅ ${ext.toUpperCase()} वीडियो पूरी न्यूज़ जैकेट के साथ डाउनलोड हुआ (${Math.round(totalDuration)}s)!`);
+      showToast(`✅ ${ext.toUpperCase()} वीडियो पूरी न्यूज़ जैकेट के साथ तैयार हुआ (${Math.round(totalDuration)}s)!`);
       triggerVideoWelcomeReward();
     } catch (err: any) {
       console.error('Video download error:', err);
       try {
         if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
       } catch {}
+      setVideoExportError(err?.message || 'वीडियो डाउनलोड करने में समस्या आई');
       try {
         handleDownloadSnapshot();
-        showToast('⚠️ वीडियो रिकॉर्डिंग में समस्या, उच्च-गुणवत्ता फ्रेम स्नैपशॉट डाउनलोड किया गया');
+        showToast('⚠️ वीडियो रिकॉर्डिंग में समस्या आई, उच्च-गुणवत्ता फ्रेम स्नैपशॉट सेव किया गया — कृपया पुनः प्रयास करें');
       } catch {
-        setVideoExportError(err?.message || 'वीडियो डाउनलोड करने में समस्या आई');
         showToast('❌ वीडियो डाउनलोड में समस्या आई');
       }
     } finally {
       try {
+        if (keepAliveOsc) {
+          keepAliveOsc.stop();
+          keepAliveOsc.disconnect();
+        }
+      } catch {}
+      tempAudioNodes.forEach((n) => {
+        try { n.disconnect(); } catch {}
+      });
+      extraAudioEls.forEach((a) => {
+        try {
+          a.pause();
+          a.src = '';
+        } catch {}
+      });
+      try {
+        activeCanvasStream?.getTracks().forEach((t) => t.stop());
+        activeCombinedStream?.getTracks().forEach((t) => t.stop());
+      } catch {}
+      try {
         if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+      } catch {}
+      try {
+        if (tempExportVideoEl) {
+          tempExportVideoEl.pause();
+          tempExportVideoEl.src = '';
+          if (tempExportVideoEl.parentNode) tempExportVideoEl.parentNode.removeChild(tempExportVideoEl);
+        }
+        if (tempExportBlobUrl) URL.revokeObjectURL(tempExportBlobUrl);
       } catch {}
       try {
         video.loop = originalLoop;
@@ -3673,7 +3942,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
   );
 
   return (
-    <div className="w-full max-w-full overflow-x-clip flex flex-col gap-4 pb-24 text-slate-900">
+    <div className="w-full max-w-full overflow-x-clip flex flex-col gap-4 pb-24 text-slate-100">
       {initialVideo && (
         <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800 px-3.5 py-2 rounded-xl text-xs text-neutral-300">
           <div className="flex items-center gap-2">
@@ -3689,7 +3958,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
 
       <div className="w-full flex flex-col lg:flex-row items-start gap-4 sm:gap-6 pb-28 lg:pb-0">
         {/* LEFT COLUMN (36% Desktop / 34% XL): Live Video Canvas with Sticky Jacket Overlay */}
-        <aside className="w-full lg:w-[36%] xl:w-[34%] lg:sticky lg:top-[72px] self-start max-h-[calc(100vh-85px)] z-20 flex flex-col gap-3 overflow-y-auto">
+        <aside className="w-full lg:w-[36%] xl:w-[34%] lg:sticky lg:top-[72px] self-start lg:max-h-[calc(100vh-85px)] z-20 flex flex-col gap-3 lg:overflow-y-auto">
           <div className="w-full bg-black p-3 sm:p-4 rounded-2xl border border-neutral-800 shadow-2xl flex flex-col items-center">
             {/* Top Status: Live Canvas, stable indicator (no ping), adjacent Reset & Draft buttons */}
             <div className="w-full flex items-center justify-between mb-2 px-1 gap-1">
@@ -5999,24 +6268,25 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                   {/* Completed Download Card - Show immediately when completed */}
                   {completedDownloadUrl && (
                     <div className="p-3.5 bg-emerald-950/90 border border-emerald-500 rounded-xl space-y-2.5 animate-in fade-in">
-                      <div className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
-                        <CheckCircle className="w-4 h-4 text-emerald-400" />
-                        <span>वीडियो सफलतापूर्वक 100% रेंडर हो गया है!</span>
+                      <div className="text-xs font-bold text-emerald-300 flex items-center justify-between gap-1.5">
+                        <span className="flex items-center gap-1.5">
+                          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <span>वीडियो सफलतापूर्वक 100% रेंडर हो गया है!</span>
+                        </span>
+                        {completedFileSizeLabel && (
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-900/80 text-emerald-200 border border-emerald-500/40 shrink-0">
+                            {completedFileSizeLabel}
+                          </span>
+                        )}
                       </div>
-                      <a
-                        href={completedDownloadUrl}
-                        download={completedDownloadFilename || 'breaking_news_video.mp4'}
-                        onClick={() => {
-                          if (completedBlobRef.current) {
-                            triggerBrowserDownload(completedBlobRef.current, completedDownloadFilename || 'breaking_news_video.mp4');
-                          }
-                          showToast('✅ वीडियो आपके डिवाइस में सेव हो रहा है!');
-                        }}
+                      <button
+                        type="button"
+                        onClick={handleImmediateDownload}
                         className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-lg flex items-center justify-center gap-2 shadow cursor-pointer transition active:scale-95"
                       >
                         <Download className="w-4 h-4" />
                         <span>✅ सीधे वीडियो फाइल सेव करें (Save Video Now)</span>
-                      </a>
+                      </button>
                     </div>
                   )}
 
@@ -7265,7 +7535,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       {/* Caption Modal Dialog */}
       {isCaptionModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-slate-900 border-2 border-amber-500/80 rounded-2xl w-full max-w-lg shadow-2xl p-5 space-y-4">
+          <div className="bg-slate-900 border-2 border-amber-500/80 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl p-5 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-amber-400" />
@@ -7323,10 +7593,10 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
       {/* Video Render Complete & Instant Download Modal Dialog */}
       {isVideoSuccessModalOpen && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in">
-          <div className="bg-gradient-to-b from-slate-900 via-slate-950 to-black border-2 border-emerald-500/80 rounded-3xl w-full max-w-md shadow-2xl p-6 space-y-4">
+          <div className="bg-gradient-to-b from-slate-900 via-slate-950 to-black border-2 border-emerald-500/80 rounded-3xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl p-5 sm:p-6 space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-emerald-500/30">
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-400 shadow-inner">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-400 shadow-inner shrink-0">
                   <CheckCircle className="w-6 h-6" />
                 </div>
                 <div>
@@ -7343,30 +7613,50 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
               </button>
             </div>
 
+            {completedDownloadUrl && (
+              <div className="w-full rounded-2xl overflow-hidden bg-black border border-slate-800 shadow-inner">
+                <video
+                  src={completedDownloadUrl}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="w-full max-h-56 object-contain mx-auto"
+                />
+              </div>
+            )}
+
             <div className="p-3 bg-emerald-950/40 border border-emerald-600/30 rounded-2xl text-center space-y-1">
-              <div className="text-xs font-bold text-emerald-200">
-                फाइल नाम: <span className="font-mono text-emerald-400">{completedDownloadFilename || 'news_video.mp4'}</span>
+              <div className="text-xs font-bold text-emerald-200 flex items-center justify-center gap-2 flex-wrap">
+                <span>फाइल: <span className="font-mono text-emerald-400 break-all">{completedDownloadFilename || 'news_video.mp4'}</span></span>
+                {completedFileSizeLabel && (
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-900/70 text-emerald-200 text-[10px] font-mono border border-emerald-500/40">
+                    {completedFileSizeLabel}
+                  </span>
+                )}
               </div>
               <div className="text-[11px] text-slate-300">
-                यदि आपका ब्राउज़र स्वचालित डाउनलोड प्रारंभ नहीं कर सका है, तो नीचे दिए गए हरे बटन पर तुरंत क्लिक करें:
+                यदि आपका ब्राउज़र या ऐप स्वचालित सेव प्रारंभ न करे, तो नीचे हरे बटन पर क्लिक करें:
               </div>
             </div>
 
-            {/* Direct 1-Click Native Save Link Button */}
-            <a
-              href={completedDownloadUrl || '#'}
-              download={completedDownloadFilename || 'news_video.mp4'}
-              onClick={() => {
-                if (completedBlobRef.current) {
-                  triggerBrowserDownload(completedBlobRef.current, completedDownloadFilename || 'news_video.mp4');
-                }
-                showToast('✅ वीडियो आपके डिवाइस में सेव हो रहा है!');
-              }}
-              className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-sm rounded-2xl shadow-xl flex items-center justify-center gap-2 cursor-pointer transition active:scale-95 animate-pulse"
+            {/* Direct 1-Click Native Save Button (no duplicate <a>+onClick firing) */}
+            <button
+              type="button"
+              onClick={handleImmediateDownload}
+              className="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600 hover:from-emerald-500 hover:to-teal-400 text-white font-black text-sm rounded-2xl shadow-xl flex items-center justify-center gap-2 cursor-pointer transition active:scale-95"
             >
               <Download className="w-5 h-5" />
               <span>⬇ सीधे वीडियो फाइल सेव करें (Save Video Now)</span>
-            </a>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleShareExportedVideo}
+              className="w-full py-2.5 px-4 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white font-black text-xs rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer transition active:scale-95"
+            >
+              <Share2 className="w-4 h-4" />
+              <span>📤 वीडियो शेयर करें (WhatsApp / Reels / Social)</span>
+            </button>
 
             <div className="grid grid-cols-2 gap-2 pt-1">
               <button
@@ -7377,7 +7667,7 @@ export const VideoStudioWeb: React.FC<VideoStudioWebProps> = ({
                 }}
                 className="py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-95"
               >
-                <Share2 className="w-4 h-4 text-amber-400" />
+                <Copy className="w-4 h-4 text-amber-400" />
                 <span>📋 कैप्शन कॉपी करें</span>
               </button>
 

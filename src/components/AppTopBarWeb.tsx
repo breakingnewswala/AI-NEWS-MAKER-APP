@@ -299,7 +299,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
               <div>
                 {/* Header line: AI News Maker + LIVE Badge + Guide Button */}
                 <div className="flex items-center gap-2">
-                  <span className="font-black text-xs sm:text-sm md:text-base tracking-wide text-slate-900 dark:text-white whitespace-nowrap">
+                  <span className="font-black text-xs sm:text-sm md:text-base tracking-wide text-white whitespace-nowrap">
                     AI News Maker
                   </span>
                   <span className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] sm:text-[9px] font-black rounded uppercase animate-pulse shadow-sm shadow-red-500/50 shrink-0">
@@ -311,7 +311,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                       e.stopPropagation();
                       setIsGuideOpen(true);
                     }}
-                    className={`rounded-full bg-slate-100 hover:bg-amber-100 dark:bg-slate-800/90 dark:hover:bg-amber-500/20 text-slate-600 dark:text-slate-300 hover:text-amber-700 dark:hover:text-amber-400 border border-slate-200 dark:border-slate-700/80 hover:border-amber-400/50 transition-all cursor-pointer shadow-xs shrink-0 flex items-center justify-center gap-1 ${
+                    className={`rounded-full bg-slate-800/90 hover:bg-amber-500/20 text-slate-200 hover:text-amber-300 border border-slate-700/80 hover:border-amber-400/50 transition-all cursor-pointer shadow-xs shrink-0 flex items-center justify-center gap-1 ${
                       isHome ? 'px-2 py-0.5' : 'p-1'
                     }`}
                     title="ऐप कैसे उपयोग करें? (मार्गदर्शिका / User Guide)"
@@ -319,15 +319,15 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                   >
                     <HelpCircle className="w-3.5 h-3.5" />
                     {isHome && (
-                      <span className="text-[10px] sm:text-xs font-bold leading-none text-slate-700 dark:text-slate-200">
+                      <span className="text-[10px] sm:text-xs font-bold leading-none text-slate-200">
                         गाइड
                       </span>
                     )}
                   </button>
                 </div>
 
-                <div className="text-[10px] text-slate-500 dark:text-slate-300 font-medium flex items-center gap-1.5 flex-wrap">
-                  <span className="text-amber-600 dark:text-amber-300 font-bold truncate max-w-[170px] sm:max-w-none">
+                <div className="text-[10px] text-slate-300 font-medium flex items-center gap-1.5 flex-wrap">
+                  <span className="text-amber-300 font-bold truncate max-w-[170px] sm:max-w-none">
                     {isHindi ? 'स्मार्ट डिजिटल न्यूज़ स्टूडियो' : 'Smart Digital News Studio'}
                   </span>
                 </div>
@@ -341,7 +341,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   isHome
                     ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-md shadow-red-600/20'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
                 }`}
               >
                 🏠 होम
@@ -351,7 +351,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   isVideos
                     ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-md shadow-red-600/20'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
                 }`}
               >
                 🎬 वीडियो व रील्स
@@ -361,7 +361,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   isStudio
                     ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 text-slate-950 font-black shadow-md shadow-amber-500/25 ring-1 ring-amber-300/40'
-                    : 'text-amber-700 dark:text-amber-300 hover:text-slate-950 dark:hover:text-white hover:bg-amber-50 dark:hover:bg-slate-800'
+                    : 'text-amber-300 hover:text-white hover:bg-slate-800'
                 }`}
               >
                 🎨 स्टूडियो
@@ -371,7 +371,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   isNewsroom
                     ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-md shadow-red-600/20'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
                 }`}
               >
                 📰 न्यूज़ रूम
@@ -381,7 +381,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   isControlPanel
                     ? 'bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-md shadow-red-600/20'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-800'
+                    : 'text-slate-300 hover:text-white hover:bg-slate-800'
                 }`}
               >
                 👤 प्रोफाइल
@@ -501,14 +501,14 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
                       });
                     }
                   }}
-                  className="p-2 text-slate-700 dark:text-slate-400 hover:text-slate-950 dark:hover:text-white bg-slate-100 dark:bg-slate-900 hover:bg-slate-200 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl relative transition-colors cursor-pointer shadow-xs"
+                  className="p-2 text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl relative transition-colors cursor-pointer shadow-xs"
                   title="सूचनाएं"
                 >
                   <Bell className="w-4 h-4" />
                   {unreadCount > 0 && (
                     <span className="absolute -top-1.5 -right-1.5 flex h-[18px] min-w-[18px]">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 pointer-events-none motion-reduce:hidden" />
-                      <span className="relative min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-black flex items-center justify-center ring-2 ring-white dark:ring-slate-950 shadow-md">
+                      <span className="relative min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-black flex items-center justify-center ring-2 ring-slate-950 shadow-md">
                         {unreadCount > 99 ? '99+' : unreadCount}
                       </span>
                     </span>
@@ -517,7 +517,7 @@ export const AppTopBarWeb: React.FC<AppTopBarWebProps> = ({
 
                 {/* Real-time Notification Dropdown */}
                 {showNotifications && (
-                  <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl p-4 space-y-3 z-50 animate-in fade-in zoom-in-95 duration-150 text-slate-800 dark:text-slate-100">
+                  <div className="absolute right-0 mt-2 w-[min(20rem,calc(100vw-1.5rem))] sm:w-96 max-h-[80vh] overflow-y-auto bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-4 space-y-3 z-50 animate-in fade-in zoom-in-95 duration-150 text-slate-100">
                     <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
                       <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
                         <Bell className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
