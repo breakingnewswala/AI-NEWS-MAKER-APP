@@ -1568,28 +1568,41 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
         .map((s: string) => cleanHeadlineText(s).replace(/[।\.\,\!\?\:\-]+$/g, '').trim())
         .filter((s: string) => s.length > 15 && /[\u0900-\u097F]/.test(s));
 
-      // Deduplicate against existing headlines
+      // Deduplicate against existing headlines (strict 0.88 threshold so distinct angles of the same story are preserved)
       const uniqueRawNew = rawNew.filter(
         (candidate) =>
           !existingHeadlines.some(
-            (existing) => existing === candidate || calculateHeadlineSimilarity(existing, candidate) >= 0.72
+            (existing) => existing === candidate || calculateHeadlineSimilarity(existing, candidate) >= 0.88
           )
       );
 
-      const effectiveSourcePublisherNames = [
-        ...(Array.isArray(data?.sourcePublisherNames) ? data.sourcePublisherNames : []),
-        ...(Array.isArray(result?.sourcePublisherNames) ? result.sourcePublisherNames : []),
-        ...(Array.isArray(card.sourcePublisherNames) ? card.sourcePublisherNames : []),
-        data?.publisherName || result?.publisherName || card.publisherName || '',
-      ].filter(Boolean);
+      const effectiveSourcePublisherNames = Array.from(
+        new Set(
+          [
+            ...(Array.isArray(data?.sourcePublisherNames) ? data.sourcePublisherNames : []),
+            ...(Array.isArray(result?.sourcePublisherNames) ? result.sourcePublisherNames : []),
+            ...(Array.isArray(card.sourcePublisherNames) ? card.sourcePublisherNames : []),
+            data?.publisherName || result?.publisherName || card.publisherName || '',
+          ]
+            .flat()
+            .map((v: any) => String(v || '').trim())
+            .filter(Boolean)
+        )
+      );
 
-      const fittedNew = fitHeadlinesTo5TierRanges(
-        uniqueRawNew.length > 0 ? uniqueRawNew : rawNew,
-        articleSentences,
-        sourceTitle,
-        sourceLoc,
-        effectiveSourcePublisherNames
-      ).slice(0, missingCount);
+      // Prefer the server-validated unique headlines directly when 5 fresh options arrived; otherwise fill via fitHeadlinesTo5TierRanges
+      const candidatePool = uniqueRawNew.length > 0 ? uniqueRawNew : rawNew;
+      const fittedNew = (
+        candidatePool.length >= missingCount
+          ? candidatePool.slice(0, missingCount)
+          : fitHeadlinesTo5TierRanges(
+              candidatePool,
+              articleSentences,
+              sourceTitle,
+              sourceLoc,
+              effectiveSourcePublisherNames
+            ).slice(0, missingCount)
+      );
 
       if (fittedNew.length > 0) {
         const preservedState = preserveHeadlineStateOnRegeneration({
@@ -1650,7 +1663,8 @@ export const InlineAiNewsTools: React.FC<InlineAiNewsToolsProps> = ({
           window.dispatchEvent(new CustomEvent('wallet_balance_updated', { detail: { coinBalance: data.remainingCoins } }));
         }
 
-        setRegenSuccessMsg(`✓ ${fittedNew.length} नए संतुलित हेडलाइन विकल्प सफलतापूर्वक जोड़े गए! कुल ${combined10.length} विकल्प उपलब्ध हैं।`);
+        const totalAvailableCount = preservedState.combinedHeadlines.length;
+        setRegenSuccessMsg(`✓ ${fittedNew.length} नए संतुलित हेडलाइन विकल्प सफलतापूर्वक जोड़े गए! कुल ${totalAvailableCount} विकल्प उपलब्ध हैं।`);
         setTimeout(() => setRegenSuccessMsg(null), 4000);
       } else {
         setError('हेडलाइन्स के नए विकल्प तैयार नहीं हो सके। कृपया पुनः प्रयास करें।');

@@ -6560,6 +6560,7 @@ __export(server_exports, {
   stripLeadingEnglishProseSentence: () => stripLeadingEnglishProseSentence,
   stripNewspaperBylines: () => stripNewspaperBylines,
   transliterateEssentialEnglishTerms: () => transliterateEssentialEnglishTerms,
+  trimHeadlineToCompleteClause: () => trimHeadlineToCompleteClause,
   validateGeneralHeadline: () => validateGeneralHeadline,
   validateHeadline: () => validateHeadline,
   validateHeadlineOption: () => validateHeadlineOption,
@@ -12440,7 +12441,17 @@ function hasInvalidHeadlineEnding(headline) {
   if (/[.!?।॥…,:;—–-]+$/u.test(text)) {
     return true;
   }
-  if (/(?:^|\s)(?:जिसमें|जिसके|जिससे|जिसका|जिसकी|तथा|एवं|और|कि|लेकिन|मगर|किंतु|परंतु)\s*$/u.test(text)) {
+  if (/(?:^|\s)(?:जिसमें|जिसके|जिससे|जिसका|जिसकी|जिन्हें|जिसे|तथा|एवं|और|व|कि|लेकिन|मगर|किंतु|परंतु|जबकि|क्योंकि|को|के|की|का|में|पर|से|ने|तक|लिए|हेतु|द्वारा|समेत|साथ|खिलाफ|विरुद्ध|लेकर|चलते|अंतर्गत|तहत|दौरान|अनुसार|कर|होकर|हुए|हुई|हुआ|भी|तो|ही)\s*$/u.test(
+    text
+  )) {
+    return true;
+  }
+  if (/(?:^|\s)(?:(?:को|ने|में|पर|से)\s+(?:जारी\s+किए|जारी\s+किया|जारी\s+की|दिए|दिया|किए|किया|भेजे|भेजा|दर्ज\s+किए|दर्ज\s+किया|दर्ज\s+की|शुरू\s+किए|शुरू\s+किया|शुरू\s+की)|जारी\s+किए|जारी\s+किया|जारी\s+की|दिए\s+गए|दिया\s+गया|दी\s+गई|किए\s+गए|की\s+गई|भेजे\s+गए|भेजा\s+गया|भेजी\s+गई|बनाए\s+गए|बनाया\s+गया|रखे\s+गए|रखा\s+गया|बताया\s+गया|कहा\s+गया|करने|होने|देने|लेने|लगाने|बनाने|चलाने|भेजने|रखने|करते|होते)\s*$/u.test(
+    text
+  )) {
+    return true;
+  }
+  if (/(?:^|\s)(?!(?:सरसों|परसों|बरसों)\s*$)[\u0900-\u097F]{2,}ों\s*$/u.test(text)) {
     return true;
   }
   const sentenceEnding = /(?:^|\s)(?:है|हैं|था|थी|थे|थीं|होगा|होगी|होंगे|होंगी|रहेगा|रहेगी|किया गया|किया गया है|किया जाएगा|की जाएगी|उपलब्ध कराई जाएगी|बैठक के दौरान लिया|लिया गया)\s*$/u;
@@ -12743,16 +12754,75 @@ function cleanCandidateClause(clause) {
       text = text.replace(pat, dev);
     }
   }
-  const sentenceEndingRegex = /(?:\s+(?:है|हैं|था|थी|थे|थीं|होगा|होगी|होंगे|होंगी|रहेगा|रहेगी|किया गया|किया गया है|किया जाएगा|की जाएगी|उपलब्ध कराई जाएगी|बैठक के दौरान लिया|लिया गया))$/u;
-  const danglingRegex = /(?:\s+(?:और|तथा|एवं|व|या|अथवा|कि|जो|का|की|के|में|पर|से|को|ने|तक|हेतु|लिए|हो|हुए|कर|गया|गई|गए|भी|तो|ही|हुई|जारी|चलते|लेकर|कहा\s+कि|बताया\s+कि))$/u;
+  const sentenceEndingRegex = /(?:\s+(?:है|हैं|था|थी|थे|थीं|होगा|होगी|होंगे|होंगी|रहेगा|रहेगी|किया गया|किया गया है|किया जाएगा|की जाएगी|उपलब्ध कराई जाएगी|बैठक के दौरान लिया|लिया गया|दिए गए|दिया गया|दी गई|किए गए|की गई|भेजे गए|भेजा गया|भेजी गई|बताया गया|कहा गया))$/u;
+  const incompleteVerbRegex = /(?:\s+(?:जारी\s+किए|जारी\s+किया|जारी\s+की|दर्ज\s+किए|दर्ज\s+किया|दर्ज\s+की|शुरू\s+किए|शुरू\s+किया|शुरू\s+की|करने|होने|देने|लेने|लगाने|बनाने|चलाने|भेजने|रखने|करते|होते))$/u;
+  const danglingRegex = /(?:\s+(?:और|तथा|एवं|व|या|अथवा|कि|जो|जिसमें|जिसके|जिससे|जिसका|जिसकी|जिन्हें|जिसे|का|की|के|में|पर|से|को|ने|तक|हेतु|लिए|द्वारा|समेत|साथ|खिलाफ|विरुद्ध|अंतर्गत|तहत|दौरान|अनुसार|हो|होकर|हुए|हुआ|कर|गया|गई|गए|भी|तो|ही|हुई|चलते|लेकर|कहा\s+कि|बताया\s+कि))$/u;
   let prev = "";
   while (text !== prev) {
     prev = text;
     text = text.replace(sentenceEndingRegex, "").trim();
+    text = text.replace(incompleteVerbRegex, "").trim();
     text = text.replace(danglingRegex, "").trim();
     text = text.replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, "").trim();
   }
+  if (hasInvalidHeadlineEnding(text)) {
+    const clauseSeps = [", ", " \u2014 ", " - ", "; ", ": "];
+    for (const sep of clauseSeps) {
+      const idx = text.lastIndexOf(sep);
+      if (idx >= 24) {
+        const prefix = text.substring(0, idx).replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, "").trim();
+        if (prefix.split(/\s+/).filter(Boolean).length >= 5 && !hasInvalidHeadlineEnding(prefix)) {
+          text = prefix;
+          break;
+        }
+      }
+    }
+  }
   return text.replace(/मध्यप्रदेश/g, "\u092E\u0927\u094D\u092F \u092A\u094D\u0930\u0926\u0947\u0936").replace(/उत्तरप्रदेश/g, "\u0909\u0924\u094D\u0924\u0930 \u092A\u094D\u0930\u0926\u0947\u0936").trim();
+}
+function trimHeadlineToCompleteClause(rawHeadline, maxWords = 22, maxChars = 200) {
+  let text = cleanCandidateClause(rawHeadline || "");
+  if (!text) return "";
+  const fitsCleanly = (s) => {
+    if (!s) return false;
+    const words2 = s.split(/\s+/).filter(Boolean);
+    return words2.length <= maxWords && countCharacters(s) <= maxChars && !hasInvalidHeadlineEnding(s);
+  };
+  if (fitsCleanly(text)) return text;
+  const compacted = text.replace(/,\s*(?:पूरे\s+)?मामले\s+में\s+/gu, ", ").replace(/,\s*इस\s+मामले\s+में\s+/gu, ", ").replace(/,\s*घटना\s+के\s+बाद\s+/gu, ", ").replace(/\s{2,}/g, " ").trim();
+  if (compacted !== text && fitsCleanly(compacted)) {
+    return compacted;
+  }
+  const working = compacted.length < text.length ? compacted : text;
+  const clauseDelimiters = [", ", " \u2014 ", " - ", "; ", ": "];
+  let bestClausePrefix = "";
+  for (const sep of clauseDelimiters) {
+    let searchFrom = working.length;
+    while (searchFrom > 0) {
+      const idx = working.lastIndexOf(sep, searchFrom - 1);
+      if (idx < 20) break;
+      const prefix = cleanCandidateClause(working.substring(0, idx));
+      if (fitsCleanly(prefix) && prefix.split(/\s+/).filter(Boolean).length >= 5) {
+        if (countCharacters(prefix) > countCharacters(bestClausePrefix)) {
+          bestClausePrefix = prefix;
+        }
+        break;
+      }
+      searchFrom = idx;
+    }
+  }
+  if (bestClausePrefix) {
+    return bestClausePrefix;
+  }
+  const words = working.split(/\s+/).filter(Boolean);
+  const startLen = Math.min(words.length, maxWords);
+  for (let len = startLen; len >= 5; len--) {
+    const candidate = cleanCandidateClause(words.slice(0, len).join(" "));
+    if (fitsCleanly(candidate) && candidate.split(/\s+/).filter(Boolean).length >= 5) {
+      return candidate;
+    }
+  }
+  return cleanCandidateClause(words.slice(0, Math.min(words.length, maxWords)).join(" "));
 }
 function regenerateHeadlineOptionFromFacts(arg1, arg2, arg3, arg4, arg5, arg6) {
   let optionIndex = 0;
@@ -12846,12 +12916,9 @@ function regenerateHeadlineOptionFromFacts(arg1, arg2, arg3, arg4, arg5, arg6) {
     let candidate = removeRedundantClauses(cleanCandidateClause(ensureCriticalEntities(cand)));
     let charLen = countCharacters(candidate);
     if (charLen > target.max) {
-      const sliced = candidate.substring(0, target.max);
-      const lastSpace = sliced.lastIndexOf(" ");
-      if (lastSpace >= target.min) {
-        candidate = removeRedundantClauses(cleanCandidateClause(sliced.substring(0, lastSpace)));
-        charLen = countCharacters(candidate);
-      } else {
+      candidate = trimHeadlineToCompleteClause(removeRedundantClauses(candidate), 22, target.max);
+      charLen = countCharacters(candidate);
+      if (charLen > target.max || charLen < Math.min(target.min, 35)) {
         continue;
       }
     }
@@ -12871,26 +12938,33 @@ function regenerateHeadlineOptionFromFacts(arg1, arg2, arg3, arg4, arg5, arg6) {
   if (validCandidates.length > 0) {
     return validCandidates[0].text;
   }
-  const opt5Fallback = cleanFacts.length > 1 ? `${cleanBase}: ${cleanFacts[0]}, ${cleanFacts[1]}` : cleanFacts.length === 1 ? `${cleanBase}: ${cleanFacts[0]}, \u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0938\u094D\u0924\u0930 \u092A\u0930 \u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u0938\u092E\u0940\u0915\u094D\u0937\u093E \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u0926\u093F\u090F \u0917\u090F` : loc ? `${loc} \u0938\u0947 \u0935\u093F\u0936\u0947\u0937 \u0915\u0935\u0930\u0947\u091C: ${cleanBase}, \u0915\u094D\u0937\u0947\u0924\u094D\u0930 \u092E\u0947\u0902 \u0938\u0902\u092A\u0942\u0930\u094D\u0923 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0928\u091C\u0930, \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u091C\u093E\u0930\u0940` : `\u092E\u0941\u0916\u094D\u092F \u0915\u0935\u0930\u0947\u091C: ${cleanBase}, \u0915\u094D\u0937\u0947\u0924\u094D\u0930 \u092E\u0947\u0902 \u0938\u0902\u092A\u0942\u0930\u094D\u0923 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u092A\u0930 \u0928\u091C\u0930, \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0926\u094D\u0935\u093E\u0930\u093E \u0906\u0935\u0936\u094D\u092F\u0915 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908 \u091C\u093E\u0930\u0940`;
+  const fact0 = cleanFacts[0] || "";
+  const fact1 = cleanFacts[1] || "";
+  const opt5Fallback = fact0 && fact1 ? `${cleanBase}: ${fact0}` : fact0 ? `${cleanBase}: ${fact0}` : loc ? `${loc} \u0938\u0947 \u092C\u0921\u093C\u0940 \u0916\u092C\u0930: ${cleanBase}, \u091C\u093E\u0902\u091A \u0924\u0947\u091C` : `\u092C\u0921\u093C\u0940 \u0916\u092C\u0930: ${cleanBase}, \u092A\u0942\u0930\u0947 \u092E\u093E\u092E\u0932\u0947 \u0915\u0940 \u091C\u093E\u0902\u091A \u0924\u0947\u091C`;
   const angleVariants = [
     cleanBase,
-    loc ? `${loc} \u092E\u0947\u0902 \u092A\u094D\u0930\u0936\u093E\u0938\u0928 \u0905\u0932\u0930\u094D\u091F, ${cleanBase}` : `\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0905\u0927\u093F\u0915\u093E\u0930\u093F\u092F\u094B\u0902 \u0915\u0947 \u0928\u093F\u0930\u094D\u0926\u0947\u0936 \u091C\u093E\u0930\u0940, ${cleanBase}`,
-    loc ? `${loc} \u0938\u0947 \u092C\u0921\u093C\u093E \u0905\u092A\u0921\u0947\u091F: ${cleanBase}, \u0915\u094D\u0937\u0947\u0924\u094D\u0930 \u092E\u0947\u0902 \u091A\u0930\u094D\u091A\u093E \u0924\u0947\u091C` : `\u092C\u0921\u093C\u093E \u0905\u0938\u0930: ${cleanBase}, \u0932\u094B\u0917\u094B\u0902 \u0915\u093E \u0927\u094D\u092F\u093E\u0928 \u0906\u0915\u0930\u094D\u0937\u093F\u0924`,
-    loc ? `\u0935\u093F\u0936\u0947\u0937 \u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0930\u093F\u092A\u094B\u0930\u094D\u091F: ${loc} \u092E\u0947\u0902 ${cleanBase}` : `\u0935\u093F\u0936\u0947\u0937 \u092A\u0921\u093C\u0924\u093E\u0932: ${cleanBase}, \u091C\u093E\u0928\u093F\u090F \u092A\u0942\u0930\u0947 \u092E\u093E\u092E\u0932\u0947 \u0938\u0947 \u091C\u0941\u0921\u093C\u0947 \u0924\u0925\u094D\u092F`,
-    opt5Fallback
+    loc ? `${loc}: ${cleanBase}` : `\u092C\u0921\u093C\u0940 \u0916\u092C\u0930: ${cleanBase}`,
+    loc ? `${loc} \u092E\u0947\u0902 \u092C\u0921\u093C\u093E \u090F\u0915\u094D\u0936\u0928: ${cleanBase}` : `\u092C\u0921\u093C\u093E \u090F\u0915\u094D\u0936\u0928: ${cleanBase}`,
+    loc ? `${loc} \u0938\u0947 \u092C\u0921\u093C\u093E \u0905\u092A\u0921\u0947\u091F: ${cleanBase}` : `\u092E\u0941\u0916\u094D\u092F \u0905\u092A\u0921\u0947\u091F: ${cleanBase}`,
+    opt5Fallback,
+    loc ? `${loc} \u092E\u0947\u0902 \u0939\u0921\u093C\u0915\u0902\u092A: ${cleanBase}` : `\u092E\u093E\u092E\u0932\u0947 \u092E\u0947\u0902 \u0928\u092F\u093E \u092E\u094B\u0921\u093C: ${cleanBase}`,
+    fact0 ? ensureCriticalEntities(fact0) : `\u0924\u093E\u091C\u093C\u093E \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E: ${cleanBase}`,
+    fact1 ? ensureCriticalEntities(fact1) : loc ? `${loc} \u092E\u0947\u0902 \u091A\u0930\u094D\u091A\u093E \u0924\u0947\u091C: ${cleanBase}` : `\u0935\u093F\u0936\u0947\u0937 \u0930\u093F\u092A\u094B\u0930\u094D\u091F: ${cleanBase}`,
+    loc ? `\u0917\u094D\u0930\u093E\u0909\u0902\u0921 \u0930\u093F\u092A\u094B\u0930\u094D\u091F: ${loc} \u092E\u0947\u0902 ${cleanBase}` : `\u0935\u093F\u0938\u094D\u0924\u0943\u0924 \u092A\u0921\u093C\u0924\u093E\u0932: ${cleanBase}`,
+    loc ? `${loc} \u0915\u0940 \u092A\u094D\u0930\u092E\u0941\u0916 \u0916\u092C\u0930: ${cleanBase}` : `\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930: ${cleanBase}`
   ];
-  let chosen = angleVariants[optionIndex % angleVariants.length] || cleanBase;
+  let chosen = trimHeadlineToCompleteClause(angleVariants[optionIndex % angleVariants.length] || cleanBase, 22, target.max);
   if (loc && !chosen.includes(loc) && optionIndex === 0) {
-    chosen = `${loc}: ${chosen}`;
+    chosen = trimHeadlineToCompleteClause(`${loc}: ${chosen}`, 22, target.max);
   }
-  chosen = cleanCandidateClause(chosen);
   const isChosenDup = existingHeadlines.some((ex) => {
     if (!ex) return false;
     return normalizeText(ex) === normalizeText(chosen) || checkHeadlineSimilarity(ex, chosen) >= 0.85;
   });
-  if (isChosenDup) {
+  if (isChosenDup || hasInvalidHeadlineEnding(chosen)) {
     for (const alt of angleVariants) {
-      const cleanedAlt = cleanCandidateClause(alt);
+      const cleanedAlt = trimHeadlineToCompleteClause(ensureCriticalEntities(alt), 22, target.max);
+      if (!cleanedAlt || hasInvalidHeadlineEnding(cleanedAlt)) continue;
       const isAltDup = existingHeadlines.some((ex) => {
         if (!ex) return false;
         return normalizeText(ex) === normalizeText(cleanedAlt) || checkHeadlineSimilarity(ex, cleanedAlt) >= 0.85;
@@ -12901,12 +12975,8 @@ function regenerateHeadlineOptionFromFacts(arg1, arg2, arg3, arg4, arg5, arg6) {
       }
     }
   }
-  if (countCharacters(chosen) > target.max) {
-    const sliced = chosen.substring(0, target.max);
-    const lastSpace = sliced.lastIndexOf(" ");
-    if (lastSpace > 20) {
-      chosen = cleanCandidateClause(sliced.substring(0, lastSpace));
-    }
+  if (countCharacters(chosen) > target.max || hasInvalidHeadlineEnding(chosen)) {
+    chosen = trimHeadlineToCompleteClause(chosen, 22, target.max);
   }
   return chosen;
 }
@@ -34006,20 +34076,15 @@ function fitHeadlinesTo5TierRanges(headlines, contextOrBase = "", baseOrContext 
     const tier = HEADLINE_TARGETS[i] || { min: 80, max: 200 };
     let cand = workingHeadlines[i] || workingHeadlines[workingHeadlines.length - 1] || baseText || "\u0924\u093E\u091C\u093C\u093E \u0938\u092E\u093E\u091A\u093E\u0930: \u092E\u0939\u0924\u094D\u0935\u092A\u0942\u0930\u094D\u0923 \u0918\u091F\u0928\u093E\u0915\u094D\u0930\u092E \u0914\u0930 \u092A\u094D\u0930\u0936\u093E\u0938\u0928\u093F\u0915 \u0905\u092A\u0921\u0947\u091F";
     cand = removeRedundantClauses(cleanCandidateClause(cand));
-    const charLen = countCharacters(cand);
-    if (charLen > tier.max) {
-      const sliced = cand.substring(0, tier.max);
-      const lastSpace = sliced.lastIndexOf(" ");
-      if (lastSpace >= Math.min(tier.min, 45)) {
-        cand = removeRedundantClauses(cleanCandidateClause(sliced.substring(0, lastSpace)));
-      }
+    if (countCharacters(cand) > tier.max || cand.split(/\s+/).filter(Boolean).length > 22 || hasInvalidHeadlineEnding(cand)) {
+      cand = trimHeadlineToCompleteClause(removeRedundantClauses(cand), 22, tier.max);
     }
     const isDup = !cand || result.includes(cand) || result.some((ex) => checkHeadlineSimilarity(ex, cand) >= 0.85);
     let val = validateHeadline(cand, i, sourcePublisherNames);
     if (isDup || !val.valid) {
       let foundAlt = false;
       for (const alt of workingHeadlines) {
-        const cleanedAlt = removeRedundantClauses(cleanCandidateClause(alt));
+        const cleanedAlt = trimHeadlineToCompleteClause(removeRedundantClauses(cleanCandidateClause(alt)), 22, tier.max);
         if (!cleanedAlt || result.includes(cleanedAlt) || result.some((ex) => checkHeadlineSimilarity(ex, cleanedAlt) >= 0.85)) continue;
         const testVal = validateHeadline(cleanedAlt, i, sourcePublisherNames);
         if (testVal.valid) {
@@ -34031,8 +34096,11 @@ function fitHeadlinesTo5TierRanges(headlines, contextOrBase = "", baseOrContext 
       }
       if (!foundAlt || isDup || !val.valid) {
         cand = regenerateHeadlineOptionFromFacts(i, factsList, baseText, location, result, sourcePublisherNames);
-        cand = removeRedundantClauses(cleanCandidateClause(cand));
+        cand = trimHeadlineToCompleteClause(removeRedundantClauses(cleanCandidateClause(cand)), 22, tier.max);
       }
+    }
+    if (countCharacters(cand) > tier.max || cand.split(/\s+/).filter(Boolean).length > 22 || hasInvalidHeadlineEnding(cand)) {
+      cand = trimHeadlineToCompleteClause(cand, 22, tier.max);
     }
     result.push(cand);
   }
@@ -35328,12 +35396,12 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
     let sourceText = canonicalContext.articleText || canonicalContext.text || canonicalContext.fullNews || canonicalContext.snippet || req.body.input || req.body.summary || "";
     let sourceLoc = cleanLocationField(canonicalContext.location || req.body.location || "");
     let candidateSourceUrl = String(canonicalContext.sourceUrl || req.body.sourceUrl || "").trim();
-    const effectiveSourcePublisherNames = Array.from(/* @__PURE__ */ new Set([
+    const effectiveSourcePublisherNames = Array.from(new Set([
       ...Array.isArray(req.body.sourcePublisherNames) ? req.body.sourcePublisherNames : [],
       ...Array.isArray(canonicalContext.sourcePublisherNames) ? canonicalContext.sourcePublisherNames : [],
       String(req.body.publisherName || canonicalContext.publisherName || "").trim(),
-      ...extractPublisherFromDomain(candidateSourceUrl) ? [extractPublisherFromDomain(candidateSourceUrl)] : []
-    ])).filter(Boolean);
+      ...extractPublisherFromDomain(candidateSourceUrl)
+    ].flat().map((v) => String(v || "").trim()))).filter(Boolean);
     if (!sourceText || sourceText.trim().length < 50) {
       const targetNewsId = draftId || req.body.newsId || canonicalContext.newsId || canonicalContext.sourceNewsId || "";
       try {
@@ -35414,7 +35482,7 @@ Generate exactly 5 BRAND NEW, distinct, balanced headline options of the SAME pr
   * Option 3 (\u0935\u093F\u0915\u0932\u094D\u092A 3): 125\u2013150 characters
   * Option 4 (\u0935\u093F\u0915\u0932\u094D\u092A 4): 130\u2013160 characters
   * Option 5 (\u0935\u093F\u0915\u0932\u094D\u092A 5): 150\u2013200 characters
-- No headline may exceed 200 characters under any circumstance. If the original news is short, keep a shorter accurate headline rather than adding filler.
+- COMPLETE GRAMMATICAL CLOSING (CRITICAL): Every single headline MUST end cleanly as a complete, self-contained Hindi newspaper headline (12 to 21 words max, strictly <= 22 words). NEVER end mid-sentence, NEVER end on an incomplete verb participle like '\u0915\u094B \u091C\u093E\u0930\u0940 \u0915\u093F\u090F' (missing '\u0928\u094B\u091F\u093F\u0938'), NEVER end on a dangling oblique noun like '...10 \u092B\u0930\u094D\u091C\u0940 \u0915\u093F\u0938\u093E\u0928\u094B\u0902' (missing '\u0915\u094B \u0928\u094B\u091F\u093F\u0938' or '\u092A\u0930 \u0915\u093E\u0930\u094D\u0930\u0935\u093E\u0908'), and NEVER end with postpositions/conjunctions ('\u092E\u0947\u0902', '\u092A\u0930', '\u0915\u094B', '\u0915\u0947', '\u0915\u0940', '\u0915\u093E', '\u0938\u0947', '\u0914\u0930', '\u091C\u093F\u0938\u092E\u0947\u0902').
 - No ending punctuation (. or \u0964 or ?). No tier labels or bracketed counts like '[85/100]'.
 - Pure Devanagari Hindi only \u2014 NEVER omit or strip compulsory English acronyms, investigating agencies, posts, or core terms from the source story; always transliterate them into Devanagari Hindi (e.g. EOW -> \u0908\u0913\u0921\u092C\u094D\u0932\u094D\u092F\u0942, CBI -> \u0938\u0940\u092C\u0940\u0906\u0908, ED -> \u0908\u0921\u0940, ACB -> \u090F\u0938\u0940\u092C\u0940, Lokayukta -> \u0932\u094B\u0915\u093E\u092F\u0941\u0915\u094D\u0924, NIA -> \u090F\u0928\u0906\u0908\u090F, SIT -> \u090F\u0938\u0906\u0908\u091F\u0940, FIR -> \u090F\u092B\u0906\u0908\u0906\u0930, SDM -> \u090F\u0938\u0921\u0940\u090F\u092E, DSP -> \u0921\u0940\u090F\u0938\u092A\u0940, Collector -> \u0915\u0932\u0947\u0915\u094D\u091F\u0930) and preserve them across ALL 5 headline options.
 Return valid JSON: { "headlineOptions": ["...", "...", "...", "...", "..."] }`;
@@ -35498,49 +35566,80 @@ JSON Output Schema:
         aiGeneratedOptions = await tryOpenAI();
         actualProvider = "openai";
       } catch (openAiErr) {
-        if (draftId && lockId && centralDb) {
-          await centralDb.releaseDraftRegenerationLock(draftId, lockId);
+        console.warn("[/api/regenerate-headlines] OpenAI error, attempting Gemini/fact fallback:", openAiErr?.message || openAiErr);
+        try {
+          aiGeneratedOptions = await tryGemini();
+          actualProvider = "gemini";
+        } catch (fallbackGeminiErr) {
+          console.warn("[/api/regenerate-headlines] Gemini fallback also unavailable, using verified fact-sheet synthesis:", fallbackGeminiErr?.message || fallbackGeminiErr);
+          if (!sourceTitle && articleSentences.length === 0) {
+            if (draftId && lockId && centralDb) {
+              await centralDb.releaseDraftRegenerationLock(draftId, lockId);
+            }
+            if (draftId && rejectInFlight) {
+              rejectInFlight(openAiErr);
+            }
+            return res.status(502).json({
+              success: false,
+              error: `ChatGPT (OpenAI) \u0938\u0947 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092A\u0941\u0928\u0930\u094D\u091C\u0928\u0928 \u092E\u0947\u0902 \u0924\u094D\u0930\u0941\u091F\u093F: ${openAiErr?.message || "\u0938\u0947\u0935\u093E \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927"}\u0964 \u0915\u0943\u092A\u092F\u093E \u091C\u0947\u092E\u093F\u0928\u0940 \u090F\u0906\u0908 \u091A\u0941\u0928\u0947\u0902 \u092F\u093E \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964`
+            });
+          }
         }
-        if (draftId && rejectInFlight) {
-          rejectInFlight(openAiErr);
-        }
-        return res.status(502).json({
-          success: false,
-          error: `ChatGPT (OpenAI) \u0938\u0947 \u0939\u0947\u0921\u0932\u093E\u0907\u0928 \u092A\u0941\u0928\u0930\u094D\u091C\u0928\u0928 \u092E\u0947\u0902 \u0924\u094D\u0930\u0941\u091F\u093F: ${openAiErr?.message || "\u0938\u0947\u0935\u093E \u0905\u0928\u0941\u092A\u0932\u092C\u094D\u0927"}\u0964 \u0915\u0943\u092A\u092F\u093E \u091C\u0947\u092E\u093F\u0928\u0940 \u090F\u0906\u0908 \u091A\u0941\u0928\u0947\u0902 \u092F\u093E \u092A\u0941\u0928\u0903 \u092A\u094D\u0930\u092F\u093E\u0938 \u0915\u0930\u0947\u0902\u0964`
-        });
       }
     } else {
       try {
         aiGeneratedOptions = await tryGemini();
         actualProvider = "gemini";
       } catch (geminiErr) {
-        if (draftId && lockId && centralDb) {
-          await centralDb.releaseDraftRegenerationLock(draftId, lockId);
+        console.warn("[/api/regenerate-headlines] Gemini pool error, checking verified fact-sheet synthesis fallback:", geminiErr?.message || geminiErr);
+        if (!sourceTitle && articleSentences.length === 0) {
+          if (draftId && lockId && centralDb) {
+            await centralDb.releaseDraftRegenerationLock(draftId, lockId);
+          }
+          if (draftId && rejectInFlight) {
+            rejectInFlight(geminiErr);
+          }
+          const mapped = mapAiPoolErrorToUserResponse(geminiErr);
+          return res.status(mapped.status).json({
+            success: false,
+            code: mapped.errorCode,
+            errorCode: mapped.errorCode,
+            error: mapped.error
+          });
         }
-        if (draftId && rejectInFlight) {
-          rejectInFlight(geminiErr);
-        }
-        const mapped = mapAiPoolErrorToUserResponse(geminiErr);
-        return res.status(mapped.status).json({
-          success: false,
-          code: mapped.errorCode,
-          errorCode: mapped.errorCode,
-          error: mapped.error
-        });
       }
     }
     if (Array.isArray(aiGeneratedOptions)) {
       aiGeneratedOptions.forEach((h) => addOptionIfValid(h));
     }
+    const verifiedFactSentences = articleSentences.length > 0 ? articleSentences : [sourceTitle, sourceText].filter(Boolean);
     if (cleanOptions.length < 5) {
       const balanced = generate5BalancedHeadlineOptions(
         sourceTitle || cleanOptions[0] || "",
-        articleSentences,
+        verifiedFactSentences,
         sourceLoc
       );
       for (const b of balanced) {
         if (cleanOptions.length >= 5) break;
         addOptionIfValid(b);
+      }
+    }
+    if (cleanOptions.length < 5) {
+      for (let idx = cleanOptions.length; idx < 5; idx++) {
+        const synth = regenerateHeadlineOptionFromFacts(
+          idx,
+          verifiedFactSentences,
+          sourceTitle || cleanOptions[0] || "",
+          sourceLoc,
+          [...excludeTitles, ...cleanOptions],
+          effectiveSourcePublisherNames
+        );
+        if (synth) {
+          const cleanSynth = trimHeadlineToCompleteClause(removeRedundantClauses(cleanCandidateClause(synth)), 22, (HEADLINE_TARGETS[idx] || { max: 200 }).max);
+          if (cleanSynth && !cleanOptions.includes(cleanSynth)) {
+            cleanOptions.push(cleanSynth);
+          }
+        }
       }
     }
     if (cleanOptions.length === 0) {
@@ -35556,22 +35655,21 @@ JSON Output Schema:
     }
     const fittedOptions = fitHeadlinesTo5TierRanges(
       cleanOptions,
-      articleSentences,
+      verifiedFactSentences,
       sourceTitle || cleanOptions[0] || "",
       sourceLoc,
       effectiveSourcePublisherNames
     );
     let validatedRegenBatch = validateHeadlinesBatch(fittedOptions, effectiveSourcePublisherNames);
     const verifiedRegenHeadlines = Array.isArray(validatedRegenBatch?.sanitizedHeadlines) ? [...validatedRegenBatch.sanitizedHeadlines] : [...fittedOptions];
-    const verifiedFactSentences = articleSentences.length > 0 ? articleSentences : [sourceTitle, sourceText].filter(Boolean);
     for (let i = 0; i < HEADLINE_TARGETS.length; i++) {
-      const res2 = validatedRegenBatch?.results ? validatedRegenBatch.results[i] : null;
-      let needsRegen = !res2 || !res2.valid;
+      const resItem = validatedRegenBatch?.results ? validatedRegenBatch.results[i] : null;
+      let needsRegen = !resItem || !resItem.valid || hasInvalidHeadlineEnding(verifiedRegenHeadlines[i] || "");
       if (!needsRegen && rawPrev.some((prevH) => checkHeadlineSimilarity(verifiedRegenHeadlines[i], String(prevH)) >= 0.85)) {
         needsRegen = true;
       }
       if (needsRegen) {
-        const existing = verifiedRegenHeadlines.filter((_h, idx) => idx !== i);
+        const existing = [...rawPrev, ...verifiedRegenHeadlines.filter((_h, idx) => idx !== i)];
         const regenerated = regenerateHeadlineOptionFromFacts(
           i,
           verifiedFactSentences,
@@ -35581,8 +35679,18 @@ JSON Output Schema:
           effectiveSourcePublisherNames
         );
         if (regenerated) {
-          verifiedRegenHeadlines[i] = removeRedundantClauses(cleanCandidateClause(regenerated));
+          verifiedRegenHeadlines[i] = trimHeadlineToCompleteClause(
+            removeRedundantClauses(cleanCandidateClause(regenerated)),
+            22,
+            (HEADLINE_TARGETS[i] || { max: 200 }).max
+          );
         }
+      } else {
+        verifiedRegenHeadlines[i] = trimHeadlineToCompleteClause(
+          removeRedundantClauses(cleanCandidateClause(verifiedRegenHeadlines[i] || "")),
+          22,
+          (HEADLINE_TARGETS[i] || { max: 200 }).max
+        );
       }
     }
     validatedRegenBatch = validateHeadlinesBatch(verifiedRegenHeadlines, effectiveSourcePublisherNames);
@@ -40426,6 +40534,7 @@ if (process.env.NO_SERVER_START !== "true") {
   stripLeadingEnglishProseSentence,
   stripNewspaperBylines,
   transliterateEssentialEnglishTerms,
+  trimHeadlineToCompleteClause,
   validateGeneralHeadline,
   validateHeadline,
   validateHeadlineOption,

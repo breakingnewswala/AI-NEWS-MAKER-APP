@@ -46,6 +46,7 @@ import {
   extractPublisherFromDomain,
   cleanCandidateClause,
   removeRedundantClauses,
+  trimHeadlineToCompleteClause,
 } from "./src/lib/headlineValidator";
 
 export {
@@ -73,6 +74,7 @@ export {
   extractPublisherFromDomain,
   cleanCandidateClause,
   removeRedundantClauses,
+  trimHeadlineToCompleteClause,
 };
 
 const safeFilename = typeof __filename !== 'undefined' ? __filename : process.cwd();
@@ -25314,14 +25316,9 @@ export function fitHeadlinesTo5TierRanges(
     let cand = workingHeadlines[i] || workingHeadlines[workingHeadlines.length - 1] || baseText || 'ताज़ा समाचार: महत्वपूर्ण घटनाक्रम और प्रशासनिक अपडेट';
     cand = removeRedundantClauses(cleanCandidateClause(cand));
 
-    // Truncate cleanly at word boundary if it exceeds tier.max or 200
-    const charLen = countCharacters(cand);
-    if (charLen > tier.max) {
-      const sliced = cand.substring(0, tier.max);
-      const lastSpace = sliced.lastIndexOf(' ');
-      if (lastSpace >= Math.min(tier.min, 45)) {
-        cand = removeRedundantClauses(cleanCandidateClause(sliced.substring(0, lastSpace)));
-      }
+    // Trim cleanly at complete grammatical boundary if it exceeds tier.max, 22 words, or has an invalid ending
+    if (countCharacters(cand) > tier.max || cand.split(/\s+/).filter(Boolean).length > 22 || hasInvalidHeadlineEnding(cand)) {
+      cand = trimHeadlineToCompleteClause(removeRedundantClauses(cand), 22, tier.max);
     }
 
     // Check if duplicate of an existing item in result or invalid
@@ -25331,7 +25328,7 @@ export function fitHeadlinesTo5TierRanges(
     if (isDup || !val.valid) {
       let foundAlt = false;
       for (const alt of workingHeadlines) {
-        const cleanedAlt = removeRedundantClauses(cleanCandidateClause(alt));
+        const cleanedAlt = trimHeadlineToCompleteClause(removeRedundantClauses(cleanCandidateClause(alt)), 22, tier.max);
         if (!cleanedAlt || result.includes(cleanedAlt) || result.some((ex) => checkHeadlineSimilarity(ex, cleanedAlt) >= 0.85)) continue;
         const testVal = validateHeadline(cleanedAlt, i, sourcePublisherNames);
         if (testVal.valid) {
@@ -25344,8 +25341,13 @@ export function fitHeadlinesTo5TierRanges(
 
       if (!foundAlt || isDup || !val.valid) {
         cand = regenerateHeadlineOptionFromFacts(i, factsList, baseText, location, result, sourcePublisherNames);
-        cand = removeRedundantClauses(cleanCandidateClause(cand));
+        cand = trimHeadlineToCompleteClause(removeRedundantClauses(cleanCandidateClause(cand)), 22, tier.max);
       }
+    }
+
+    // Final guarantee: complete journalistic closing and within 22 words & tier.max
+    if (countCharacters(cand) > tier.max || cand.split(/\s+/).filter(Boolean).length > 22 || hasInvalidHeadlineEnding(cand)) {
+      cand = trimHeadlineToCompleteClause(cand, 22, tier.max);
     }
 
     result.push(cand);
@@ -26887,8 +26889,8 @@ app.post("/api/regenerate-headlines", enforceUserAccessMiddleware, async (req, r
       ...(Array.isArray(req.body.sourcePublisherNames) ? req.body.sourcePublisherNames : []),
       ...(Array.isArray(canonicalContext.sourcePublisherNames) ? canonicalContext.sourcePublisherNames : []),
       String(req.body.publisherName || canonicalContext.publisherName || "").trim(),
-      ...(extractPublisherFromDomain(candidateSourceUrl) ? [extractPublisherFromDomain(candidateSourceUrl)] : []),
-    ])).filter(Boolean);
+      ...extractPublisherFromDomain(candidateSourceUrl),
+    ].flat().map((v: any) => String(v || "").trim()))).filter(Boolean);
 
     // Enhanced context retrieval fallback for pre-published and normal news
     if (!sourceText || sourceText.trim().length < 50) {
@@ -26984,7 +26986,7 @@ Generate exactly 5 BRAND NEW, distinct, balanced headline options of the SAME pr
   * Option 3 (विकल्प 3): 125–150 characters
   * Option 4 (विकल्प 4): 130–160 characters
   * Option 5 (विकल्प 5): 150–200 characters
-- No headline may exceed 200 characters under any circumstance. If the original news is short, keep a shorter accurate headline rather than adding filler.
+- COMPLETE GRAMMATICAL CLOSING (CRITICAL): Every single headline MUST end cleanly as a complete, self-contained Hindi newspaper headline (12 to 21 words max, strictly <= 22 words). NEVER end mid-sentence, NEVER end on an incomplete verb participle like 'को जारी किए' (missing 'नोटिस'), NEVER end on a dangling oblique noun like '...10 फर्जी किसानों' (missing 'को नोटिस' or 'पर कार्रवाई'), and NEVER end with postpositions/conjunctions ('में', 'पर', 'को', 'के', 'की', 'का', 'से', 'और', 'जिसमें').
 - No ending punctuation (. or । or ?). No tier labels or bracketed counts like '[85/100]'.
 - Pure Devanagari Hindi only — NEVER omit or strip compulsory English acronyms, investigating agencies, posts, or core terms from the source story; always transliterate them into Devanagari Hindi (e.g. EOW -> ईओडब्ल्यू, CBI -> सीबीआई, ED -> ईडी, ACB -> एसीबी, Lokayukta -> लोकायुक्त, NIA -> एनआईए, SIT -> एसआईटी, FIR -> एफआईआर, SDM -> एसडीएम, DSP -> डीएसपी, Collector -> कलेक्टर) and preserve them across ALL 5 headline options.
 Return valid JSON: { "headlineOptions": ["...", "...", "...", "...", "..."] }`;
@@ -27070,35 +27072,47 @@ JSON Output Schema:
         aiGeneratedOptions = await tryOpenAI();
         actualProvider = "openai";
       } catch (openAiErr: any) {
-        if (draftId && lockId && centralDb) {
-          await centralDb.releaseDraftRegenerationLock(draftId, lockId);
+        console.warn("[/api/regenerate-headlines] OpenAI error, attempting Gemini/fact fallback:", openAiErr?.message || openAiErr);
+        try {
+          aiGeneratedOptions = await tryGemini();
+          actualProvider = "gemini";
+        } catch (fallbackGeminiErr: any) {
+          console.warn("[/api/regenerate-headlines] Gemini fallback also unavailable, using verified fact-sheet synthesis:", fallbackGeminiErr?.message || fallbackGeminiErr);
+          if (!sourceTitle && articleSentences.length === 0) {
+            if (draftId && lockId && centralDb) {
+              await centralDb.releaseDraftRegenerationLock(draftId, lockId);
+            }
+            if (draftId && rejectInFlight) {
+              (rejectInFlight as any)(openAiErr);
+            }
+            return res.status(502).json({
+              success: false,
+              error: `ChatGPT (OpenAI) से हेडलाइन पुनर्जनन में त्रुटि: ${openAiErr?.message || "सेवा अनुपलब्ध"}। कृपया जेमिनी एआई चुनें या पुनः प्रयास करें।`,
+            });
+          }
         }
-        if (draftId && rejectInFlight) {
-          (rejectInFlight as any)(openAiErr);
-        }
-        return res.status(502).json({
-          success: false,
-          error: `ChatGPT (OpenAI) से हेडलाइन पुनर्जनन में त्रुटि: ${openAiErr?.message || "सेवा अनुपलब्ध"}। कृपया जेमिनी एआई चुनें या पुनः प्रयास करें।`,
-        });
       }
     } else {
       try {
         aiGeneratedOptions = await tryGemini();
         actualProvider = "gemini";
       } catch (geminiErr: any) {
-        if (draftId && lockId && centralDb) {
-          await centralDb.releaseDraftRegenerationLock(draftId, lockId);
+        console.warn("[/api/regenerate-headlines] Gemini pool error, checking verified fact-sheet synthesis fallback:", geminiErr?.message || geminiErr);
+        if (!sourceTitle && articleSentences.length === 0) {
+          if (draftId && lockId && centralDb) {
+            await centralDb.releaseDraftRegenerationLock(draftId, lockId);
+          }
+          if (draftId && rejectInFlight) {
+            (rejectInFlight as any)(geminiErr);
+          }
+          const mapped = mapAiPoolErrorToUserResponse(geminiErr);
+          return res.status(mapped.status).json({
+            success: false,
+            code: mapped.errorCode,
+            errorCode: mapped.errorCode,
+            error: mapped.error,
+          });
         }
-        if (draftId && rejectInFlight) {
-          (rejectInFlight as any)(geminiErr);
-        }
-        const mapped = mapAiPoolErrorToUserResponse(geminiErr);
-        return res.status(mapped.status).json({
-          success: false,
-          code: mapped.errorCode,
-          errorCode: mapped.errorCode,
-          error: mapped.error,
-        });
       }
     }
 
@@ -27106,15 +27120,39 @@ JSON Output Schema:
       aiGeneratedOptions.forEach((h) => addOptionIfValid(h));
     }
 
+    // Verified fact-sheet distinct synthesis when AI returned fewer than 5 unique options or temporarily timed out
+    const verifiedFactSentences = articleSentences.length > 0
+      ? articleSentences
+      : [sourceTitle, sourceText].filter(Boolean);
+
     if (cleanOptions.length < 5) {
       const balanced = generate5BalancedHeadlineOptions(
         sourceTitle || cleanOptions[0] || "",
-        articleSentences,
+        verifiedFactSentences,
         sourceLoc
       );
       for (const b of balanced) {
         if (cleanOptions.length >= 5) break;
         addOptionIfValid(b);
+      }
+    }
+
+    if (cleanOptions.length < 5) {
+      for (let idx = cleanOptions.length; idx < 5; idx++) {
+        const synth = regenerateHeadlineOptionFromFacts(
+          idx,
+          verifiedFactSentences,
+          sourceTitle || cleanOptions[0] || "",
+          sourceLoc,
+          [...excludeTitles, ...cleanOptions],
+          effectiveSourcePublisherNames
+        );
+        if (synth) {
+          const cleanSynth = trimHeadlineToCompleteClause(removeRedundantClauses(cleanCandidateClause(synth)), 22, (HEADLINE_TARGETS[idx] || { max: 200 }).max);
+          if (cleanSynth && !cleanOptions.includes(cleanSynth)) {
+            cleanOptions.push(cleanSynth);
+          }
+        }
       }
     }
 
@@ -27132,7 +27170,7 @@ JSON Output Schema:
 
     const fittedOptions = fitHeadlinesTo5TierRanges(
       cleanOptions,
-      articleSentences,
+      verifiedFactSentences,
       sourceTitle || cleanOptions[0] || "",
       sourceLoc,
       effectiveSourcePublisherNames
@@ -27145,19 +27183,15 @@ JSON Output Schema:
       : [...fittedOptions];
 
     // For any tier that failed validation or is a duplicate against previous or current batch, regenerate from verified facts
-    const verifiedFactSentences = articleSentences.length > 0
-      ? articleSentences
-      : [sourceTitle, sourceText].filter(Boolean);
-
     for (let i = 0; i < HEADLINE_TARGETS.length; i++) {
-      const res = validatedRegenBatch?.results ? validatedRegenBatch.results[i] : null;
-      let needsRegen = !res || !res.valid;
+      const resItem = validatedRegenBatch?.results ? validatedRegenBatch.results[i] : null;
+      let needsRegen = !resItem || !resItem.valid || hasInvalidHeadlineEnding(verifiedRegenHeadlines[i] || "");
       if (!needsRegen && rawPrev.some((prevH: string) => checkHeadlineSimilarity(verifiedRegenHeadlines[i], String(prevH)) >= 0.85)) {
         needsRegen = true;
       }
 
       if (needsRegen) {
-        const existing = verifiedRegenHeadlines.filter((_h: string, idx: number) => idx !== i);
+        const existing = [...rawPrev, ...verifiedRegenHeadlines.filter((_h: string, idx: number) => idx !== i)];
         const regenerated = regenerateHeadlineOptionFromFacts(
           i,
           verifiedFactSentences,
@@ -27167,8 +27201,18 @@ JSON Output Schema:
           effectiveSourcePublisherNames
         );
         if (regenerated) {
-          verifiedRegenHeadlines[i] = removeRedundantClauses(cleanCandidateClause(regenerated));
+          verifiedRegenHeadlines[i] = trimHeadlineToCompleteClause(
+            removeRedundantClauses(cleanCandidateClause(regenerated)),
+            22,
+            (HEADLINE_TARGETS[i] || { max: 200 }).max
+          );
         }
+      } else {
+        verifiedRegenHeadlines[i] = trimHeadlineToCompleteClause(
+          removeRedundantClauses(cleanCandidateClause(verifiedRegenHeadlines[i] || "")),
+          22,
+          (HEADLINE_TARGETS[i] || { max: 200 }).max
+        );
       }
     }
 

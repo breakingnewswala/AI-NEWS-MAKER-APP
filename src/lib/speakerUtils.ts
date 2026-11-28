@@ -15,6 +15,7 @@ import {
   extractPublisherFromDomain,
   cleanCandidateClause,
   removeRedundantClauses,
+  trimHeadlineToCompleteClause,
 } from './headlineValidator';
 
 export {
@@ -32,6 +33,7 @@ export {
   extractPublisherFromDomain,
   cleanCandidateClause,
   removeRedundantClauses,
+  trimHeadlineToCompleteClause,
 };
 
 /**
@@ -2203,24 +2205,9 @@ export function fitHeadlinesTo5TierRanges(
     let cand = workingHeadlines[i] || workingHeadlines[workingHeadlines.length - 1] || baseText || '';
     cand = removeRedundantClauses(cleanCandidateClause(cand));
 
-    // Enforce tier-specific maximum bounds (up to tier.max characters, absolute maximum 200 characters)
-    const charLenInitial = countCharacters(cand);
-    if (charLenInitial > tier.max) {
-      const sliced = cand.substring(0, tier.max);
-      const lastSpace = sliced.lastIndexOf(' ');
-      if (lastSpace >= Math.min(tier.min, 45)) {
-        cand = removeRedundantClauses(cleanCandidateClause(sliced.substring(0, lastSpace)));
-      }
-    }
-
-    // Truncate cleanly at word boundary if it exceeds tier.max
-    const charLen = countCharacters(cand);
-    if (charLen > tier.max) {
-      const sliced = cand.substring(0, tier.max);
-      const lastSpace = sliced.lastIndexOf(' ');
-      if (lastSpace >= Math.min(tier.min, 45)) {
-        cand = removeRedundantClauses(cleanCandidateClause(sliced.substring(0, lastSpace)));
-      }
+    // Enforce tier-specific maximum bounds cleanly at complete grammatical boundaries (never slice mid-phrase)
+    if (countCharacters(cand) > tier.max || cand.split(/\s+/).filter(Boolean).length > 22 || hasInvalidHeadlineEnding(cand)) {
+      cand = trimHeadlineToCompleteClause(removeRedundantClauses(cand), 22, tier.max);
     }
 
     // Check if cand is duplicate of an existing item in result
@@ -2230,7 +2217,7 @@ export function fitHeadlinesTo5TierRanges(
     if (isDup || !val.valid) {
       let foundAlt = false;
       for (const alt of workingHeadlines) {
-        const cleanedAlt = removeRedundantClauses(cleanCandidateClause(alt));
+        const cleanedAlt = trimHeadlineToCompleteClause(removeRedundantClauses(cleanCandidateClause(alt)), 22, tier.max);
         if (!cleanedAlt || result.includes(cleanedAlt) || result.some((ex) => checkHeadlineSimilarity(ex, cleanedAlt) >= 0.85)) continue;
         const testVal = validateHeadline(cleanedAlt, i, sourcePublisherNames);
         if (testVal.valid) {
@@ -2243,23 +2230,22 @@ export function fitHeadlinesTo5TierRanges(
 
       if (!foundAlt || isDup || !val.valid) {
         cand = regenerateHeadlineOptionFromFacts(i, factsList, baseText, location, result, sourcePublisherNames);
-        cand = removeRedundantClauses(cleanCandidateClause(cand));
+        cand = trimHeadlineToCompleteClause(removeRedundantClauses(cleanCandidateClause(cand)), 22, tier.max);
       }
     }
 
     // Clean formatting and state spaces
-    cand = removeRedundantClauses(cleanCandidateClause(cand));
+    cand = trimHeadlineToCompleteClause(removeRedundantClauses(cleanCandidateClause(cand)), 22, tier.max);
 
     // Guarantee that cand is strictly distinct from anything already in result
     if (!cand || result.includes(cand) || result.some((ex) => checkHeadlineSimilarity(ex, cand) >= 0.85)) {
       cand = diversifyHeadlineToTier(baseText, i, tier, location, result);
-      cand = removeRedundantClauses(cleanCandidateClause(cand));
+      cand = trimHeadlineToCompleteClause(removeRedundantClauses(cleanCandidateClause(cand)), 22, tier.max);
     }
 
-    // Enforce BREAKING NEWS WALA Editorial Standard: strictly <= 22 words per headline
-    const candWords = cand.split(/\s+/).filter(Boolean);
-    if (candWords.length > 22) {
-      cand = stripDanglingHeadlineEndings(candWords.slice(0, 22).join(' '));
+    // Final guarantee: <= 22 words, <= tier.max chars, and NEVER a broken/dangling ending
+    if (cand.split(/\s+/).filter(Boolean).length > 22 || countCharacters(cand) > tier.max || hasInvalidHeadlineEnding(cand)) {
+      cand = trimHeadlineToCompleteClause(cand, 22, tier.max);
     }
 
     result.push(cand);
@@ -2307,20 +2293,12 @@ export function generate5BalancedHeadlineOptions(
 
   const uniqueOptions: string[] = [];
 
-  const clampToEditorialBounds = (text: string, targetMaxWords: number = 32, maxChars: number = 200): string => {
-    let clean = sanitizeHeadlineClean(text);
+  const clampToEditorialBounds = (text: string, targetMaxWords: number = 22, maxChars: number = 125): string => {
+    const clean = sanitizeHeadlineClean(text);
     if (!clean) return '';
-    clean = clean.replace(/[।\.\,\!\?\:\-–—;;\s]+$/g, '').trim();
-    const words = clean.split(/\s+/).filter(Boolean);
-    if (words.length > targetMaxWords) {
-      const sliced = words.slice(0, targetMaxWords).join(' ');
-      clean = stripDanglingHeadlineEndings(sliced);
-    }
-    const chars = countHeadlineVisibleCharacters(clean);
-    if (chars > maxChars) {
-      clean = stripDanglingHeadlineEndings(clean.substring(0, maxChars - 5).replace(/\s+[^\s]*$/, ''));
-    }
-    return clean;
+    const effectiveWords = Math.min(targetMaxWords, 22);
+    const effectiveChars = Math.min(maxChars, 125);
+    return trimHeadlineToCompleteClause(clean, effectiveWords, effectiveChars);
   };
 
   const addOptionIfDistinct = (cand: string, threshold: number = 0.88, maxWords: number = 32, maxChars: number = 200) => {

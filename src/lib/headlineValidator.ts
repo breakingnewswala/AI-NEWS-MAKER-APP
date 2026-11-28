@@ -141,8 +141,28 @@ export function hasInvalidHeadlineEnding(headline: string): boolean {
     return true;
   }
 
-  // Reject dangling relative conjunctions / particles at the end
-  if (/(?:^|\s)(?:जिसमें|जिसके|जिससे|जिसका|जिसकी|तथा|एवं|और|कि|लेकिन|मगर|किंतु|परंतु)\s*$/u.test(text)) {
+  // Reject dangling conjunctions, postpositions, prepositions, and particles at the end
+  if (
+    /(?:^|\s)(?:जिसमें|जिसके|जिससे|जिसका|जिसकी|जिन्हें|जिसे|तथा|एवं|और|व|कि|लेकिन|मगर|किंतु|परंतु|जबकि|क्योंकि|को|के|की|का|में|पर|से|ने|तक|लिए|हेतु|द्वारा|समेत|साथ|खिलाफ|विरुद्ध|लेकर|चलते|अंतर्गत|तहत|दौरान|अनुसार|कर|होकर|हुए|हुई|हुआ|भी|तो|ही)\s*$/u.test(
+      text
+    )
+  ) {
+    return true;
+  }
+
+  // Reject incomplete pre-object verb participles / cut-off action phrases
+  // (e.g. "10 फर्जी किसानों को जारी किए" missing "नोटिस", or "करने", "होने", "दिए गए")
+  if (
+    /(?:^|\s)(?:(?:को|ने|में|पर|से)\s+(?:जारी\s+किए|जारी\s+किया|जारी\s+की|दिए|दिया|किए|किया|भेजे|भेजा|दर्ज\s+किए|दर्ज\s+किया|दर्ज\s+की|शुरू\s+किए|शुरू\s+किया|शुरू\s+की)|जारी\s+किए|जारी\s+किया|जारी\s+की|दिए\s+गए|दिया\s+गया|दी\s+गई|किए\s+गए|की\s+गई|भेजे\s+गए|भेजा\s+गया|भेजी\s+गई|बनाए\s+गए|बनाया\s+गया|रखे\s+गए|रखा\s+गया|बताया\s+गया|कहा\s+गया|करने|होने|देने|लेने|लगाने|बनाने|चलाने|भेजने|रखने|करते|होते)\s*$/u.test(
+      text
+    )
+  ) {
+    return true;
+  }
+
+  // Reject dangling oblique-case plural noun at the end (e.g. "...ईओडब्ल्यू के छापे में 10 फर्जी किसानों")
+  // In Hindi grammar, oblique plural nouns ending in 'ों' require a following postposition + action/predicate.
+  if (/(?:^|\s)(?!(?:सरसों|परसों|बरसों)\s*$)[\u0900-\u097F]{2,}ों\s*$/u.test(text)) {
     return true;
   }
 
@@ -520,24 +540,114 @@ export function cleanCandidateClause(clause: string): string {
 
   // Strip explanatory verb endings if present at the end of the clause
   const sentenceEndingRegex =
-    /(?:\s+(?:है|हैं|था|थी|थे|थीं|होगा|होगी|होंगे|होंगी|रहेगा|रहेगी|किया गया|किया गया है|किया जाएगा|की जाएगी|उपलब्ध कराई जाएगी|बैठक के दौरान लिया|लिया गया))$/u;
+    /(?:\s+(?:है|हैं|था|थी|थे|थीं|होगा|होगी|होंगे|होंगी|रहेगा|रहेगी|किया गया|किया गया है|किया जाएगा|की जाएगी|उपलब्ध कराई जाएगी|बैठक के दौरान लिया|लिया गया|दिए गए|दिया गया|दी गई|किए गए|की गई|भेजे गए|भेजा गया|भेजी गई|बताया गया|कहा गया))$/u;
+
+  // Strip incomplete pre-object verb fragments (e.g. "...को जारी किए" where object noun was chopped)
+  const incompleteVerbRegex =
+    /(?:\s+(?:जारी\s+किए|जारी\s+किया|जारी\s+की|दर्ज\s+किए|दर्ज\s+किया|दर्ज\s+की|शुरू\s+किए|शुरू\s+किया|शुरू\s+की|करने|होने|देने|लेने|लगाने|बनाने|चलाने|भेजने|रखने|करते|होते))$/u;
 
   // Strip dangling postpositions at the end
   const danglingRegex =
-    /(?:\s+(?:और|तथा|एवं|व|या|अथवा|कि|जो|का|की|के|में|पर|से|को|ने|तक|हेतु|लिए|हो|हुए|कर|गया|गई|गए|भी|तो|ही|हुई|जारी|चलते|लेकर|कहा\s+कि|बताया\s+कि))$/u;
+    /(?:\s+(?:और|तथा|एवं|व|या|अथवा|कि|जो|जिसमें|जिसके|जिससे|जिसका|जिसकी|जिन्हें|जिसे|का|की|के|में|पर|से|को|ने|तक|हेतु|लिए|द्वारा|समेत|साथ|खिलाफ|विरुद्ध|अंतर्गत|तहत|दौरान|अनुसार|हो|होकर|हुए|हुआ|कर|गया|गई|गए|भी|तो|ही|हुई|चलते|लेकर|कहा\s+कि|बताया\s+कि))$/u;
 
   let prev = "";
   while (text !== prev) {
     prev = text;
     text = text.replace(sentenceEndingRegex, "").trim();
+    text = text.replace(incompleteVerbRegex, "").trim();
     text = text.replace(danglingRegex, "").trim();
     text = text.replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, "").trim();
+  }
+
+  // If the trailing clause after a comma/colon still ends in an incomplete phrase or oblique plural (e.g. "...10 फर्जी किसानों"),
+  // trim back cleanly to the preceding complete clause so the headline never ends mid-thought.
+  if (hasInvalidHeadlineEnding(text)) {
+    const clauseSeps = [", ", " — ", " - ", "; ", ": "];
+    for (const sep of clauseSeps) {
+      const idx = text.lastIndexOf(sep);
+      if (idx >= 24) {
+        const prefix = text.substring(0, idx).replace(/[।\.\,\!\?\:\-–—;;\s"”'’]+$/g, "").trim();
+        if (prefix.split(/\s+/).filter(Boolean).length >= 5 && !hasInvalidHeadlineEnding(prefix)) {
+          text = prefix;
+          break;
+        }
+      }
+    }
   }
 
   return text
     .replace(/मध्यप्रदेश/g, "मध्य प्रदेश")
     .replace(/उत्तरप्रदेश/g, "उत्तर प्रदेश")
     .trim();
+}
+
+/**
+ * Safely trims a headline to fit within maxWords and maxChars WITHOUT slicing mid-phrase
+ * or leaving incomplete verb participles / dangling oblique nouns at the end.
+ */
+export function trimHeadlineToCompleteClause(
+  rawHeadline: string,
+  maxWords: number = 22,
+  maxChars: number = 200
+): string {
+  let text = cleanCandidateClause(rawHeadline || "");
+  if (!text) return "";
+
+  const fitsCleanly = (s: string): boolean => {
+    if (!s) return false;
+    const words = s.split(/\s+/).filter(Boolean);
+    return words.length <= maxWords && countCharacters(s) <= maxChars && !hasInvalidHeadlineEnding(s);
+  };
+
+  if (fitsCleanly(text)) return text;
+
+  // Step 1: Try light non-destructive filler compaction (e.g. ", मामले में " -> ", ") to keep the full ending intact!
+  const compacted = text
+    .replace(/,\s*(?:पूरे\s+)?मामले\s+में\s+/gu, ", ")
+    .replace(/,\s*इस\s+मामले\s+में\s+/gu, ", ")
+    .replace(/,\s*घटना\s+के\s+बाद\s+/gu, ", ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  if (compacted !== text && fitsCleanly(compacted)) {
+    return compacted;
+  }
+  const working = compacted.length < text.length ? compacted : text;
+
+  // Step 2: Prefer trimming cleanly at a complete clause boundary (comma / dash / semicolon / colon) from right to left.
+  // Require at least 9 words in the kept prefix so short lead-in labels like "डिंडौरी: ईओडब्ल्यू की कार्रवाई" are never returned alone.
+  const clauseDelimiters = [", ", " — ", " - ", "; ", ": "];
+  let bestClausePrefix = "";
+  for (const sep of clauseDelimiters) {
+    let searchFrom = working.length;
+    while (searchFrom > 0) {
+      const idx = working.lastIndexOf(sep, searchFrom - 1);
+      if (idx < 28) break;
+      const prefix = cleanCandidateClause(working.substring(0, idx));
+      if (fitsCleanly(prefix) && prefix.split(/\s+/).filter(Boolean).length >= 9) {
+        if (countCharacters(prefix) > countCharacters(bestClausePrefix)) {
+          bestClausePrefix = prefix;
+        }
+        break;
+      }
+      searchFrom = idx;
+    }
+  }
+  if (bestClausePrefix) {
+    return bestClausePrefix;
+  }
+
+  // Step 3: Walk backward word-by-word to the longest grammatically complete ending within limits
+  const words = working.split(/\s+/).filter(Boolean);
+  const startLen = Math.min(words.length, maxWords);
+  for (let len = startLen; len >= 5; len--) {
+    const candidate = cleanCandidateClause(words.slice(0, len).join(" "));
+    if (fitsCleanly(candidate) && candidate.split(/\s+/).filter(Boolean).length >= 5) {
+      return candidate;
+    }
+  }
+
+  // Final safeguard: return cleaned clause prefix or word slice stripped of invalid endings
+  return cleanCandidateClause(words.slice(0, Math.min(words.length, maxWords)).join(" "));
 }
 
 /**
@@ -667,17 +777,15 @@ export function regenerateHeadlineOptionFromFacts(
     let candidate = removeRedundantClauses(cleanCandidateClause(ensureCriticalEntities(cand)));
     let charLen = countCharacters(candidate);
 
-    if (charLen > target.max) {
-      const sliced = candidate.substring(0, target.max);
-      const lastSpace = sliced.lastIndexOf(" ");
-      if (lastSpace >= target.min) {
-        candidate = removeRedundantClauses(cleanCandidateClause(sliced.substring(0, lastSpace)));
-        charLen = countCharacters(candidate);
-      } else {
+    if (charLen > target.max || candidate.split(/\s+/).filter(Boolean).length > 22 || hasInvalidHeadlineEnding(candidate)) {
+      candidate = trimHeadlineToCompleteClause(removeRedundantClauses(candidate), 22, target.max);
+      charLen = countCharacters(candidate);
+      if (charLen > target.max || charLen < Math.min(target.min, 35) || candidate.split(/\s+/).filter(Boolean).length > 22) {
         continue;
       }
     }
 
+    if (candidate.split(/\s+/).filter(Boolean).length < 7) continue;
     if (hasBlockedMediaBrand(candidate, sourcePublisherNames)) continue;
     if (hasInvalidHeadlineEnding(candidate)) continue;
 
@@ -702,52 +810,91 @@ export function regenerateHeadlineOptionFromFacts(
     return validCandidates[0].text;
   }
 
-  // 5. Fallback: If no candidate met exact range without duplication, create a clean synthesized variant
-  const opt5Fallback = cleanFacts.length > 1
-    ? `${cleanBase}: ${cleanFacts[0]}, ${cleanFacts[1]}`
-    : (cleanFacts.length === 1
-      ? `${cleanBase}: ${cleanFacts[0]}, मामले में प्रशासनिक स्तर पर विस्तृत समीक्षा के निर्देश दिए गए`
-      : (loc ? `${loc} से विशेष कवरेज: ${cleanBase}, क्षेत्र में संपूर्ण घटनाक्रम पर नजर, प्रशासन द्वारा आवश्यक कार्रवाई जारी` : `मुख्य कवरेज: ${cleanBase}, क्षेत्र में संपूर्ण घटनाक्रम पर नजर, प्रशासन द्वारा आवश्यक कार्रवाई जारी`));
-
-  const angleVariants: string[] = [
-    cleanBase,
-    loc ? `${loc} में प्रशासन अलर्ट, ${cleanBase}` : `मामले में अधिकारियों के निर्देश जारी, ${cleanBase}`,
-    loc ? `${loc} से बड़ा अपडेट: ${cleanBase}, क्षेत्र में चर्चा तेज` : `बड़ा असर: ${cleanBase}, लोगों का ध्यान आकर्षित`,
-    loc ? `विशेष ग्राउंड रिपोर्ट: ${loc} में ${cleanBase}` : `विशेष पड़ताल: ${cleanBase}, जानिए पूरे मामले से जुड़े तथ्य`,
-    opt5Fallback,
+  // 5. Fallback: Create clean, complete, non-duplicate journalistic variants across all facts so 5 + 5 regeneration always yields 10 unique options
+  const angleVariants: string[] = [];
+  const genericPrefixes = [
+    "बड़ी खबर",
+    "बड़ा एक्शन",
+    "बड़ा खुलासा",
+    "ताज़ा अपडेट",
+    "प्रशासनिक सख्ती",
+    "मामले में नया मोड़",
+    "विशेष रिपोर्ट",
+    "प्रमुख समाचार",
   ];
+  const locPrefixes = loc
+    ? [
+        `${loc} से बड़ी खबर`,
+        `${loc} में बड़ा एक्शन`,
+        `${loc} में बड़ा खुलासा`,
+        `${loc} से ताज़ा अपडेट`,
+        `${loc} में हड़कंप`,
+        `${loc} की प्रमुख खबर`,
+      ]
+    : genericPrefixes;
 
-  let chosen = angleVariants[optionIndex % angleVariants.length] || cleanBase;
-  if (loc && !chosen.includes(loc) && optionIndex === 0) {
-    chosen = `${loc}: ${chosen}`;
-  }
-  chosen = cleanCandidateClause(chosen);
-
-  const isChosenDup = existingHeadlines.some((ex) => {
-    if (!ex) return false;
-    return normalizeText(ex) === normalizeText(chosen) || checkHeadlineSimilarity(ex, chosen) >= 0.85;
+  // Add distinct fact-driven angles first without repeating location or stacking double colons
+  cleanFacts.forEach((f, idx) => {
+    const anchored = ensureCriticalEntities(f);
+    const hasLoc = Boolean(loc && anchored.includes(loc));
+    const hasColon = anchored.includes(":");
+    const prefix = hasLoc
+      ? genericPrefixes[idx % genericPrefixes.length]
+      : locPrefixes[idx % locPrefixes.length];
+    if (!hasColon) {
+      angleVariants.push(`${prefix}: ${anchored}`);
+    } else if (!hasLoc && loc) {
+      angleVariants.push(`${loc} में ${anchored}`);
+    }
+    angleVariants.push(anchored);
   });
 
-  if (isChosenDup) {
-    for (const alt of angleVariants) {
-      const cleanedAlt = cleanCandidateClause(alt);
-      const isAltDup = existingHeadlines.some((ex) => {
-        if (!ex) return false;
-        return normalizeText(ex) === normalizeText(cleanedAlt) || checkHeadlineSimilarity(ex, cleanedAlt) >= 0.85;
-      });
-      if (!isAltDup) {
+  // Add base-title framed angles (skip location prefix if cleanBase already names location)
+  const baseHasLoc = Boolean(loc && cleanBase.includes(loc));
+  (baseHasLoc ? genericPrefixes : locPrefixes).forEach((prefix) => {
+    angleVariants.push(`${prefix}: ${cleanBase}`);
+  });
+  angleVariants.push(cleanBase);
+
+  const isExactDup = (cand: string) =>
+    existingHeadlines.some((ex) => ex && normalizeText(ex) === normalizeText(cand));
+  const isNearDup = (cand: string) =>
+    existingHeadlines.some(
+      (ex) => ex && (normalizeText(ex) === normalizeText(cand) || checkHeadlineSimilarity(ex, cand) >= 0.85)
+    );
+
+  let chosen = "";
+  const rotatedVariants = [
+    ...angleVariants.slice(optionIndex % Math.max(1, angleVariants.length)),
+    ...angleVariants.slice(0, optionIndex % Math.max(1, angleVariants.length)),
+  ];
+
+  // Pass 1: Prefer strictly non-similar (< 0.85) substantive (>= 8 words) complete headline
+  for (const alt of rotatedVariants) {
+    const cleanedAlt = trimHeadlineToCompleteClause(ensureCriticalEntities(alt), 22, target.max);
+    const wCount = cleanedAlt ? cleanedAlt.split(/\s+/).filter(Boolean).length : 0;
+    if (!cleanedAlt || wCount < 8 || hasInvalidHeadlineEnding(cleanedAlt) || hasBlockedMediaBrand(cleanedAlt, sourcePublisherNames)) continue;
+    if (!isNearDup(cleanedAlt)) {
+      chosen = cleanedAlt;
+      break;
+    }
+  }
+
+  // Pass 2: If story facts are very tight, guarantee zero exact duplicates and substantive length
+  if (!chosen) {
+    for (const alt of rotatedVariants) {
+      const cleanedAlt = trimHeadlineToCompleteClause(ensureCriticalEntities(alt), 22, target.max);
+      const wCount = cleanedAlt ? cleanedAlt.split(/\s+/).filter(Boolean).length : 0;
+      if (!cleanedAlt || wCount < 8 || hasInvalidHeadlineEnding(cleanedAlt) || hasBlockedMediaBrand(cleanedAlt, sourcePublisherNames)) continue;
+      if (!isExactDup(cleanedAlt)) {
         chosen = cleanedAlt;
         break;
       }
     }
   }
 
-  if (countCharacters(chosen) > target.max) {
-    const sliced = chosen.substring(0, target.max);
-    const lastSpace = sliced.lastIndexOf(" ");
-    if (lastSpace > 20) {
-      chosen = cleanCandidateClause(sliced.substring(0, lastSpace));
-    }
+  if (!chosen) {
+    chosen = trimHeadlineToCompleteClause(cleanBase, 22, target.max);
   }
 
   return chosen;
